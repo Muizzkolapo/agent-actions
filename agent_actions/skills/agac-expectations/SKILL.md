@@ -158,4 +158,4 @@ The test: can a careful reader decide the rule from this one record and the rule
 4. **`repair` cannot run at `granularity: file`.** Use `repair: none`, or put the rule on the record action before it.
 5. **`structural:` handles schema failures, `repair:` handles rule failures.** `structural: retry` (the default) sends the same prompt again. `structural: auto` sends the schema feedback.
 
-See [Expectations](https://docs.runagac.com/docs/reference/validation/expectations), [Output validation](https://docs.runagac.com/docs/reference/validation/output-validation) and [agac expect](https://docs.runagac.com/docs/reference/cli/expect).
+See Expectations (docs: `reference/validation/expectations`), Output validation (docs: `reference/validation/output-validation`) and agac expect (docs: `reference/cli/expect`).

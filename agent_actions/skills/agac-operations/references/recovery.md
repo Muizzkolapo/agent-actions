@@ -12,7 +12,7 @@ Use this page when an action produced bad output in a large run, and the actions
 | The output of an action is good, but the next action read the wrong field of it | Add a recovery tool action (section 2), then `--rerun` the recovery action |
 | The staging input itself was wrong | `agac run -w <workflow> -u tools --fresh` (all output is lost) |
 
-A config edit alone runs nothing again. The edited action keeps its output until you give `--rerun`. See [run](https://docs.runagac.com/docs/reference/cli/run#when-you-edit-the-workflow).
+A config edit alone runs nothing again. The edited action keeps its output until you give `--rerun`. See run (docs: `reference/cli/run#when-you-edit-the-workflow`).
 
 ## 2 The recovery tool action
 

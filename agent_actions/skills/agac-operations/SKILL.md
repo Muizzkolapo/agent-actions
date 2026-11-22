@@ -53,7 +53,7 @@ Exit codes of `agac run` and `agac retry`:
 | 4 | The run paused for a batch (or `--wait-timeout` passed). Run again later |
 | 5 | A provider quota or credit stopped the run |
 
-See [run](https://docs.runagac.com/docs/reference/cli/run), [retry](https://docs.runagac.com/docs/reference/cli/retry), [dispositions](https://docs.runagac.com/docs/reference/cli/dispositions) and [usage](https://docs.runagac.com/docs/reference/cli/usage).
+See run (docs: `reference/cli/run`), retry (docs: `reference/cli/retry`), dispositions (docs: `reference/cli/dispositions`) and usage (docs: `reference/cli/usage`).
 
 ## Batch or online
 
@@ -65,7 +65,7 @@ See [run](https://docs.runagac.com/docs/reference/cli/run), [retry](https://docs
 | Cost matters more than time | You test a prompt on 2 or 3 records |
 | The action makes one call per record | An action has few records left (a repair round of 3 records waits a full batch cycle) |
 
-You can set `run_mode` in `defaults:` and override it on one action. `llm_judge` calls follow the action's mode, or `expect: {judge_mode: batch | online}`. See [Run modes](https://docs.runagac.com/docs/reference/execution/run-modes) and [Batch recovery](https://docs.runagac.com/docs/reference/execution/batch-recovery).
+You can set `run_mode` in `defaults:` and override it on one action. `llm_judge` calls follow the action's mode, or `expect: {judge_mode: batch | online}`. See Run modes (docs: `reference/execution/run-modes`) and Batch recovery (docs: `reference/execution/batch-recovery`).
 
 CAUTION: The batch and online paths had differences in earlier releases (the text of a `json_mode: false` action, judge calls, the context-window check). Current releases make them alike. After you upgrade agent-actions, run your sample in batch mode once, and compare it with an online run of the same records.
 
@@ -104,16 +104,18 @@ The health check reads counts. It does not read the content of the output. For a
 
 | Limit | What happens | What to do |
 |---|---|---|
-| Context window | agent-actions estimates a prompt as characters / 4 and refuses a prompt above the model's window. A model name that it does not know gets 128,000 tokens | Split oversized inputs (below). Keep large fields out of `observe` where a distilled field exists |
+| Context window | agent-actions estimates a prompt as characters / 4 and refuses a prompt above the model's window. A model name that it does not know gets 128,000 tokens. `context_window` on the action or in `defaults:` sets the window | Set `context_window` when the model reads more than agent-actions knows. Split oversized inputs (below). Keep large fields out of `observe` where a distilled field exists. Keep `context_block: auto` (the default), so a field the prompt prints is not sent twice |
 | Memory | Batch preparation holds the records of the action in memory. Very large records times many records can fill the machine | Close other large programs. Watch the process memory during the first large batch step |
 | Disk | The store grows with each action. Old workflow stores and virtual environments add up | Remove old stores with `agac clean` or `scripts/reset_workflow.py --full` (agac-agent-skills) when you no longer need them |
 | Rate limits | Online mode with high `record_concurrency` gets HTTP 429 from some providers | Set `retry` and `request_timeout` in `defaults:`. Lower `record_concurrency` for providers with low limits |
 
-See [Context handling](https://docs.runagac.com/docs/reference/execution/context-handling) and [Chunking](https://docs.runagac.com/docs/reference/data-io/chunking).
+See Context handling (docs: `reference/execution/context-handling`) and Chunking (docs: `reference/data-io/chunking`).
 
 ### Splitting an oversized input
 
-Chunking splits text files. It does not split a JSON record. For a JSON record that is too large:
+For a JSON, CSV, TSV or Excel record with one very long top-level field, set `chunk_config: {field: source.<name>}` on the first action or in the workflow's `defaults:`. Each part becomes a record of its own, with every other field and `chunk_index` and `chunk_count`. It uses the same `chunk_size`, `chunk_overlap` and `split_method` as text files.
+
+For a record that `field` cannot split (the long text is nested, or spread over many fields):
 
 1. Split it before staging, into parts with a unique key each (for example, `url#part-2`). Two records with the same key collide.
 2. Put the parts in a new staging file, so the existing files do not change (Rule 3).

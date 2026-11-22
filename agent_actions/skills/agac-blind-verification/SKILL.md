@@ -147,4 +147,4 @@ An `llm_judge` expectation (see the `agac-expectations` skill) sees the field it
 2. **A verifier that observes `classify_document.*` sees the reference.** A wildcard on the action under test gives the verifier every field of it. Name the fields of the blind view, not a wildcard of that action.
 3. **Same model, same blind spot.** If all verifiers miss the same kind of error, a majority does not help. Add a verifier on a different model, or a refuter.
 
-See [Context scope](https://docs.runagac.com/docs/reference/context/context-scope), [Guards](https://docs.runagac.com/docs/reference/execution/guards) and [Custom tools](https://docs.runagac.com/docs/guides/custom-tools).
+See Context scope (docs: `reference/context/context-scope`), Guards (docs: `reference/execution/guards`) and Custom tools (docs: `guides/custom-tools`).
