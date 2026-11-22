@@ -37,6 +37,10 @@ class SkipEvaluator:
     def __repr__(self):
         return f"SkipEvaluator(strategies={len(self.strategies)})"
 
+    def has_strategies(self) -> bool:
+        """Whether any strategy is registered, so the earlier outputs are worth reading."""
+        return bool(self.strategies)
+
     def should_skip_action(
         self, agent_config: dict[str, Any], previous_outputs: dict[str, Any] | None = None
     ) -> bool:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -55,6 +56,7 @@ from agent_actions.storage.backend import (
     DISPOSITION_FILTERED,
     DISPOSITION_PASSTHROUGH,
 )
+from agent_actions.utils.memory import peak_rss_mb
 
 if TYPE_CHECKING:
     from agent_actions.processing.disposition_gate import DispositionGate
@@ -120,6 +122,7 @@ class BatchSubmissionService:
             Tuple of (tasks, context_map)
         """
         provider = self._client_resolver.get_for_config(agent_config)
+        started = time.perf_counter()
         prepared = self._task_preparator.prepare_tasks(
             agent_config=agent_config,
             data=data,
@@ -129,26 +132,25 @@ class BatchSubmissionService:
             source_data=source_data,
             workflow_metadata=workflow_metadata,
         )
+        elapsed = time.perf_counter() - started
         sent = prepared.stats.sent_elsewhere_items
         sent_note = f", {sent} sent elsewhere" if sent else ""
-        if prepared.stats.error_items:
-            logger.warning(
-                "Task preparation complete: %d tasks, %d filtered, %d skipped, "
-                "%d failed (prep errors)%s",
-                prepared.task_count,
-                prepared.stats.total_filtered,
-                prepared.stats.total_skipped,
-                prepared.stats.error_items,
-                sent_note,
-            )
-        else:
-            logger.debug(
-                "Task preparation complete: %d tasks, %d filtered, %d skipped%s",
-                prepared.task_count,
-                prepared.stats.total_filtered,
-                prepared.stats.total_skipped,
-                sent_note,
-            )
+        peak = peak_rss_mb()
+        log = logger.warning if prepared.stats.error_items else logger.info
+        log(
+            "Prepared %s/%s in %.1fs: %d record(s), %d task(s), %d filtered, %d skipped, "
+            "%d failed (prep errors)%s; peak memory %s MB",
+            agent_config.get("action_name", batch_name),
+            batch_name,
+            elapsed,
+            len(data),
+            prepared.task_count,
+            prepared.stats.total_filtered,
+            prepared.stats.total_skipped,
+            prepared.stats.error_items,
+            sent_note,
+            "unknown" if peak is None else f"{peak:.0f}",
+        )
         return prepared.tasks, prepared.context_map
 
     def check_status(

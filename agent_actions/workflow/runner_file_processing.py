@@ -1081,20 +1081,24 @@ def process_from_storage_backend(
 ) -> tuple[int, int, CollectedErrors]:
     """Process backend data instead of filesystem → (found, processed, per_file_errors)."""
 
-    if runner.storage_backend is None:
+    backend = runner.storage_backend
+    if backend is None:
         return (0, 0, CollectedErrors())
     reached = reached if reached is not None else Reached()
 
-    output_path = Path(params.output_directory)
     errors = CollectedErrors()
 
-    data_by_path: dict[str, list[tuple[str, Any]]] = {}
-    # Entries that never reached data_by_path. files_found is computed from what was READ,
+    # Each stored entry's upstreams, read only when the entry is processed: read up
+    # front, every file of every upstream is held until the walk ends.
+    listed: dict[str, list[str]] = {}
+    # Entries lost before processing. files_found is computed from what was READ,
     # so without this a walk that loses everything returns (0, 0) and falls through to a
     # walk that finds nothing: the action is skipped and its rows deleted as though its
     # input were gone. #1026 fixed the same shape for the two filesystem walks by widening
     # files_seen; this walker counts differently, hence a separate tally.
     lost = 0
+    # Listed entries none of whose upstreams could be read: not found, only lost.
+    unreadable = 0
 
     upstream_to_read = params.upstream_data_dirs
     merged_versions = params.correlated_input
@@ -1103,9 +1107,7 @@ def process_from_storage_backend(
         # its answers, which a run carries records from. Its other dependencies are
         # read and paired with them below as a fan-in's branches are, in the files
         # the versions hold.
-        data_by_path = {
-            path: [(params.action_name, rows)] for path, rows in merged_versions.items()
-        }
+        listed = {path: [] for path in merged_versions}
         upstream_to_read = [
             d for d in params.upstream_data_dirs if Path(d).name != params.action_name
         ]
@@ -1118,7 +1120,7 @@ def process_from_storage_backend(
             continue
 
         try:
-            target_files = runner.storage_backend.list_target_files(action_name)
+            target_files = backend.list_target_files(action_name)
         except (OSError, sqlite3.Error) as e:
             # Every file of this upstream is gone. Counted as one loss because the
             # listing is what failed, so how many files it held is unknowable -- a floor,
@@ -1139,15 +1141,21 @@ def process_from_storage_backend(
         for relative_path in target_files:
             if merged_versions is not None and relative_path not in merged_versions:
                 continue
+            listed.setdefault(relative_path, []).append(action_name)
+
+    def read_branches(relative_path: str) -> list[tuple[str, Any]]:
+        """The entry's rows from each upstream that lists it, a lost read counted and named."""
+        nonlocal lost
+        branches: list[tuple[str, Any]] = []
+        if merged_versions is not None:
+            branches.append((params.action_name, merged_versions[relative_path]))
+        for action_name in listed[relative_path]:
             try:
-                data = runner.storage_backend.read_target(action_name, relative_path)
-                if relative_path not in data_by_path:
-                    data_by_path[relative_path] = []
-                data_by_path[relative_path].append((action_name, data))
+                branches.append((action_name, backend.read_target(action_name, relative_path)))
             except (OSError, sqlite3.Error, SerializationError) as e:
-                # Dropped before the processing loop, so it never reaches the handler
-                # there. Counted and recorded here instead, or it is absent from
-                # files_found and from CollectedErrors both.
+                # Never reaches the handler of the processing loop. Counted and
+                # recorded here instead, or it is absent from files_found and from
+                # CollectedErrors both.
                 lost += 1
                 errors.record(f"{action_name}/{relative_path}", e)
                 _lose_file(runner, params.action_name)
@@ -1159,14 +1167,11 @@ def process_from_storage_backend(
                     e,
                     exc_info=True,
                 )
+        return branches
 
-    # Sorted, not upstream-major: a file limit truncates this mapping, and the
-    # union of several upstreams is otherwise ordered by which one was read first.
-    data_by_path = {path: data_by_path[path] for path in sorted(data_by_path)}
-
-    # What was there, not what survived: a lost entry is still an input this action was
-    # meant to process, and counting only survivors is what let an all-lost walk pass.
-    files_found = len(data_by_path) + lost
+    # Sorted, not upstream-major: a file limit truncates this list, and the union of
+    # several upstreams is otherwise ordered by which one was read first.
+    paths = sorted(listed)
     files_processed = 0
 
     # A guard `filter` anywhere upstream makes those records dead — they must not
@@ -1177,61 +1182,20 @@ def process_from_storage_backend(
             "tell which upstream actions send records elsewhere or gather them."
         )
     dead_above = _collect_upstream_filtered_guids(
-        runner.storage_backend,
+        backend,
         params.action_name,
         params.upstream_data_dirs,
         runner.action_configs,
     )
 
-    for seen, (relative_path, data_sources) in enumerate(data_by_path.items(), start=1):
+    for seen, relative_path in enumerate(paths, start=1):
+        data_sources = read_branches(relative_path)
+        if not data_sources:
+            unreadable += 1
+            continue
         reached.paths.add(relative_path)
         try:
-            # Before the merge, so a fan-in pairs only records still alive in every branch.
-            dropped = 0
-            live_sources: list[tuple[str, Any]] = []
-            filtered_guids = dead_above.for_inputs(data_sources)
-            for branch, source_data in data_sources:
-                kept, gone = _drop_filtered_records(source_data, filtered_guids)
-                live_sources.append((branch, kept))
-                dropped += gone
-            if len(live_sources) == 1:
-                _, data = live_sources[0]
-            else:
-                logger.debug(
-                    "Merging %d sources for %s from parallel branches",
-                    len(live_sources),
-                    relative_path,
-                )
-                data = merge_fan_in(live_sources)
-
-            if dropped:
-                logger.info(
-                    "%s: dropped %d record(s) filtered by an upstream guard "
-                    "(filter is authoritative — dead records are not carried forward)",
-                    params.action_name,
-                    dropped,
-                )
-
-            source_key = str(Path(relative_path).with_suffix(""))
-            virtual_input_path = output_path / relative_path
-
-            record_count = len(data) if isinstance(data, list) else 1
-            logger.debug(
-                "Processing %s with %d pre-loaded records (no file read)",
-                relative_path,
-                record_count,
-            )
-            runner._process_single_file(
-                _build_file_params(
-                    params,
-                    virtual_input_path,
-                    output_path,
-                    output_path,
-                    str(output_path),
-                    source_relative_path=source_key,
-                    data=data,
-                )
-            )
+            _process_stored_entry(runner, params, relative_path, data_sources, dead_above)
             files_processed += 1
 
         except Exception as e:
@@ -1253,13 +1217,20 @@ def process_from_storage_backend(
                     e,
                     exc_info=True,
                 )
+        # Released before the next entry is read.
+        del data_sources
 
-        def _unread(taken: int = seen, total: int = len(data_by_path)) -> bool:
+        def _unread(taken: int = seen, total: int = len(paths)) -> bool:
             """Whether any stored entry past this one is still to be read."""
             return taken < total
 
         if _file_limit_reached(runner, params, files_processed, _unread, reached):
             break
+
+    # What was there, not what survived: a lost entry is still an input this action was
+    # meant to process, and counting only survivors is what let an all-lost walk pass.
+    # An entry past a file limit is not read, and counts as found.
+    files_found = len(paths) - unreadable + lost
 
     _log_processing_errors(
         errors.messages,
@@ -1269,6 +1240,63 @@ def process_from_storage_backend(
         "Storage backend processing",
     )
     return (files_found, files_processed, errors)
+
+
+def _process_stored_entry(
+    runner: ActionRunner,
+    params: FileProcessParams,
+    relative_path: str,
+    data_sources: list[tuple[str, Any]],
+    dead_above: Any,
+) -> None:
+    """Process one stored entry from its upstreams' rows, paired as a fan-in."""
+    output_path = Path(params.output_directory)
+    # Before the merge, so a fan-in pairs only records still alive in every branch.
+    dropped = 0
+    live_sources: list[tuple[str, Any]] = []
+    filtered_guids = dead_above.for_inputs(data_sources)
+    for branch, source_data in data_sources:
+        kept, gone = _drop_filtered_records(source_data, filtered_guids)
+        live_sources.append((branch, kept))
+        dropped += gone
+    if len(live_sources) == 1:
+        _, data = live_sources[0]
+    else:
+        logger.debug(
+            "Merging %d sources for %s from parallel branches",
+            len(live_sources),
+            relative_path,
+        )
+        data = merge_fan_in(live_sources)
+
+    if dropped:
+        logger.info(
+            "%s: dropped %d record(s) filtered by an upstream guard "
+            "(filter is authoritative — dead records are not carried forward)",
+            params.action_name,
+            dropped,
+        )
+
+    source_key = str(Path(relative_path).with_suffix(""))
+    virtual_input_path = output_path / relative_path
+
+    record_count = len(data) if isinstance(data, list) else 1
+    logger.debug(
+        "Processing %s with %d pre-loaded records (no file read)",
+        relative_path,
+        record_count,
+    )
+    runner._process_single_file(
+        _build_file_params(
+            params,
+            virtual_input_path,
+            output_path,
+            output_path,
+            str(output_path),
+            source_relative_path=source_key,
+            data=data,
+        )
+    )
 
 
 def forget_files_of_inputs_gone(

@@ -21,6 +21,7 @@ from agent_actions.logging.events import (
 from agent_actions.record.reasons import EXPECTATIONS_FAILED
 from agent_actions.storage.backend import DISPOSITION_SUCCESS
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+from agent_actions.utils.memory import peak_rss_mb
 from agent_actions.workflow.managers.state import COMPLETED_STATUSES, ActionStatus
 from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
 
@@ -73,6 +74,7 @@ def fire_step_complete(
             # fail to account for the level.
             unfinished=len(actions) - completed - partial - skipped - failed,
             batch_pending=list(batch_pending or []),
+            peak_rss_mb=peak_rss_mb(),
         )
     )
 

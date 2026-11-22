@@ -335,6 +335,8 @@ class StepCompleteEvent(BaseEvent):
     failed: int = 0
     unfinished: int = 0
     batch_pending: list[str] = field(default_factory=list)
+    # The process's peak resident memory when the step closed; None where unknown.
+    peak_rss_mb: float | None = None
 
     def __post_init__(self) -> None:
         # Always INFO: a step is a boundary, not a fault. ActionFailedEvent
@@ -368,6 +370,7 @@ class StepCompleteEvent(BaseEvent):
             "failed": self.failed,
             "unfinished": self.unfinished,
             "batch_pending": list(self.batch_pending),
+            "peak_rss_mb": self.peak_rss_mb,
         }
 
     @property
