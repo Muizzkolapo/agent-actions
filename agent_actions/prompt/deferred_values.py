@@ -203,9 +203,17 @@ def _read_with_tags_held(region: _Region) -> Any:
         return text.strip()
     if not (isinstance(parsed, dict) and list(parsed) == ["k"]):
         return text.strip()
-    return _strings(
-        parsed["k"], "", lambda held, _path: _TAG.sub(lambda m: tags[int(m.group(1))], held)
-    )
+
+    def put_back(value: Any) -> Any:
+        if isinstance(value, str):
+            return _TAG.sub(lambda m: tags[int(m.group(1))], value)
+        if isinstance(value, dict):
+            return {put_back(key): put_back(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [put_back(item) for item in value]
+        return value
+
+    return put_back(parsed["k"])
 
 
 class _NotData(Exception):

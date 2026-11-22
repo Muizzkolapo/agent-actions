@@ -1697,6 +1697,46 @@ def test_a_guard_that_reads_a_version_variable_keeps_its_line_and_drops_its_comm
     assert not [m for m in _messages(wf, tmp_path) if "`later`" in m or "`why`" in m]
 
 
+@pytest.mark.parametrize(
+    "lines, key, expected",
+    [
+        pytest.param(
+            "    guard: {{ i }} < up.x\n      and up.y > 1\n",
+            "guard",
+            "{{ i }} < up.x and up.y > 1",
+            id="multi-line-plain",
+        ),
+        pytest.param(
+            "    guard: {{ i }} < up.x  # see {{ i }}\n",
+            "guard",
+            "{{ i }} < up.x",
+            id="tag-in-comment",
+        ),
+        pytest.param(
+            "    schema: {score_{{ i }}: number, other: string}\n",
+            "schema",
+            {"score_{{ i }}": "number", "other": "string"},
+            id="flow-key",
+        ),
+        pytest.param(
+            "    schema:\n      {{ 'score' }}_{{ i }}: number\n",
+            "schema",
+            {"{{ 'score' }}_{{ i }}": "number"},
+            id="block-key",
+        ),
+    ],
+)
+def test_a_version_value_that_starts_with_a_tag_is_read_as_agac_reads_it(
+    tmp_path, lines, key, expected
+):
+    wf = _project(tmp_path, _VERSIONED + lines)
+
+    rendered = render_workflow_source(wf, tmp_path)
+
+    assert rendered.data["actions"][1][key] == expected
+    assert yaml.safe_load(rendered.text) == rendered.data
+
+
 def test_the_text_for_the_tree_escapes_a_character_yaml_does_not_take_as_written(tmp_path):
     written = '"o\\x7f\\x85\\x9f\\u2028\\uffff\\U0001F600{{ i }}"'
     wf = _project(tmp_path, f"{_VERSIONED}    output_field: {written}\n")
