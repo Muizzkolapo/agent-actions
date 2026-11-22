@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  Split the docs catalog generator's `CatalogGenerator.generate` and `generate_docs` into small
+  helpers, pinned by golden-output tests of `catalog.json` and the `agac docs` summary. No
+  behavior change.
+time: 2026-11-22T10:00:12Z
