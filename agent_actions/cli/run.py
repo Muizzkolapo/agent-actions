@@ -42,6 +42,38 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def start_tracked_run(
+    workflow: AgentWorkflow, agent_name: str, project_root: Path | None
+) -> tuple[RunTracker, str]:
+    """Start a run in the run history, hand its id to the workflow, and open its log files."""
+    tracker = RunTracker(project_root=project_root)
+    run_id = tracker.start_workflow_run(
+        workflow_id=agent_name,
+        workflow_name=agent_name,
+        actions_total=len(workflow.execution_order),
+    )
+
+    workflow.services.core.action_executor.run_tracker = tracker
+    workflow.services.core.action_executor.run_id = run_id
+    # Re-populate now that `run_id` exists; strategies read this to build
+    # the runtime `workflow` namespace (`{{ workflow.name }}`, `{{ workflow.run_id }}`).
+    from agent_actions.prompt.context.scope_application import build_workflow_metadata
+
+    workflow.services.core.action_runner.workflow_metadata = build_workflow_metadata(
+        name=agent_name, run_id=run_id
+    )
+
+    agent_folder = workflow.services.core.action_runner.get_action_folder(agent_name)
+    LoggerFactory.initialize(
+        output_dir=agent_folder,
+        workflow_name=agent_name,
+        invocation_id=run_id,
+        force=True,
+        new_run=True,
+    )
+    return tracker, run_id
+
+
 class RunCommand:
     def __init__(self, args: RunCommandArgs, sleep: Callable[[float], None] = time.sleep):
         self.args = args
@@ -161,31 +193,7 @@ class RunCommand:
             finally:
                 PromptValidator().validate(prompt_files)
 
-        tracker = RunTracker(project_root=project_root)
-        run_id = tracker.start_workflow_run(
-            workflow_id=self.agent_name,
-            workflow_name=self.agent_name,
-            actions_total=len(workflow.execution_order),
-        )
-
-        workflow.services.core.action_executor.run_tracker = tracker
-        workflow.services.core.action_executor.run_id = run_id
-        # Re-populate now that `run_id` exists; strategies read this to build
-        # the runtime `workflow` namespace (`{{ workflow.name }}`, `{{ workflow.run_id }}`).
-        from agent_actions.prompt.context.scope_application import build_workflow_metadata
-
-        workflow.services.core.action_runner.workflow_metadata = build_workflow_metadata(
-            name=self.agent_name, run_id=run_id
-        )
-
-        agent_folder = workflow.services.core.action_runner.get_action_folder(self.agent_name)
-        LoggerFactory.initialize(
-            output_dir=agent_folder,
-            workflow_name=self.agent_name,
-            invocation_id=run_id,
-            force=True,
-            new_run=True,
-        )
+        tracker, run_id = start_tracked_run(workflow, self.agent_name, project_root)
 
         outcome = RunOutcome.FAILED
         error_message = None

@@ -10,8 +10,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 
 def _new_run_values(module_path: str) -> list[object]:
     """The ``new_run`` value of each ``LoggerFactory.initialize(output_dir=...)`` call."""
@@ -33,9 +31,15 @@ def _new_run_values(module_path: str) -> list[object]:
     return values
 
 
-@pytest.mark.parametrize("module_path", ["agent_actions/cli/run.py", "agent_actions/cli/retry.py"])
-def test_a_workflow_run_starts_a_new_log_file(module_path):
-    assert _new_run_values(module_path) == [True]
+def test_a_workflow_run_starts_a_new_log_file():
+    assert _new_run_values("agent_actions/cli/run.py") == [True]
+
+
+def test_a_retry_starts_its_log_file_through_the_run_helper():
+    from agent_actions.cli import retry, run
+
+    assert retry.start_tracked_run is run.start_tracked_run
+    assert _new_run_values("agent_actions/cli/retry.py") == []
 
 
 def test_a_batch_command_appends_to_the_current_log_file():

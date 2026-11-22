@@ -144,6 +144,37 @@ def _fetch_example(example_name: str, dest: Path, *, force: bool = False) -> Non
             shutil.copy2(shared_env, dest / ".env.example")
 
 
+def _install_example(
+    name: str,
+    project_name: str | None,
+    output_dir: str | None,
+    force: bool,
+    *,
+    log: logging.Logger,
+) -> None:
+    """Fetch an example, stamp its project name into agent_actions.yml, and print next steps."""
+    dest_name = project_name or name
+    out = Path(output_dir) if output_dir else Path.cwd()
+    dest = out / dest_name
+    _fetch_example(name, dest, force=force)
+
+    config_file = dest / "agent_actions.yml"
+    if config_file.exists():
+        try:
+            with open(config_file, encoding="utf-8") as f:
+                config = yaml.safe_load(f) or {}
+            config[PROJECT_NAME_KEY] = dest_name
+            with open(config_file, "w", encoding="utf-8") as f:
+                yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+        except (yaml.YAMLError, OSError) as exc:
+            log.warning("Could not inject project_name into %s: %s", config_file, exc)
+
+    click.echo(f"Created project from example '{name}': {dest}")
+    click.echo("\nNext steps:")
+    click.echo(f"  cd {dest_name}")
+    click.echo("  agac run")
+
+
 def _print_available_examples() -> None:
     """Fetch and print available example names from GitHub."""
     try:
@@ -420,24 +451,4 @@ def init_example(
         agac init example contract_reviewer
         agac init example contract_reviewer my_project
     """
-    dest_name = project_name or name
-    out = Path(output_dir) if output_dir else Path.cwd()
-    dest = out / dest_name
-    _fetch_example(name, dest, force=force)
-
-    # Inject project_name into the example's agent_actions.yml
-    config_file = dest / "agent_actions.yml"
-    if config_file.exists():
-        try:
-            with open(config_file, encoding="utf-8") as f:
-                config = yaml.safe_load(f) or {}
-            config[PROJECT_NAME_KEY] = dest_name
-            with open(config_file, "w", encoding="utf-8") as f:
-                yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
-        except (yaml.YAMLError, OSError) as exc:
-            logger.warning("Could not inject project_name into %s: %s", config_file, exc)
-
-    click.echo(f"Created project from example '{name}': {dest}")
-    click.echo("\nNext steps:")
-    click.echo(f"  cd {dest_name}")
-    click.echo("  agac run")
+    _install_example(name, project_name, output_dir, force, log=logger)

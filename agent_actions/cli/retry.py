@@ -34,6 +34,7 @@ from agent_actions.cli.exit_codes import (
     classify_outcome,
     report_quota_stop,
 )
+from agent_actions.cli.run import start_tracked_run
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.errors import ProviderQuotaStop
@@ -60,7 +61,6 @@ from agent_actions.storage.backend import (
     NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.storage.run_lock import hold_run_lock
-from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.utils.atomic_write import atomic_json_write
 
 logger = logging.getLogger(__name__)
@@ -447,28 +447,7 @@ class RetryCommand:
         for action in downstream_actions:
             state_mgr.update_status(action, ActionStatus.PENDING, **{REPAIRED_BY: created_at})
 
-        tracker = RunTracker(project_root=project_root)
-        run_id = tracker.start_workflow_run(
-            workflow_id=self.agent_name,
-            workflow_name=self.agent_name,
-            actions_total=len(workflow.execution_order),
-        )
-        workflow.services.core.action_executor.run_tracker = tracker
-        workflow.services.core.action_executor.run_id = run_id
-        from agent_actions.prompt.context.scope_application import build_workflow_metadata
-
-        workflow.services.core.action_runner.workflow_metadata = build_workflow_metadata(
-            name=self.agent_name, run_id=run_id
-        )
-
-        agent_folder = workflow.services.core.action_runner.get_action_folder(self.agent_name)
-        LoggerFactory.initialize(
-            output_dir=agent_folder,
-            workflow_name=self.agent_name,
-            invocation_id=run_id,
-            force=True,
-            new_run=True,
-        )
+        tracker, run_id = start_tracked_run(workflow, self.agent_name, project_root)
 
         outcome = RunOutcome.FAILED
         error_message = None
