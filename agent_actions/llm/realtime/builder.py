@@ -54,7 +54,7 @@ def create_dynamic_agent(
             "formatted_prompt is required. "
             "Please use PromptPreparationService.prepare_prompt_with_context() "
             "to prepare the prompt before calling create_dynamic_agent(). "
-            "See agent_actions/prompt_generation/data_generator.py for an example."
+            "See TaskPreparer in agent_actions/processing/task_preparer.py for an example."
         )
 
     # Dispatch already handled by PromptPreparationService
