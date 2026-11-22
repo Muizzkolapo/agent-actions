@@ -32,3 +32,12 @@ def test_the_console_keeps_events_at_or_above_its_floor(level, floor):
     # Outside its categories, only a warning or an error clears the floor.
     expected = _at_least(level, floor) and level in (EventLevel.WARN, EventLevel.ERROR)
     assert handler.accepts(event) is expected
+
+
+@pytest.mark.parametrize(("level", "floor"), PAIRS)
+def test_the_console_without_a_category_filter_keeps_every_level_at_or_above_its_floor(
+    level, floor
+):
+    handler = ConsoleEventHandler(min_level=floor, categories=None)
+    event = BaseEvent(level=level, message="m", category="other")
+    assert handler.accepts(event) is _at_least(level, floor)
