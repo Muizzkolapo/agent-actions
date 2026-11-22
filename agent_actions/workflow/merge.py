@@ -325,7 +325,7 @@ def _aggregate_unpaired(
     )
 
 
-def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:
+def merge_fan_in(sources: list[tuple[str, Any]]) -> list[Any]:  # noqa: C901
     """Merge the records of a fan-in's branches, one record per logical record.
 
     *sources* holds ``(branch, records)`` per dependency. Records are grouped as

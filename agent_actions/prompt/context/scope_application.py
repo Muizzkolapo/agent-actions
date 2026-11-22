@@ -164,7 +164,7 @@ __all__ = [
 ]
 
 
-def apply_context_scope(
+def apply_context_scope(  # noqa: C901
     field_context: dict,
     context_scope: dict,
     static_data: dict | None = None,

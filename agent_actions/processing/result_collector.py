@@ -468,7 +468,7 @@ def write_node_level_disposition(
     )
 
 
-def collect_results_from_processing_results(
+def collect_results_from_processing_results(  # noqa: C901
     results: list[ProcessingResult],
     action_name: str,
     *,

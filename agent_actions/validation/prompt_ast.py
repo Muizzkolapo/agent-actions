@@ -26,7 +26,7 @@ class PromptASTAnalyzer:
 
     def __init__(self):
         """Initialize Jinja2 environment for AST parsing."""
-        self.env = Environment(extensions=PROMPT_EXTENSIONS)
+        self.env = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
 
     def _parse(self, template_source: str) -> nodes.Template:
         """Parse template after escaping Jinja syntax in inline code spans."""

@@ -316,7 +316,7 @@ class CatalogGenerator:
 
         return enriched
 
-    def generate(
+    def generate(  # noqa: C901
         self,
         prompts_data: dict[str, Any] | None = None,
         schemas_data: dict[str, Any] | None = None,

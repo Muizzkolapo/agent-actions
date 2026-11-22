@@ -166,7 +166,7 @@ def extract_action_names_from_template(
     _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
 
     try:
-        env = Environment(extensions=PROMPT_EXTENSIONS)
+        env = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
         ast = env.parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError as e:
         logger.warning(

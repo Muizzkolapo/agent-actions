@@ -506,7 +506,7 @@ class SQLiteBackend(StorageBackend):
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                f"SELECT action_name, data FROM target_data "
+                f"SELECT action_name, data FROM target_data "  # nosec B608  # only ? placeholders are interpolated
                 f"WHERE action_name IN ({placeholders}) AND relative_path = ?",
                 (*action_names, relative_path),
             )
@@ -1106,7 +1106,7 @@ class SQLiteBackend(StorageBackend):
         columns = "action_name, record_id, disposition, reason, relative_path, detail, created_at"
         if snapshots:
             columns += ", input_snapshot"
-        query = f"SELECT {columns} FROM record_disposition WHERE action_name = ?"
+        query = f"SELECT {columns} FROM record_disposition WHERE action_name = ?"  # nosec B608  # columns are fixed literals
         params: list[str] = [action_name]
 
         if record_id is not None:
@@ -1176,7 +1176,7 @@ class SQLiteBackend(StorageBackend):
         terminal = tuple(TERMINAL_DISPOSITIONS)
         placeholders = ",".join("?" * len(terminal))
         sql = (
-            f"SELECT DISTINCT record_id FROM record_disposition "
+            f"SELECT DISTINCT record_id FROM record_disposition "  # nosec B608  # only ? placeholders are interpolated
             f"WHERE action_name = ? AND disposition IN ({placeholders}) "
             f"AND record_id != ? "
             f"AND NOT (disposition = ? AND COALESCE(reason, '') = ?)"
@@ -1207,7 +1207,7 @@ class SQLiteBackend(StorageBackend):
                 chunk = ids[start : start + _SQL_MAX_PARAMS]
                 placeholders = ",".join("?" * len(chunk))
                 cursor.execute(
-                    f"SELECT DISTINCT relative_path FROM source_data "
+                    f"SELECT DISTINCT relative_path FROM source_data "  # nosec B608  # only ? placeholders are interpolated
                     f"WHERE source_guid IN ({placeholders})",
                     chunk,
                 )
@@ -1224,7 +1224,7 @@ class SQLiteBackend(StorageBackend):
                 chunk = ids[start : start + _SQL_MAX_PARAMS]
                 placeholders = ",".join("?" * len(chunk))
                 cursor.execute(
-                    f"SELECT DISTINCT source_guid FROM source_data "
+                    f"SELECT DISTINCT source_guid FROM source_data "  # nosec B608  # only ? placeholders are interpolated
                     f"WHERE source_guid IN ({placeholders})",
                     chunk,
                 )
@@ -1245,7 +1245,7 @@ class SQLiteBackend(StorageBackend):
                 chunk = ids[start : start + chunk_size]
                 placeholders = ",".join("?" * len(chunk))
                 cursor.execute(
-                    f"SELECT 1 FROM source_data WHERE "
+                    f"SELECT 1 FROM source_data WHERE "  # nosec B608  # only ? placeholders are interpolated
                     f"(repeat_of_source_guid > '' AND source_guid IN ({placeholders})) "
                     f"OR repeat_of_source_guid IN ({placeholders}) LIMIT 1",
                     chunk + chunk,
@@ -1254,7 +1254,7 @@ class SQLiteBackend(StorageBackend):
                     return True
                 # A NULL column is a row written before it existed: ask its payload.
                 cursor.execute(
-                    f"SELECT 1 FROM source_data WHERE repeat_of_source_guid IS NULL "
+                    f"SELECT 1 FROM source_data WHERE repeat_of_source_guid IS NULL "  # nosec B608  # only ? placeholders are interpolated
                     f"AND typeof(data) = 'text' AND json_valid(data) AND ("
                     f"(source_guid IN ({placeholders}) "
                     f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL) "
@@ -1302,7 +1302,7 @@ class SQLiteBackend(StorageBackend):
                     chunk = ids[start : start + _SQL_MAX_PARAMS]
                     placeholders = ",".join("?" * len(chunk))
                     cursor.execute(
-                        f"DELETE FROM record_disposition WHERE action_name = ? "
+                        f"DELETE FROM record_disposition WHERE action_name = ? "  # nosec B608  # only ? placeholders are interpolated
                         f"AND record_id IN ({placeholders})",
                         (action_name, *chunk),
                     )
@@ -1906,7 +1906,7 @@ class SQLiteBackend(StorageBackend):
         """Retrieve prompt traces for an action, optionally filtered by record."""
         action_name = self._validate_identifier(action_name, "action_name")
 
-        query = f"SELECT {self._trace_select_list()} FROM prompt_trace WHERE action_name = ?"
+        query = f"SELECT {self._trace_select_list()} FROM prompt_trace WHERE action_name = ?"  # nosec B608  # columns from the fixed _TRACE_READ_COLUMNS
         params: list[Any] = [action_name]
 
         if record_id is not None:
@@ -1981,7 +1981,7 @@ class SQLiteBackend(StorageBackend):
             total_count = cursor.fetchone()["count"]
 
             cursor.execute(
-                f"SELECT {select_list} FROM prompt_trace"
+                f"SELECT {select_list} FROM prompt_trace"  # nosec B608  # columns from the fixed _TRACE_READ_COLUMNS
                 " WHERE action_name = ? ORDER BY id LIMIT ? OFFSET ?",
                 (action_name, limit, offset),
             )
@@ -2013,7 +2013,7 @@ class SQLiteBackend(StorageBackend):
                     )
                     deleted = cursor.rowcount
                     cursor.execute(
-                        "DELETE FROM prompt_trace_dictionary WHERE action_name = ? AND "
+                        "DELETE FROM prompt_trace_dictionary WHERE action_name = ? AND "  # nosec B608  # appends the constant _TRACE_DICTIONARY_SQL
                         + self._TRACE_DICTIONARY_SQL,
                         (action_name,),
                     )
@@ -2021,7 +2021,7 @@ class SQLiteBackend(StorageBackend):
                     cursor.execute("DELETE FROM prompt_trace")
                     deleted = cursor.rowcount
                     cursor.execute(
-                        "DELETE FROM prompt_trace_dictionary WHERE " + self._TRACE_DICTIONARY_SQL
+                        "DELETE FROM prompt_trace_dictionary WHERE " + self._TRACE_DICTIONARY_SQL  # nosec B608  # appends the constant _TRACE_DICTIONARY_SQL
                     )
                 self.connection.commit()
                 logger.debug(
@@ -2403,7 +2403,7 @@ class SQLiteBackend(StorageBackend):
                     if candidates:
                         placeholders = ",".join("?" for _ in candidates)
                         cursor.execute(
-                            f"SELECT record_id, compiled_prompt, llm_context, "
+                            f"SELECT record_id, compiled_prompt, llm_context, "  # nosec B608  # only ? placeholders are interpolated
                             f"response_text, model_name, model_vendor, run_mode, "
                             f"prompt_length, response_length, attempt "
                             f"FROM prompt_trace "

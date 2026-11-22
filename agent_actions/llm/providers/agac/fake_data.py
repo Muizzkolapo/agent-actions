@@ -332,7 +332,9 @@ class FakeDataGenerator:
         if seed is not None:
             context.seed = seed
         elif prompt:
-            context.seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
+            context.seed = int(
+                hashlib.md5(prompt.encode(), usedforsecurity=False).hexdigest()[:8], 16
+            )
         else:
             context.seed = random.randint(0, 2**32 - 1)
 
@@ -986,7 +988,10 @@ class FakeDataGenerator:
         schema = cls.unwrap_schema(schema) if schema else None
 
         # Set context with prompt for reproducible, prompt-aware generation
-        seed = int(hashlib.md5(f"{custom_id}:{attempt}".encode()).hexdigest()[:8], 16)
+        seed = int(
+            hashlib.md5(f"{custom_id}:{attempt}".encode(), usedforsecurity=False).hexdigest()[:8],
+            16,
+        )
         cls.set_context(seed=seed, prompt=prompt)
 
         if schema:
@@ -1053,7 +1058,7 @@ class FakeDataGenerator:
 
         Each string value becomes a generated sentence. One prompt always gets one answer.
         """
-        seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
+        seed = int(hashlib.md5(prompt.encode(), usedforsecurity=False).hexdigest()[:8], 16)
         cls.set_context(seed=seed, prompt=prompt)
         rng = cls._get_rng()
         shape = rng.choice(shapes)
@@ -1075,7 +1080,9 @@ class FakeDataGenerator:
         Returns:
             Generated text response
         """
-        seed = int(hashlib.md5(f"{prompt}:{attempt}".encode()).hexdigest()[:8], 16)
+        seed = int(
+            hashlib.md5(f"{prompt}:{attempt}".encode(), usedforsecurity=False).hexdigest()[:8], 16
+        )
         cls.set_context(seed=seed, prompt=prompt)
         rng = cls._get_rng()
 

@@ -220,7 +220,7 @@ def _source_fields_every_render_reads(template: str) -> set[str]:
     from agent_actions.validation.prompt_required_field_validator import _chain_root_and_field
 
     try:
-        ast = Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))
+        ast = Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))  # nosec B701  # prompt text, not HTML
     except TemplateSyntaxError:
         return set()
 

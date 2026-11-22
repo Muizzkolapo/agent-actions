@@ -455,7 +455,7 @@ class PromptPreparationService:
         )
 
     @staticmethod
-    def _render_prompt_template(
+    def _render_prompt_template(  # noqa: C901
         raw_prompt: str,
         prompt_context: dict[str, Any],
         *,
