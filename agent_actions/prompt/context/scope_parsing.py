@@ -1,5 +1,6 @@
 """Field reference parsing and action name extraction utilities."""
 
+import functools
 import logging
 from collections.abc import Mapping
 
@@ -158,6 +159,17 @@ def extract_action_names_from_template(
     if not template or not isinstance(template, str):
         return set()
 
+    items = tuple((names or {}).items())
+    try:
+        hash(items)
+    except TypeError:
+        return set(_template_action_names.__wrapped__(template, items))
+    return set(_template_action_names(template, items))
+
+
+@functools.lru_cache(maxsize=256)
+def _template_action_names(template: str, names_items: tuple) -> frozenset[str]:
+    """Parsed once per (template, names); every record of an action asks again."""
     from jinja2 import Environment, nodes
     from jinja2.exceptions import TemplateSyntaxError
 
@@ -179,7 +191,7 @@ def extract_action_names_from_template(
         raise
 
     referenced_actions: set[str] = set()
-    aliases = prompt_aliases(ast, names or {})
+    aliases = prompt_aliases(ast, dict(names_items))
 
     def _walk(node: nodes.Node, local_vars: set[str]) -> None:
         # {% for %} and {% macro %} create child scopes — copy the set
@@ -237,7 +249,7 @@ def extract_action_names_from_template(
             _walk(child, local_vars)
 
     _walk(ast, set())
-    return referenced_actions
+    return frozenset(referenced_actions)
 
 
 def extract_field_value(field_context: dict, action_name: str, field_name: str, default=None):
