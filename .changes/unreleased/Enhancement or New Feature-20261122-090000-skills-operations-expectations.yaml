@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: 'agac skills install now also installs three skills: agac-operations (run large workflows safely, recover without paying twice, and check the output counts with scripts/run_health.py), agac-expectations (expect: rules and how to calibrate a rule before it may block records) and agac-blind-verification (verifiers that never see the reference, display ids, vote rules). agac skills list shows the description of each skill from its frontmatter, in name order. A test keeps the bundled skills free of words from one domain.'
+time: 2026-11-22T09:00:00Z

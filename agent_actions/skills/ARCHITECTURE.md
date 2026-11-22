@@ -9,22 +9,16 @@ This document maps the moving parts of `agent_actions/skills/` — the module th
 ```
                       agent_actions/skills/
                             │
-                    agac-agent-skills/           ← the only bundled skill
-                            │
-              ┌─────────────┼─────────────┐
-              │             │             │
-          SKILL.md     references/    scripts/
-        (descriptor)   (5 guides)    (2 helpers)
-              │             │             │
-              │             │       inspect_action.py
-              │             │       reset_workflow.py
-              │             │
-              │        workflow-patterns.md
-              │        context-scoping.md
-              │        loop-patterns.md
-              │        pooling-approach.md
-              │        prompt-engineering.md
-              │
+     ┌──────────────────┬───┴──────────────┬──────────────────┐
+     │                  │                  │                  │
+agac-agent-skills/  agac-operations/   agac-expectations/   agac-blind-verification/
+     │                  │                  │                  │
+ SKILL.md           SKILL.md           SKILL.md           SKILL.md
+ references/ (5)    references/        references/        references/
+ scripts/ (2)         recovery.md        calibration.md     display-ids.md
+                    scripts/                               consensus.md
+                      run_health.py
+
           (installed into user project via `agac skills install`)
 ```
 
@@ -43,10 +37,11 @@ get_bundled_skills_path()                 (cli/skills.py)
        │
        └─ iterdir() → [d for d in path.iterdir() if d.is_dir()]
             │
-            └─ ["agac-agent-skills"]      ← every subdirectory is a skill
+            └─ ["agac-agent-skills", "agac-operations",
+                "agac-blind-verification", "agac-expectations"]   ← every subdirectory is a skill
 ```
 
-The `list` command reads `SKILL.md` from each discovered directory to extract a description. The description comes from the YAML frontmatter `description:` field, but the current implementation reads the first non-empty, non-heading line after line 1 — so both sources need to agree.
+The `list` command reads `SKILL.md` from each discovered directory and shows the `description:` of its YAML frontmatter (`skill_description()` in `cli/skills.py`). A `SKILL.md` with no frontmatter shows its first non-empty, non-heading line. The skills are listed in name order.
 
 Adding a new skill means creating a new subdirectory under `skills/` with a `SKILL.md` at its root. No registration step needed.
 
@@ -151,6 +146,10 @@ Both scripts self-locate the project root by walking up for `agent_actions.yml`,
 | `agac-agent-skills/SKILL.md` | Skill descriptor + primary knowledge payload |
 | `agac-agent-skills/references/*.md` | 5 deep-dive reference guides |
 | `agac-agent-skills/scripts/*.py` | 2 helper scripts (inspect, reset) |
+| `agac-operations/SKILL.md`, `references/recovery.md` | Running, recovering and checking large workflows |
+| `agac-operations/scripts/run_health.py` | Health check of the output counts (standard library only) |
+| `agac-expectations/SKILL.md`, `references/calibration.md` | `expect:` rules and their calibration |
+| `agac-blind-verification/SKILL.md`, `references/*.md` | Blind verifiers, display ids, vote rules |
 
 CLI entry point (outside this module):
 
@@ -170,6 +169,6 @@ CLI entry point (outside this module):
 
 4. **`seed.` prefix.** Seed data declared under `context_scope.seed` is available in prompts as `{{ seed.key }}`. The config key (`seed:`) and the template variable prefix (`seed.`) are the same word — declare it, then reference it.
 
-5. **Skill naming convention.** Skill directories must start with `agac-` by convention (the current skill is `agac-agent-skills`). Discovery does not enforce this — any subdirectory is treated as a skill — but the convention exists for namespace clarity.
+5. **Skill naming convention.** Skill directories must start with `agac-` by convention (the current skills are `agac-agent-skills`, `agac-operations`, `agac-expectations` and `agac-blind-verification`). Discovery does not enforce this — any subdirectory is treated as a skill — but the convention exists for namespace clarity.
 
 6. **No selective update.** Installation is all-or-nothing per skill. You cannot install only `references/` or only `scripts/`. The entire skill directory tree is copied.
