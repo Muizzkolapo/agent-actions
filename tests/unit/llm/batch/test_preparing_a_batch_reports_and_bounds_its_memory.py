@@ -11,6 +11,8 @@ from __future__ import annotations
 import gc
 import logging
 import tracemalloc
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -86,9 +88,26 @@ def _record_size() -> int:
     return size
 
 
+@contextmanager
+def _no_log_records() -> Iterator[None]:
+    """No log record is made: a capture that keeps every record (pytest at DEBUG) would be counted."""
+    before = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    try:
+        yield
+    finally:
+        logging.disable(before)
+
+
 def _peak_of_preparing(config: dict[str, Any], n: int) -> int:
     data = _records(n)
     gc.collect()
+    with _no_log_records():
+        return _traced_peak_of_preparing(config, data)
+
+
+def _traced_peak_of_preparing(config: dict[str, Any], data: list[dict[str, Any]]) -> int:
+    n = len(data)
     tracemalloc.start()
     try:
         base = tracemalloc.get_traced_memory()[0]
