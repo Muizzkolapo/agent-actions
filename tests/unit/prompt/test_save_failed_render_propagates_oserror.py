@@ -18,18 +18,16 @@ class TestSaveFailedRenderPropagatesOSError:
 
     def test_oserror_on_write_propagates(self, tmp_path):
         """OSError during file write is not caught — it propagates to caller."""
-        read_only_dir = tmp_path / "readonly"
-        read_only_dir.mkdir()
-        read_only_dir.chmod(0o444)
+        # A regular file where the cache directory must go fails under any uid;
+        # a read-only directory does not stop root.
+        (tmp_path / ".agent-actions").write_text("", encoding="utf-8")
 
         with patch(
             "agent_actions.prompt.render_workflow.resolve_project_root",
-            return_value=read_only_dir,
+            return_value=tmp_path,
         ):
             with pytest.raises(OSError):
-                _save_failed_render("bad yaml", "test_workflow", project_root=read_only_dir)
-
-        read_only_dir.chmod(0o755)
+                _save_failed_render("bad yaml", "test_workflow", project_root=tmp_path)
 
     def test_successful_save_returns_path_message(self, tmp_path):
         """When save succeeds, returns message with file path."""
