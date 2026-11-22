@@ -1656,6 +1656,35 @@ def test_the_text_for_the_tree_holds_each_version_value_as_written(tmp_path):
     assert len(rendered.text.splitlines()) == len(textwrap.dedent(_VERSIONED).splitlines()) + 2
 
 
+@pytest.mark.parametrize(
+    "lines, condition",
+    [
+        pytest.param('    guard: &g "up.x > {{ i }}"\n', "up.x > {{ i }}", id="anchor"),
+        pytest.param("    guard: >-\n      up.x > {{ i }}\n", "up.x > {{ i }}", id="folded"),
+        pytest.param("    guard: {{ i }} < up.x  # later\n", "{{ i }} < up.x", id="comment"),
+    ],
+)
+def test_a_guard_that_reads_a_version_variable_keeps_its_line_and_drops_its_comment(
+    tmp_path, lines, condition
+):
+    wf = _project(tmp_path, _VERSIONED + lines)
+
+    idx = build_index(tmp_path)
+
+    judge = idx.file_actions[wf]["judge"]
+    assert (judge.guard_line, judge.guard_condition) == (8, condition)
+    assert _messages(wf, tmp_path) == []
+
+
+def test_the_text_for_the_tree_escapes_a_character_yaml_does_not_take_as_written(tmp_path):
+    wf = _project(tmp_path, _VERSIONED + '    output_field: "o\\x7f{{ i }}"\n')
+
+    rendered = render_workflow_source(wf, tmp_path)
+
+    assert rendered.data["actions"][1]["output_field"] == "o\x7f{{ i }}"
+    assert yaml.safe_load(rendered.text) == rendered.data
+
+
 def test_a_line_of_an_action_named_with_a_version_variable_is_owned_by_its_written_name(tmp_path):
     wf = _project(
         tmp_path,

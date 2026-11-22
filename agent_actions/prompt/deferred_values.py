@@ -57,6 +57,10 @@ _HELD_OPEN, _HELD_CLOSE = "\ue002", "\ue003"
 _TOKEN = re.compile(f"{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
 # A token as `leave` writes it in place of a value.
 _LEFT = re.compile(f" ?{_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
+# The same, with the anchor or tag `leave` keeps before it.
+_LEFT_WITH_PROPERTIES = re.compile(f" ((?:[&!]\\S*[ \\t]+)*){_LEFT_OPEN}(\\d+){_LEFT_CLOSE}")
+# A character YAML does not accept as written, which JSON does not escape.
+_NOT_YAML_PRINTABLE = re.compile("[\\x7f-\\x84\\x86-\\x9f\\ud800-\\udfff\\ufffe\\uffff]")
 _HELD = re.compile(f"{_HELD_OPEN}(\\d+){_HELD_CLOSE}")
 # A loaded prompt that a prompt's tag outputs, put in once the YAML is parsed.
 _LOADED_OPEN, _LOADED_CLOSE = "\ue004", "\ue005"
@@ -173,6 +177,23 @@ class _Left:
     text: str = ""
     names: Mapping[str, Any] | None = None
     while_importing: bool = False
+
+
+def _without_comments(text: str) -> str:
+    """*text*, YAML that does not parse on its own, with each line's comment cut off."""
+    lines = []
+    for line in text.split("\n"):
+        quote = ""
+        for i, char in enumerate(line):
+            if quote:
+                quote = "" if char == quote else quote
+            elif char in "'\"":
+                quote = char
+            elif char == "#" and (i == 0 or line[i - 1] in " \t"):
+                line = line[:i]
+                break
+        lines.append(line.rstrip())
+    return "\n".join(lines).strip()
 
 
 class _NotData(Exception):
@@ -473,28 +494,28 @@ class LoadRender:
             try:
                 parsed = yaml.safe_load(region.document(region.text))
             except yaml.YAMLError:
-                return region.text.strip()
+                return _without_comments(region.text)
             if isinstance(parsed, dict) and list(parsed) == ["k"]:
                 return parsed["k"]
-            return region.text.strip()
+            return _without_comments(region.text)
 
         return self.fill_loaded(_strings(data, "", put))
 
     def written_line(self, line: str) -> str:
-        """*line* with each left value that sits on one line put back as the file writes it."""
+        """*line* with each left value put back as the file writes its first line."""
 
         def put(match: re.Match[str]) -> str:
-            text = self._left[int(match.group(1))].region.text.rstrip("\n")
-            return match.group(0) if "\n" in text else text
+            return self._left[int(match.group(2))].region.text.split("\n", 1)[0]
 
-        return _LEFT.sub(put, line)
+        return _LEFT_WITH_PROPERTIES.sub(put, line)
 
     def written_text(self, text: str) -> str:
         """*text* with each left value as one JSON line of the value the file writes."""
 
         def put(match: re.Match[str]) -> str:
             value = self.written(match.group(0).lstrip(" "))
-            return " " + json.dumps(value, ensure_ascii=False, default=str)
+            dumped = json.dumps(value, ensure_ascii=False, default=str)
+            return " " + _NOT_YAML_PRINTABLE.sub(lambda c: f"\\u{ord(c.group()):04x}", dumped)
 
         return _LEFT.sub(put, text)
 
