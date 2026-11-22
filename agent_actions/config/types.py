@@ -113,6 +113,7 @@ class ActionConfigDict(TypedDict, total=False):
     is_operational: bool
     json_mode: bool
     output_field: str
+    context_block: str  # "auto" | "all" | "none"
 
     # Prompt & Schema
     prompt: str

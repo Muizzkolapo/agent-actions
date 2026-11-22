@@ -245,10 +245,9 @@ class TestOnline:
                 {"type": "text", "text": SHARED, "cache_control": MARK},
                 {
                     "type": "text",
+                    # The prompt prints both observed fields, so the context block sends none.
                     "text": "## THE SLOT\nIt rained.\n :<|end_of_user_instruction|>\n"
-                    '<|begin_of_text|>: {"source": {"page_content": '
-                    '"The page text.\\nIts second line.", "fact": "It rained."}}'
-                    " :<|end_of_text|>\n",
+                    "<|begin_of_text|>: {} :<|end_of_text|>\n",
                 },
             ],
         }

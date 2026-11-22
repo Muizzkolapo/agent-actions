@@ -55,6 +55,7 @@ The examples on this page omit the lines that are not the subject of the example
 | `run_mode` | string | `online` (default) or `batch` execution |
 | `on_empty` | string | The result of an empty answer: `warn` (default), `error` or `skip`. See [Execution Fields](./index.md#execution-fields) |
 | `context_scope` | object | The default context visibility: `observe`, `drop`, `passthrough`, `seed` |
+| `context_block` | string | Which observed fields the request sends in its context block: `auto` (default), `all` or `none`. See [The context block](../context/context-scope.md#the-context-block) |
 | `temperature` | float | The LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | The maximum number of response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |

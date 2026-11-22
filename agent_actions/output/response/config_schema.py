@@ -96,6 +96,9 @@ class AgentConfig(BaseModel):
     on_empty: Literal["warn", "error", "skip"] = Field(
         default="warn", description="What an empty answer does to its record or action"
     )
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None, description="Observed fields sent in the context block"
+    )
     context_scope: dict[str, Any] | None = Field(
         default=None,
         description="Context scope configuration for data visibility and flow control "

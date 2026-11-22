@@ -35,6 +35,7 @@ from agent_actions.processing.task_preparer import (
     write_trace_row,
 )
 from agent_actions.prompt.cache_scope import CACHE_POINTS_KEY, repair_call_scope
+from agent_actions.prompt.context_block import context_block
 from agent_actions.record.elsewhere import sends_elsewhere
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP, SENT_ELSEWHERE
@@ -319,7 +320,12 @@ class BatchTaskPreparator:
             PromptService.debug_print_prompt(
                 agent_config,
                 task["prompt"],
-                str(ContextService.prepare_context_data(task["content"], is_tool=False)),
+                str(
+                    ContextService.prepare_context_data(
+                        context_block(task["content"], agent_config, task["prompt"]),
+                        is_tool=False,
+                    )
+                ),
                 task.get("compiled_schema", schema),
             )
 

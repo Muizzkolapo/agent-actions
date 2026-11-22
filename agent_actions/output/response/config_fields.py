@@ -32,6 +32,7 @@ SIMPLE_CONFIG_FIELDS = {
     "json_mode": True,  # Default: True (JSON-based system)
     "prompt_debug": False,  # Default: False (no debug output)
     "output_field": "raw_response",  # Default: 'raw_response' (for non-JSON vendors like Ollama)
+    "context_block": "auto",  # Default: observed fields the prompt prints are not sent again
     # Generation parameters (provider-agnostic; mapped to vendor-specific keys in each client)
     "temperature": None,  # Default: None (use provider default)
     "max_tokens": None,  # Default: None (use provider default)
