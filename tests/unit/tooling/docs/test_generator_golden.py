@@ -508,3 +508,17 @@ class TestGenerateDocsGolden:
 
         assert generate_docs(str(project), elsewhere) is True
         assert capsys.readouterr().out.endswith(f"\nDone. Documentation compiled to {elsewhere}/\n")
+
+
+def test_colliding_log_names_get_suffixes_by_run_name_not_insertion_order():
+    from agent_actions.tooling.docs.generator import _event_sources
+
+    a = {"is_workflow": False, "events": [{"id": "a"}]}
+    b = {"is_workflow": False, "events": [{"id": "b"}]}
+    logs = {"events": [{"id": "cli"}]}
+
+    forward = _event_sources(logs, {"logs": a, "x_logs": b})
+    backward = _event_sources(logs, {"x_logs": b, "logs": a})
+
+    assert forward == backward
+    assert [name for name, _ in forward] == ["project:logs", "project:logs~2", "project:x_logs"]
