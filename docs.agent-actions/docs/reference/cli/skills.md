@@ -61,6 +61,8 @@ agac skills install --codex
 agac skills install --claude --force
 ```
 
+The command does not replace a skill that is already in the target folder. If every skill is already there, the command installs nothing and says `Nothing installed.`. To replace the installed skills, add `--force`.
+
 ## Installed Files {/* #what-gets-installed */}
 
 Each skill contains these files:
