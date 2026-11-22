@@ -24,6 +24,7 @@ from agent_actions.logging.events.cache_events import (
     CacheMissEvent,
 )
 from agent_actions.prompt.context.seed_entry import SeedSelectionError, parse_seed_entry
+from agent_actions.utils.readonly import readonly_view
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +54,12 @@ class StaticDataLoader:
     # Supported file extensions
     SUPPORTED_EXTENSIONS = {".json", ".yml", ".yaml", ".md", ".txt", ".csv"}
 
-    def __init__(self, static_data_dir: Path | Sequence[SeedFolder]):
-        """The folders a reference is looked for in, in order; one path is a list of one."""
+    def __init__(self, static_data_dir: Path | Sequence[SeedFolder], *, readonly: bool = False):
+        """The folders a reference is looked for in, in order; one path is a list of one.
+
+        ``readonly`` keeps each parsed file as a read-only view, for a loader whose values
+        every caller shares.
+        """
         if isinstance(static_data_dir, Path):
             if not static_data_dir.exists():
                 raise ValueError(f"Static data directory does not exist: {static_data_dir}")
@@ -70,6 +75,7 @@ class StaticDataLoader:
         self.folders = folders
         self.static_data_dir = folders[0].path
         self._cache: dict[str, Any] = {}
+        self._readonly = readonly
 
         logger.debug(
             "StaticDataLoader initialized with folders: %s", [str(f.path) for f in folders]
@@ -122,6 +128,8 @@ class StaticDataLoader:
                         )
                     )
                     data = self._load_file(resolved_path, field_name)
+                    if self._readonly:
+                        data = readonly_view(data)
                     self._cache[cache_key] = data
                     loaded_data[field_name] = data
                     logger.debug(
@@ -427,8 +435,9 @@ _SHARED_LOADERS_LOCK = threading.Lock()
 def shared_static_data_loader(static_data_dir: Path | Sequence[SeedFolder]) -> StaticDataLoader:
     """One loader per folder list for the process, so a file is parsed once.
 
-    What it returns is shared between callers: read it, never write to it. One
-    path is a list of one folder, as for ``StaticDataLoader`` itself.
+    What it returns is shared between callers and read-only: a write raises
+    ``ReadOnlyError``. One path is a list of one folder, as for ``StaticDataLoader``
+    itself.
     """
     if isinstance(static_data_dir, Path):
         resolved = static_data_dir.resolve()
@@ -441,6 +450,6 @@ def shared_static_data_loader(static_data_dir: Path | Sequence[SeedFolder]) -> S
     with _SHARED_LOADERS_LOCK:
         loader = _SHARED_LOADERS.get(key)
         if loader is None:
-            loader = StaticDataLoader(folders)
+            loader = StaticDataLoader(folders, readonly=True)
             _SHARED_LOADERS[key] = loader
         return loader

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'An Anthropic batch action with `json_mode: false` stores only the text of an answer that also holds a tool call, under its `output_field`, as the online action does. An answer that holds a tool call and no text fails the record with the error the online action raises. A batch line of such an action does not offer its schema as a tool, and a rule on the `output_field`, such as an `llm_judge`, reads the answer text.'
+time: 2026-11-21T16:00:00Z

@@ -103,7 +103,7 @@ The same configuration works identically in the two modes.
 
 The two modes also send the same request. For the same prompt, record, schema and `json_mode`, a batch request holds the messages that the online request holds. The prompt, the record and the schema instructions are in the same places.
 
-Agent Actions sends the record to the model as JSON. It does not escape text that is not ASCII. A `NaN` or an infinite number becomes `null`.
+Agent Actions sends the record to the model as JSON. It does not escape text that is not ASCII. A `NaN` or an infinite number becomes `null`. A field that the prompt prints is not sent again in that JSON, unless the action sets `context_block: all`. See [The context block](../context/context-scope.md#the-context-block).
 
 A prompt that is too large for the context window of the model fails its record in the two modes. In batch mode, Agent Actions does not send that record. It sends the other records of the batch. A judge request that is too large fails only its judge call, with `judge call failed: <error>`, as online. Agent Actions sends the other judge requests.
 

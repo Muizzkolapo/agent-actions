@@ -18,6 +18,7 @@ from agent_actions.processing.source_resolution import (
     resolve_first_stage_source,
     resolve_source_content,
 )
+from agent_actions.prompt.context_block import context_block
 from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils import deep_json
 from agent_actions.utils.content import get_existing_content
@@ -50,7 +51,11 @@ def write_trace_row(
         action_name=context.agent_name,
         record_id=record_id,
         compiled_prompt=prompt,
-        llm_context=deep_json.dumps(llm_context, ensure_ascii=False, default=str),
+        llm_context=deep_json.dumps(
+            context_block(llm_context, context.agent_config, prompt),
+            ensure_ascii=False,
+            default=str,
+        ),
         model_name=context.agent_config.get("model_name") or context.agent_config.get("model"),
         model_vendor=context.agent_config.get("model_vendor"),
         run_mode=context.mode.value if context.mode else None,
@@ -120,6 +125,7 @@ class TaskPreparer:
                 conditional_clause,
                 field_context,
                 conditional_clause_passthrough_on_error,
+                source_guid,
             )
             if not guard_result.should_execute:
                 return PreparedTask(
@@ -195,6 +201,7 @@ class TaskPreparer:
             conditional_clause,
             field_context,
             conditional_clause_passthrough_on_error,
+            source_guid,
         )
         return GuardStatus.PASSED if result.should_execute else _turned_away_as(result.behavior)
 
@@ -316,6 +323,7 @@ class TaskPreparer:
         conditional_clause: str | None,
         field_context: dict[str, Any],
         conditional_clause_passthrough_on_error: bool = True,
+        source_guid: str | None = None,
     ):
         """Evaluate guard with full context; wraps non-dict content as ``{"_raw": content}``."""
         from agent_actions.input.preprocessing.filtering.evaluator import (
@@ -332,6 +340,7 @@ class TaskPreparer:
             context=field_context,
             conditional_clause=conditional_clause,
             conditional_clause_passthrough_on_error=conditional_clause_passthrough_on_error,
+            record_id=source_guid,
         )
 
     @staticmethod

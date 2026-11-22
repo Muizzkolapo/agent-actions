@@ -22,7 +22,7 @@ Only depends on `errors` and `utils.constants` (leaf packages).
 | `guard_parser` | `GuardParser` | Class | Parses guard expression strings into typed `GuardExpression` objects. |
 | `guard_parser` | `GuardType` | Enum | Guard types: `SQL`, `UDF`. |
 | `consolidated_guard` | `GuardBehavior` | Enum | Behavior on guard failure: `SKIP`, `FILTER`, `WARN`. Unsupported values (`write_to`, `reprocess`) are in `_UNSUPPORTED_GUARD_BEHAVIORS`. |
-| `consolidated_guard` | `parse_guard_config` | Function | Parses guard config from string or dict format. |
+| `consolidated_guard` | `parse_guard_config` | Function | Parses guard config from string or dict format. The dict form takes `timeout` (seconds, a positive finite number), refused on a UDF guard. |
 
 ## Re-export Shims
 
@@ -36,7 +36,7 @@ The original modules under `output/response/` are now re-export shims pointing h
 |--------|------|-------------|------------|
 | `GuardParser.parse()` | `agent_config/{workflow}.yml` | Validates | `actions[].guard.condition` |
 | `parse_guard_config()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard` |
-| `GuardConfig.from_dict()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard.condition`, `actions[].guard.on_false` |
+| `GuardConfig.from_dict()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard.condition`, `actions[].guard.on_false`, `actions[].guard.passthrough_on_error`, `actions[].guard.timeout` |
 | `GuardConfig.from_string()` | `agent_config/{workflow}.yml` | Reads | `actions[].guard` |
 
 **Internal only**: `GuardType`, `GuardExpression`, `GuardBehavior`, `GuardConfig.is_udf_condition()`, `GuardConfig.is_sql_condition()`, `GuardConfig.get_condition_expression()` — no direct project surface.

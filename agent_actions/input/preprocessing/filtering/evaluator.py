@@ -9,6 +9,7 @@ from agent_actions.errors import (
     ConfigurationError,
     FunctionNotFoundError,
     GuardNotAppliedError,
+    GuardNotEvaluatedError,
     mark_action_fatal,
 )
 from agent_actions.errors.configuration import ConfigValidationError
@@ -19,12 +20,15 @@ from agent_actions.guards.consolidated_guard import (
     GuardBehavior,
 )
 from agent_actions.input.preprocessing.filtering.guard_filter import (
+    DEFAULT_GUARD_TIMEOUT,
     ErrorCategory,
     FilterItemRequest,
     FilterResult,
     GuardFilter,
     get_global_guard_filter,
 )
+from agent_actions.logging.core.manager import fire_event
+from agent_actions.logging.events.validation_events import GuardEvaluationTimeoutEvent
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.readonly import ReadOnlyError
 from agent_actions.utils.safe_format import get_error_chain, safe_format_error
@@ -236,12 +240,14 @@ class GuardEvaluator:
         context: dict[str, Any] | None = None,
         conditional_clause: str | None = None,
         conditional_clause_passthrough_on_error: bool = True,
+        record_id: str | None = None,
     ) -> GuardResult:
         """Evaluate guard conditions, optionally with full context.
 
         When *context* is provided, item content is merged with context data
         (passthrough fields, source data) before evaluation.  When *context*
-        is ``None``, evaluation uses the item directly.
+        is ``None``, evaluation uses the item directly. *record_id* names the
+        record in what is reported when its guard cannot be evaluated.
         """
         if context is not None:
             eval_data = self._build_evaluation_context(item, context)
@@ -257,7 +263,7 @@ class GuardEvaluator:
             if result is not None:
                 return result
 
-        return self._evaluate_guard(eval_data, guard_config)
+        return self._evaluate_guard(eval_data, guard_config, record_id)
 
     def _evaluate_conditional_clause(
         self, context: Any, conditional_clause: str, passthrough_on_error: bool = True
@@ -344,7 +350,9 @@ class GuardEvaluator:
 
         return None
 
-    def _evaluate_guard(self, context: Any, guard_config: dict[str, Any] | None) -> GuardResult:
+    def _evaluate_guard(
+        self, context: Any, guard_config: dict[str, Any] | None, record_id: str | None = None
+    ) -> GuardResult:
         """Evaluate guard condition against context data."""
         if not guard_config:
             return GuardResult.passed()
@@ -363,12 +371,15 @@ class GuardEvaluator:
             )
         behavior = GuardBehavior(behavior_str)
         passthrough_on_error = guard_config.get("passthrough_on_error", True)
+        timeout = guard_config.get("timeout") or DEFAULT_GUARD_TIMEOUT
 
         try:
             eval_context = self._prepare_eval_context(context)
 
-            request = FilterItemRequest(data=eval_context, condition=clause)
+            request = FilterItemRequest(data=eval_context, condition=clause, timeout=timeout)
             filter_result = self._filter.filter_item(request)
+            if filter_result.error_category == ErrorCategory.TIMEOUT:
+                return _out_of_time(clause, behavior, timeout, record_id)
 
             filter_result = reclassify_missing_field_error(filter_result, clause)
 
@@ -439,6 +450,34 @@ class GuardEvaluator:
             eval_data["_raw"] = item
 
         return eval_data
+
+
+def _out_of_time(
+    clause: str, behavior: GuardBehavior, timeout: float, record_id: str | None
+) -> GuardResult:
+    """A guard with no verdict in its time: a warn guard runs the record, any other fails it.
+
+    Not ``passthrough_on_error``: passing or turning the record away would make the same
+    record's result depend on the machine's load, with nothing to find it by afterwards.
+    """
+    fire_event(
+        GuardEvaluationTimeoutEvent(
+            guard_clause=clause, timeout_seconds=timeout, record_id=record_id or ""
+        )
+    )
+    if behavior == GuardBehavior.WARN:
+        return GuardResult.passed()
+    raise GuardNotEvaluatedError(
+        f"Guard '{clause}' gave no verdict on record {record_id} within {timeout}s, so the "
+        "record is failed rather than passed or turned away; `agac retry` runs it again. "
+        "If it recurs, give the guard more time with its `timeout:` key.",
+        context={
+            "guard_clause": clause,
+            "timeout_seconds": timeout,
+            "record_id": record_id,
+            "failed_field": "guard",
+        },
+    )
 
 
 # Thread-safe singleton

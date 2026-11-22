@@ -232,8 +232,11 @@ def test_a_field_an_open_schema_admits_unlisted_still_runs(tmp_path, mode, promp
     _run_to_the_end(project)
 
     assert _dispositions(project, "consumer") == ["success", "success"]
-    traces = [c for (c,) in trace_rows(project, "select llm_context from prompt_trace")]
-    assert any('"produce": {' in c and '"page_content": "two"' in c for c in traces), traces
+    traces = trace_rows(project, "select compiled_prompt, llm_context from prompt_trace")
+    # A field the prompt prints reaches the model in the prompt, not again in the context block.
+    assert any(
+        ('"produce": {' in c and '"page_content": "two"' in c) or p == "Say two" for p, c in traces
+    ), traces
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])

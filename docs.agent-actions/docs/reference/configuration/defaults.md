@@ -55,6 +55,7 @@ The examples on this page omit the lines that are not the subject of the example
 | `run_mode` | string | `online` (default) or `batch` execution |
 | `on_empty` | string | The result of an empty answer: `warn` (default), `error` or `skip`. See [Execution Fields](./index.md#execution-fields) |
 | `context_scope` | object | The default context visibility: `observe`, `drop`, `passthrough`, `seed` |
+| `context_block` | string | Which observed fields the request sends in its context block: `auto` (default), `all` or `none`. See [The context block](../context/context-scope.md#the-context-block) |
 | `temperature` | float | The LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | The maximum number of response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
@@ -64,6 +65,7 @@ The examples on this page omit the lines that are not the subject of the example
 | `batch_max_workers` | integer | The number of records that an Ollama action in `run_mode: batch` sends at the same time (1-32). If unset, the `OLLAMA_BATCH_MAX_WORKERS` environment variable gives the value, or else the value is 1. No other action reads this field. See [Ollama batch](../execution/run-modes.md#ollama-batch) |
 | `request_timeout` | number | The number of seconds that one LLM request may take (greater than 0). If a request takes longer, that attempt fails and `retry` retries it. If unset, each provider SDK keeps its own timeout. See [Request timeout](./index.md#request-timeout) |
 | `context_window` | integer | The number of tokens of prompt that the model reads (greater than 0). A larger prompt fails its record before it is sent. If unset, Agent Actions uses the window that it knows for the model, or 128,000 tokens. See [Context window](./index.md#context-window) |
+| `guard_timeout` | number | The number of seconds that the condition of each guard may take on one record (greater than 0, default 5). A guard's own `timeout` wins. A UDF guard does not read it. See [Guards](../execution/guards.md#timeouts) |
 | `record_limit` | integer | The maximum number of records in each file (default: unlimited). `AGAC_RECORD_LIMIT` caps this value from the environment |
 | `file_limit` | integer | The maximum number of files that each action walks (default: unlimited). `AGAC_FILE_LIMIT` limits this value from the environment. This limit does not restrict [`agac retry`](../cli/retry). That command walks the files that hold the records it named, and does not stop after `file_limit` files |
 | `enable_prompt_caching` | boolean | Enables Anthropic prompt caching, to reduce the costs of repeated prompts (default: `false`). A prompt that every record shares is marked at its end. A prompt with `{% cache_point %}` tags is marked at each tag. See [Prompt Caching](../prompts/prompt-caching.md) |

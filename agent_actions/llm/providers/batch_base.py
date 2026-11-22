@@ -32,6 +32,7 @@ from agent_actions.prompt.cache_scope import (
     SHARED_PROMPT_LEN_KEY,
     cache_points_of,
 )
+from agent_actions.prompt.context_block import context_block
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
@@ -130,6 +131,9 @@ class BatchResult:
     # Whether online's retry policy retries what this record ended with, where the client
     # knows the error online raises for it; None is decided from ``error_status``.
     retriable: bool | None = None
+    # How online's text-mode call ends this answer, which holds no text (an Anthropic tool
+    # answer alone); None when it holds text or the client does not say. Not persisted.
+    no_text: NoAnswer | None = None
 
 
 def raise_unsent(rows: list[dict[str, Any]]) -> None:
@@ -208,12 +212,15 @@ class BaseBatchClient(ABC):
             cache_points = cache_points_of(row) if marks_cache_points else ()
             row.pop(CACHE_POINTS_KEY, None)
             varies_per_record = row.pop(REQUEST_VARIES_PER_RECORD_KEY, False)
+            prompt = row.get("prompt", agent_config.get("prompt", ""))
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
-                prompt=row.get("prompt", agent_config.get("prompt", "")),
+                prompt=prompt,
                 # Encoded by the function online's call uses, so both send the same text.
                 user_content=str(
-                    ContextService.prepare_context_data(row["content"], is_tool=False)
+                    ContextService.prepare_context_data(
+                        context_block(row["content"], agent_config, prompt), is_tool=False
+                    )
                 ),
                 model_config={
                     "model_name": agent_config.get("model_name", self._get_default_model()),
@@ -443,6 +450,7 @@ class BaseBatchClient(ABC):
             usage=usage,
             text=text,
             parse_error=parse_error,
+            no_text=None if text is not None else self._no_text_answer(raw_response),
         )
 
     def _no_answer(self, _raw_response: Any) -> NoAnswer | None:
@@ -455,6 +463,10 @@ class BaseBatchClient(ABC):
 
     def _answer_text(self, raw_response: Any) -> str | None:
         """The answer's text, for a provider whose content extraction already parsed it."""
+        return None
+
+    def _no_text_answer(self, _raw_response: Any) -> NoAnswer | None:
+        """How online's text-mode call ends an answer that holds no text; None keeps it."""
         return None
 
     def _extract_custom_id(self, raw_response: Any) -> str:

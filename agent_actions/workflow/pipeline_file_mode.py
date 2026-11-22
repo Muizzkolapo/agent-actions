@@ -621,6 +621,7 @@ def prefilter_by_guard(
                 context=context,
                 conditional_clause=conditional_clause,
                 conditional_clause_passthrough_on_error=conditional_clause_passthrough_on_error,
+                record_id=stored_record.get("source_guid"),
             )
         except GuardNotAppliedError as e:
             # The evaluator is handed the record's content; the envelope naming it is here.

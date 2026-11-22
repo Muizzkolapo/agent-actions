@@ -20,7 +20,7 @@ and provide formatter hooks for the CLI/tracing system.
 | `workflow_events.py` | Module | Workflow lifecycle (W), step lifecycle (W004/W005) and action execution (A) events. 10 classes. `ActionCompleteEvent.guard_skipped` (data key `guard_skipped`) is the part of `record_count` the action's guard skipped this execution. `ActionCompleteEvent.checks_failed` is the records the execution shipped with a failing verdict; `WorkflowCompleteEvent.records_failed_checks` is the records the workflow's actions hold that failed their checks, read from the store. `ActionCompleteEvent.cases`: a built-in router's rows per case, in the router's order. | `logging` |
 | `batch_events.py` | Module | Batch processing events (B prefix). 9 classes. | `logging` |
 | `llm_events.py` | Module | LLM interaction (L) and template rendering (T) events. 6 classes. | `logging` |
-| `validation_events.py` | Module | Validation (V), data parsing (D), guard (G), and recovery (R) events. 9 classes. | `logging` |
+| `validation_events.py` | Module | Validation (V), data parsing (D), guard (G), and recovery (R) events. 9 classes. `GuardEvaluationTimeoutEvent` (G001) names the clause, the time limit, the record id and the action (filled in from the action it fires under). | `logging` |
 | `cache_events.py` | Module | Cache lifecycle events (C prefix). 5 classes. | `logging` |
 | `initialization_events.py` | Module | Configuration (F), environment (E), initialization (I), and plugin (P) events. 13 classes. | `logging` |
 | `io_events.py` | Module | File I/O (FIO), schema operations (SO), and context introspection (CX) events, plus `LogFileCapReachedEvent` (FIO008). 15 classes. | `logging` |

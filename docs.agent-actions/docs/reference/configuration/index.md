@@ -158,6 +158,7 @@ actions:
 | `prompt` | string | An inline prompt or a `$store.template` reference |
 | `schema` | string | The output validation schema |
 | `context_scope` | object | Controls data visibility: `observe`, `drop`, `passthrough`, `seed`. Each action must declare one. See [Context Scope](../context/context-scope.md) |
+| `context_block` | string | Which observed fields the request sends in its context block. `auto` (default) leaves out a field that the prompt prints. `all` sends every field. `none` sends none. See [The context block](../context/context-scope.md#the-context-block) |
 
 ### Model Fields
 
