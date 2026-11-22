@@ -12,6 +12,7 @@ import contextlib
 import errno
 import json
 import logging
+import os
 import stat
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -120,18 +121,23 @@ def _staging(tmp_path, *, names=("a.json",), dangling=()):
     return input_dir
 
 
-def _unreadable(input_dir, name="locked/denied.json"):
-    """A real file whose parent directory denies traversal, so ``stat()`` is EACCES.
+def _unreadable(monkeypatch, input_dir, name="locked/denied.json"):
+    """A real file the walk lists but whose ``stat()`` fails with EACCES.
 
-    ``rglob`` still lists it at mode 0o444, which is what makes this reach the walk
-    at all. Returned so the caller can restore the mode; pytest cannot clean up a
-    directory it may not enter.
+    ``os.stat`` is patched for that one path rather than denying traversal with
+    ``chmod``, which does not stop root.
     """
     target = input_dir / name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("[]")
-    target.parent.chmod(0o444)
-    return target.parent
+    real_stat = os.stat
+
+    def _stat(path, *args, **kwargs):
+        if os.fspath(path) == str(target):
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(target))
+        return real_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", _stat)
 
 
 class TestTheHelperSeparatesNotAFileFromCannotTell:
@@ -315,33 +321,27 @@ class TestAnErrnoOtherThanEnoent:
     names first.
     """
 
-    def test_a_permission_failure_is_reported_like_any_other_loss(self, tmp_path):
+    def test_a_permission_failure_is_reported_like_any_other_loss(self, tmp_path, monkeypatch):
         input_dir = _staging(tmp_path, names=("a.json",))
-        locked = _unreadable(input_dir)
-        try:
-            backend = _Backend()
-            runner = MagicMock()
-            runner.retried_records = frozenset()
-            runner.storage_backend = backend
-            runner._process_single_file.side_effect = _slices(backend)
+        _unreadable(monkeypatch, input_dir)
+        backend = _Backend()
+        runner = MagicMock()
+        runner.retried_records = frozenset()
+        runner.storage_backend = backend
+        runner._process_single_file.side_effect = _slices(backend)
 
-            found, processed, errors = process_directory_files(
-                runner, input_dir, tmp_path / "output", str(input_dir), _params(tmp_path), set()
-            )
-        finally:
-            locked.chmod(0o755)
+        found, processed, errors = process_directory_files(
+            runner, input_dir, tmp_path / "output", str(input_dir), _params(tmp_path), set()
+        )
 
         assert (found, processed) == (2, 1), "the readable file still ran; the locked one counted"
         assert any(f"[Errno {errno.EACCES}]" in m for m in errors.messages), errors.messages
         assert slice_observation(backend, ACTION) is None
 
-    def test_the_collector_hands_back_the_permission_errno(self, tmp_path):
+    def test_the_collector_hands_back_the_permission_errno(self, tmp_path, monkeypatch):
         up = _staging(tmp_path, names=("a.json",))
-        locked = _unreadable(up)
-        try:
-            _collected, lost = collect_files_from_upstream([str(up)])
-        finally:
-            locked.chmod(0o755)
+        _unreadable(monkeypatch, up)
+        _collected, lost = collect_files_from_upstream([str(up)])
 
         assert [e.errno for _path, e in lost] == [errno.EACCES], lost
 
@@ -628,8 +628,6 @@ class TestWhatStatAsksIsWhatIsFileAsked:
     def test_a_fifo_is_not_a_regular_file(self, tmp_path):
         """``is_file()`` is false for a FIFO, which stats fine — so the check has to
         test the mode, not merely that ``stat()`` succeeded."""
-        import os
-
         input_dir = _staging(tmp_path)
         fifo = input_dir / "pipe.json"
         os.mkfifo(fifo)
