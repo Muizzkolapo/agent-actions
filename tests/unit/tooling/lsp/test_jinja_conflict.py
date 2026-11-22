@@ -9,7 +9,6 @@ import textwrap
 from pathlib import Path
 
 import pytest
-from ruamel.yaml import YAML
 
 from agent_actions.tooling.lsp.indexer import _index_workflow_file
 from agent_actions.tooling.lsp.models import ProjectIndex, ReferenceType
@@ -23,7 +22,7 @@ def _index_yaml(tmp_path: Path, yaml_content: str) -> tuple[list, ProjectIndex]:
     yaml_file = tmp_path / "test.yml"
     yaml_file.write_text(yaml_content)
     index = ProjectIndex(root=tmp_path)
-    _index_workflow_file(index, yaml_file, YAML(typ="safe"))
+    _index_workflow_file(index, yaml_file)
     return index.references_by_file.get(yaml_file, []), index
 
 
@@ -160,13 +159,19 @@ class TestIndexerJinjaNoFalseReferences:
         assert (ReferenceType.SCHEMA, "my_schema") in ref_pairs
         assert len(refs) == 2
 
-    def test_top_level_jinja_file_gracefully_skipped(self, tmp_path):
-        """Top-level Jinja blocks cause YAML parse failure — no crash, no refs."""
-        refs, _ = _index_yaml(
+    def test_top_level_jinja_import_indexes_actions(self, tmp_path):
+        """A top-level import renders as agac renders it, so the file keeps its actions."""
+        (tmp_path / "templates").mkdir()
+        (tmp_path / "templates" / "macros.jinja2").write_text(
+            "{% macro quality_check() %}{% endmacro %}\n"
+        )
+        refs, index = _index_yaml(
             tmp_path,
             "{% from 'macros.jinja2' import quality_check %}\nactions:\n  - name: test\n",
         )
         assert len(refs) == 0
+        assert "test" in index.file_actions[tmp_path / "test.yml"]
+        assert index.parse_errors == {}
 
     def test_jinja_filters_in_prompt(self, tmp_path):
         """Jinja filters (| join) in prompt — only schema ref indexed."""

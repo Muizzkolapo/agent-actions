@@ -35,6 +35,9 @@ await build({
     target: 'node20',
     sourcemap: 'inline',
     external: ['node:*'],
+    // A bundled CommonJS package (yaml) calls require() for Node built-ins, which an
+    // ES module does not define.
+    banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
     outExtension: { '.js': '.mjs' },
 });
 
