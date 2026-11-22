@@ -1,0 +1,637 @@
+{
+  "metadata": {
+    "generated_at": "2026-01-02T03:04:05",
+    "total_workflows": 4,
+    "generator_version": "1.1.0",
+    "project_name": "demo"
+  },
+  "workflows": {
+    "review": {
+      "id": "review",
+      "name": "review",
+      "description": "Review flow",
+      "path": "agent_config/review.yml",
+      "version": "2.0.0",
+      "defaults": {
+        "model_vendor": "openai"
+      },
+      "actions": {
+        "extract": {
+          "name": "extract",
+          "intent": "extract",
+          "type": "llm",
+          "prompt": "review.extract",
+          "schema": "extract_schema",
+          "outputs": [
+            "title",
+            "body"
+          ],
+          "output_fields": [
+            {
+              "name": "title",
+              "source": "schema",
+              "is_required": false,
+              "is_dropped": false,
+              "type": "string",
+              "description": "title field"
+            },
+            {
+              "name": "body",
+              "source": "schema",
+              "is_required": false,
+              "is_dropped": false,
+              "type": "string",
+              "description": "body field"
+            }
+          ],
+          "metrics": {
+            "calls": 3
+          }
+        },
+        "summarize": {
+          "name": "summarize",
+          "intent": "summarize",
+          "type": "llm",
+          "schema": {
+            "summary": "string",
+            "score": {
+              "type": "number"
+            }
+          },
+          "outputs": [
+            "summary",
+            "score"
+          ],
+          "output_fields": [
+            {
+              "name": "summary",
+              "source": "schema",
+              "is_required": true,
+              "is_dropped": false,
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "score",
+              "source": "schema",
+              "is_required": true,
+              "is_dropped": false,
+              "type": "unknown",
+              "description": ""
+            }
+          ],
+          "inputs": [
+            "extract.title",
+            "extract.body"
+          ],
+          "drops": [
+            "extract.body",
+            "extract.*"
+          ]
+        },
+        "score": {
+          "name": "score",
+          "type": "tool",
+          "kind": "tool",
+          "implementation": "score_fn",
+          "schema": "unknown_schema",
+          "tool_function": {
+            "name": "score_fn",
+            "file": "tools/review/score.py"
+          }
+        },
+        "scribe": {
+          "name": "scribe",
+          "kind": "llm",
+          "intent": "write"
+        },
+        "lookup": {
+          "name": "lookup",
+          "type": "tool",
+          "kind": "tool",
+          "implementation": "missing_fn",
+          "prompt": "not.a.known.prompt",
+          "inputs": [
+            "extract.title"
+          ]
+        }
+      },
+      "action_count": 5,
+      "latest_run": {
+        "id": "run_1",
+        "status": "SUCCESS"
+      },
+      "manifest": {
+        "actions": [
+          "extract"
+        ]
+      },
+      "readme": "# Review\n![logo](/artefact/images/review/logo.png) ![gone](missing.png) <img src=\"https://example.com/x.png\">\n"
+    },
+    "empty": {
+      "id": "empty",
+      "name": "empty",
+      "description": "",
+      "path": "agent_config/empty.yml",
+      "version": "1.0.0",
+      "defaults": {},
+      "actions": {},
+      "action_count": 0,
+      "latest_run": null,
+      "manifest": null,
+      "readme": null
+    },
+    "solo": {
+      "id": "solo",
+      "name": "solo",
+      "description": "Solo",
+      "path": "agent_config/solo.rendered.yml",
+      "version": "1.0.0",
+      "defaults": {},
+      "actions": {
+        "solo_step": {
+          "name": "solo_step",
+          "type": "llm",
+          "prompt": "solo.step",
+          "schema": "solo_schema",
+          "outputs": [
+            "answer"
+          ],
+          "output_fields": [
+            {
+              "name": "answer",
+              "source": "schema",
+              "is_required": false,
+              "is_dropped": false,
+              "type": "number",
+              "description": "answer field"
+            }
+          ]
+        }
+      },
+      "action_count": 1,
+      "latest_run": null,
+      "manifest": null,
+      "readme": "# Solo\n"
+    }
+  },
+  "actions": {
+    "review.extract": {
+      "name": "extract",
+      "intent": "extract",
+      "type": "llm",
+      "prompt": "review.extract",
+      "schema": "extract_schema",
+      "outputs": [
+        "title",
+        "body"
+      ],
+      "output_fields": [
+        {
+          "name": "title",
+          "source": "schema",
+          "is_required": false,
+          "is_dropped": false,
+          "type": "string",
+          "description": "title field"
+        },
+        {
+          "name": "body",
+          "source": "schema",
+          "is_required": false,
+          "is_dropped": false,
+          "type": "string",
+          "description": "body field"
+        }
+      ],
+      "workflow_id": "review"
+    },
+    "review.summarize": {
+      "name": "summarize",
+      "intent": "summarize",
+      "type": "llm",
+      "schema": {
+        "summary": "string",
+        "score": {
+          "type": "number"
+        }
+      },
+      "outputs": [
+        "summary",
+        "score"
+      ],
+      "output_fields": [
+        {
+          "name": "summary",
+          "source": "schema",
+          "is_required": true,
+          "is_dropped": false,
+          "type": "string",
+          "description": ""
+        },
+        {
+          "name": "score",
+          "source": "schema",
+          "is_required": true,
+          "is_dropped": false,
+          "type": "unknown",
+          "description": ""
+        }
+      ],
+      "inputs": [
+        "extract.title",
+        "extract.body"
+      ],
+      "drops": [
+        "extract.body",
+        "extract.*"
+      ],
+      "workflow_id": "review"
+    },
+    "review.score": {
+      "name": "score",
+      "type": "tool",
+      "kind": "tool",
+      "implementation": "score_fn",
+      "schema": "unknown_schema",
+      "tool_function": {
+        "name": "score_fn",
+        "file": "tools/review/score.py"
+      },
+      "workflow_id": "review"
+    },
+    "review.scribe": {
+      "name": "scribe",
+      "kind": "llm",
+      "intent": "write",
+      "workflow_id": "review"
+    },
+    "review.lookup": {
+      "name": "lookup",
+      "type": "tool",
+      "kind": "tool",
+      "implementation": "missing_fn",
+      "prompt": "not.a.known.prompt",
+      "inputs": [
+        "extract.title"
+      ],
+      "workflow_id": "review"
+    },
+    "solo.solo_step": {
+      "name": "solo_step",
+      "type": "llm",
+      "prompt": "solo.step",
+      "schema": "solo_schema",
+      "outputs": [
+        "answer"
+      ],
+      "output_fields": [
+        {
+          "name": "answer",
+          "source": "schema",
+          "is_required": false,
+          "is_dropped": false,
+          "type": "number",
+          "description": "answer field"
+        }
+      ],
+      "workflow_id": "solo"
+    }
+  },
+  "prompts": {
+    "review.extract": {
+      "content": "Extract",
+      "workflow": "review",
+      "used_by": [
+        {
+          "workflow": "review",
+          "action": "extract"
+        }
+      ]
+    },
+    "solo.step": {
+      "content": "Step",
+      "workflow": "solo",
+      "used_by": [
+        {
+          "workflow": "solo",
+          "action": "solo_step"
+        }
+      ]
+    },
+    "orphan": {
+      "content": "Unused",
+      "used_by": []
+    }
+  },
+  "schemas": {
+    "extract_schema": {
+      "fields": [
+        "title",
+        "body"
+      ],
+      "used_by": [
+        {
+          "workflow": "review",
+          "action": "extract"
+        }
+      ]
+    },
+    "solo_schema": {
+      "fields": [
+        "answer"
+      ],
+      "used_by": [
+        {
+          "workflow": "solo",
+          "action": "solo_step"
+        }
+      ]
+    }
+  },
+  "tool_functions": {
+    "score_fn": {
+      "name": "score_fn",
+      "file": "tools/review/score.py"
+    },
+    "other_fn": {
+      "name": "other_fn"
+    }
+  },
+  "runs": {
+    "review": {
+      "action_metrics": {
+        "extract": {
+          "calls": 3
+        },
+        "ghost": {
+          "calls": 1
+        }
+      },
+      "latest_run": {
+        "id": "run_1",
+        "status": "SUCCESS"
+      },
+      "manifest": {
+        "actions": [
+          "extract"
+        ]
+      },
+      "runtime_warnings": [
+        {
+          "action_name": "extract",
+          "message": "slow",
+          "timestamp": "t1"
+        },
+        {
+          "event_type": "BatchEvent",
+          "level": "error",
+          "message": "boom"
+        },
+        {
+          "level": "warn"
+        }
+      ],
+      "total_runs": 4
+    },
+    "stray": {},
+    "logs": {}
+  },
+  "logs": {
+    "events_path": "agent_io/logs/events.json",
+    "recent_invocations": [
+      {
+        "id": "inv_1"
+      }
+    ],
+    "validation_errors": [
+      {
+        "message": "e1"
+      },
+      {
+        "message": "e2"
+      }
+    ],
+    "validation_warnings": [
+      {
+        "message": "w1"
+      }
+    ],
+    "runtime_warnings": [
+      {
+        "target": "extract",
+        "message": "slow",
+        "timestamp": "t1"
+      },
+      {
+        "target": "NOT_SET",
+        "message": "",
+        "timestamp": ""
+      }
+    ],
+    "runtime_errors": [
+      {
+        "target": "BatchEvent",
+        "message": "boom",
+        "timestamp": ""
+      },
+      {
+        "target": "review",
+        "message": "it broke",
+        "timestamp": "e1"
+      },
+      {
+        "target": "extract",
+        "message": "bad",
+        "timestamp": "e2"
+      },
+      {
+        "target": "wf_2",
+        "message": "Run run_2 failed",
+        "timestamp": "s2"
+      },
+      {
+        "target": "NOT_SET",
+        "message": "Run ? failed",
+        "timestamp": ""
+      },
+      {
+        "target": "a",
+        "message": "Action a failed in run run_4",
+        "timestamp": "s4"
+      }
+    ],
+    "events": [
+      {
+        "seq": 0,
+        "level": "warn",
+        "event_type": "LogEvent",
+        "message": "logs warn 0",
+        "meta": {
+          "timestamp": "2026-01-01T00:03:00"
+        },
+        "id": "project:logs~2:0"
+      },
+      {
+        "seq": 1,
+        "level": "error",
+        "event_type": "LogEvent",
+        "message": "stray error 1",
+        "meta": {
+          "timestamp": "2026-01-01T00:02:01"
+        },
+        "id": "project:stray:1"
+      },
+      {
+        "seq": 0,
+        "level": "info",
+        "event_type": "LogEvent",
+        "message": "stray info 0",
+        "meta": {
+          "timestamp": "2026-01-01T00:02:00"
+        },
+        "id": "project:stray:0"
+      },
+      {
+        "seq": 3,
+        "level": "debug",
+        "event_type": "LogEvent",
+        "message": "review debug 3",
+        "meta": {
+          "timestamp": "2026-01-01T00:01:03"
+        },
+        "id": "workflow:review:3"
+      },
+      {
+        "seq": 2,
+        "level": "warn",
+        "event_type": "LogEvent",
+        "message": "review warn 2",
+        "meta": {
+          "timestamp": "2026-01-01T00:01:02"
+        },
+        "id": "workflow:review:2"
+      },
+      {
+        "seq": 1,
+        "level": "error",
+        "event_type": "LogEvent",
+        "message": "review error 1",
+        "meta": {
+          "timestamp": "2026-01-01T00:01:01"
+        },
+        "id": "workflow:review:1"
+      },
+      {
+        "seq": 0,
+        "level": "info",
+        "event_type": "LogEvent",
+        "message": "review info 0",
+        "meta": {
+          "timestamp": "2026-01-01T00:01:00"
+        },
+        "id": "workflow:review:0"
+      },
+      {
+        "seq": 2,
+        "level": "info",
+        "event_type": "LogEvent",
+        "message": "project info 2",
+        "meta": {
+          "timestamp": "2026-01-01T00:00:02"
+        },
+        "id": "project:logs:2"
+      },
+      {
+        "seq": 1,
+        "level": "error",
+        "event_type": "LogEvent",
+        "message": "project error 1",
+        "meta": {
+          "timestamp": "2026-01-01T00:00:01"
+        },
+        "id": "project:logs:1"
+      },
+      {
+        "seq": 0,
+        "level": "info",
+        "event_type": "LogEvent",
+        "message": "project info 0",
+        "meta": {
+          "timestamp": "2026-01-01T00:00:00"
+        },
+        "id": "project:logs:0"
+      }
+    ]
+  },
+  "vendors": {
+    "openai": {
+      "name": "OpenAI"
+    },
+    "anthropic": {
+      "name": "Anthropic"
+    }
+  },
+  "error_types": {
+    "config": {
+      "error_count": 3
+    },
+    "runtime": {
+      "error_count": 2
+    },
+    "x": {}
+  },
+  "event_types": {
+    "workflow": {
+      "event_count": 4
+    },
+    "action": {}
+  },
+  "examples": {
+    "ex1": {},
+    "ex2": {}
+  },
+  "data_loaders": {
+    "json": {},
+    "csv": {}
+  },
+  "processing_states": {
+    "Status": {},
+    "Kind": {}
+  },
+  "workflow_data": {
+    "review": {
+      "nodes": {
+        "a": {},
+        "b": {}
+      }
+    },
+    "solo": {}
+  },
+  "stats": {
+    "total_workflows": 3,
+    "total_actions": 6,
+    "llm_actions": 3,
+    "tool_actions": 2,
+    "total_prompts": 3,
+    "total_schemas": 2,
+    "total_tool_functions": 2,
+    "total_runs": 5,
+    "validation_errors": 2,
+    "validation_warnings": 1,
+    "runtime_warnings": 2,
+    "runtime_errors": 6,
+    "total_vendors": 2,
+    "total_error_types": 5,
+    "total_event_types": 4,
+    "total_examples": 2,
+    "total_data_loaders": 2,
+    "total_processing_states": 2,
+    "total_data_nodes": 2,
+    "event_levels": {
+      "info": 16,
+      "error": 3,
+      "warn": 2
+    }
+  }
+}
