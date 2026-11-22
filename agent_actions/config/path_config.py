@@ -1,5 +1,8 @@
 """Project-specific path configuration loading."""
 
+import copy
+import functools
+import io
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -13,6 +16,15 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 
 logger = logging.getLogger(__name__)
+
+
+@functools.lru_cache(maxsize=32)
+def _parse_project_yaml(name: str, text: str) -> Any:
+    """*text* parsed, once per distinct text; the result is shared and must not be written to."""
+    stream = io.StringIO(text)
+    # A parse error names the file, as it does when the file itself is the stream.
+    stream.name = name
+    return yaml.safe_load(stream)
 
 
 def load_project_config(project_root: Path) -> dict[str, Any]:
@@ -46,7 +58,8 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
             fire_event(ConfigLoadStartEvent(config_file=str(config_file)))
             try:
                 with open(config_file, encoding="utf-8") as f:
-                    config = yaml.safe_load(f) or {}
+                    text = f.read()
+                config = copy.deepcopy(_parse_project_yaml(str(config_file), text)) or {}
             except yaml.YAMLError as e:
                 raise ConfigValidationError(
                     "path_config_yaml",

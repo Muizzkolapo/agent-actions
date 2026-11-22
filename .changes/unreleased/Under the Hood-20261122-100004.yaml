@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  The per-record prompt render now compiles each distinct template once against one shared
+  Jinja environment instead of building an environment and recompiling for every record, and a
+  record's seed lookup no longer YAML-parses an unchanged agent_actions.yml again. Rendered
+  prompts, errors and config events are unchanged.
+time: 2026-11-22T10:00:04Z
