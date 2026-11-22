@@ -290,7 +290,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 ### Interfaces
 | File | Role |
 |------|------|
-| `interfaces.py` | `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader` interface ABCs |
+| `interfaces.py` | `ILoader`, `IDataLoader`, `ISourceDataLoader` interface ABCs |
 
 ### Project Lifecycle
 | File | Role |

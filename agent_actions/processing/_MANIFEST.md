@@ -80,7 +80,6 @@ that only fails to load at record time also fails each record this way, and the 
 | Package | Direction | Why |
 |---------|-----------|-----|
 | `llm` | inbound | Batch and online runners delegate to UnifiedProcessor |
-| `prompt` | inbound | DataGenerator uses OnlineLLMStrategy for subsequent-stage processing |
 | `workflow` | inbound | Pipeline orchestrator calls processing for each action stage |
 | `cli` | inbound | `agac retry` asks `answered_by_repair` and `found_by_repair` what its re-run reached, and keeps and resumes `repair_lineage`'s notes; `agac expect` reads `bypasses_expectations` |
 | `prompt` | outbound | TaskPreparer uses PromptPreparationService for context and prompt rendering |

@@ -482,7 +482,6 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 | `render_workflow.py` | `render_pipeline_with_templates()` -- compiles workflow YAML (Jinja2 macros, prompt resolution, schema inlining, version expansion). |
 | `renderer.py` | `JinjaTemplateRenderer` + `ConfigRenderingService` -- CLI/validation entry points for config rendering and loading. |
 | `prompt_utils.py` | `PromptUtils` -- `dispatch_task()` resolution, field reference parsing and replacement. |
-| `data_generator.py` | `DataGenerator` -- composes prompt preparation with `OnlineLLMStrategy` for the generate CLI command. |
 
 ---
 

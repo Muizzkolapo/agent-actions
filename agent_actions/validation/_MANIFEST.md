@@ -55,7 +55,7 @@ decoders to schema validators and preflight checks.
 | `find_reads_not_upstream` | `agent_config/{workflow}.yml` | Validates | `dependencies`, `context_scope`, `prompt`, `guard`, `is_operational` |
 | `find_reads_not_upstream` | `prompt_store/{workflow}.md` | Reads | — |
 
-**Internal only**: `BaseValidator`, `PathValidationOptions`, `SchemaValidationReport`, `FieldUsage`, `scan_prompt_fields_ast`, `validate_prompt_fields_ast` -- no direct project surface.
+**Internal only**: `BaseValidator`, `PathValidationOptions`, `SchemaValidationReport`, `scan_prompt_fields_ast`, `validate_prompt_fields_ast` -- no direct project surface.
 
 ## Dependencies
 

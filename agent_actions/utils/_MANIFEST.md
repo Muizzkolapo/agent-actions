@@ -55,7 +55,6 @@ pathways.
 | `discover_and_load_udfs()` | `tools/{workflow}/*.py` | Reads | — |
 | `discover_and_load_udfs_recursive()` | `tools/{workflow}/*.py` | Reads | — |
 | `load_module_from_path()` | `tools/{workflow}/*.py` | Reads | — |
-| `load_user_defined_function()` | `tools/{workflow}/*.py` | Reads | — |
 | `execute_user_defined_function()` | `tools/{workflow}/*.py` | Transforms | — |
 | `udf_tool` | `tools/{workflow}/*.py` | Reads | — |
 | `resolve_seed_path()` | `seed_data/*.json` | Validates | — |
