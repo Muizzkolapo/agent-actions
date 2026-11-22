@@ -210,3 +210,71 @@ def test_an_unreadable_recovery_state_leaves_the_records_called_orphans(backend,
     text = _warnings(caplog, lifecycle)
 
     assert "possible orphans: ['g1']" in text
+
+
+def _repair_pending(backend, file_name: str, *, submitted: list[str]) -> None:
+    _register(backend, file_name, recovery=None, collected=False)
+    _register(backend, f"{file_name}_repair_1", recovery=RecoveryType.REPAIR, collected=False)
+    RecoveryStateManager.save(
+        backend,
+        ACTION,
+        file_name,
+        RecoveryState(
+            phase=RecoveryPhase.REPAIR,
+            repair_attempt=1,
+            repair_max_attempts=2,
+            repair_submitted_ids=[f"c-{g}" for g in submitted],
+        ),
+    )
+
+
+def test_the_answered_records_of_a_file_in_a_repair_round_are_not_called_orphans(
+    backend, lifecycle, caplog
+):
+    guids = [f"g{i}" for i in range(10)]
+    _send(backend, "pages.json", *guids)
+    _defer(backend, *guids)
+    _repair_pending(backend, "pages.json", submitted=["g0"])
+
+    text = _warnings(caplog, lifecycle)
+
+    assert "orphan" not in text.lower(), text
+    assert "1 record(s) wait on repair round 1 of 2: ['g0']" in text
+    assert (
+        "9 record(s) wait for their file, which waits on repair round 1 of 2: "
+        "['g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'g7', 'g8', 'g9']"
+    ) in text
+
+
+def test_the_answered_records_of_a_file_in_a_retry_round_are_not_called_orphans(
+    backend, lifecycle, caplog
+):
+    _send(backend, "pages.json", "g1", "g2", "g3")
+    _defer(backend, "g1", "g2", "g3")
+    _retry_pending(backend, failed={"g1": REFUSED}, unanswered=[])
+
+    text = _warnings(caplog, lifecycle)
+
+    assert "orphan" not in text.lower(), text
+    assert (
+        "2 record(s) wait for their file, which waits on retry attempt 2 of 3: ['g2', 'g3']"
+    ) in text
+
+
+def test_a_record_no_pending_batch_answers_is_still_called_an_orphan_beside_a_repair_round(
+    backend, lifecycle, caplog
+):
+    _send(backend, "pages.json", "g1", "g2")
+    _defer(backend, "g1", "g2", "lost")
+    _repair_pending(backend, "pages.json", submitted=["g1"])
+    _send(backend, "other.json", "done")
+    _register(backend, "other.json", recovery=None, collected=True)
+    _defer(backend, "done")
+
+    text = _warnings(caplog, lifecycle)
+
+    assert "1 record(s) wait for their file, which waits on repair round 1 of 2: ['g2']" in text
+    assert (
+        "2 record(s) still in DEFERRED state after batch completion — possible orphans: "
+        "['done', 'lost']"
+    ) in text
