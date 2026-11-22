@@ -394,7 +394,7 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
 
 ## Seed Data Loading
 
-`StaticDataLoader` loads reference data for injection into prompts via the `seed` namespace, from an ordered list of folders: the workflow's `seed_data/`, the project's, then each folder of `seed_data_paths` (`config.path_config.seed_search_folders`).
+`StaticDataLoader` loads reference data for injection into prompts via the `seed` namespace, from an ordered list of folders: the workflow's `seed_data/`, the project's, then each folder of `seed_data_paths` (`config.path_config.seed_search_folders`; a run's records use `record_seed_search_folders`, which re-reads `agent_actions.yml` only when its stat changes).
 
 ```
 context_scope:

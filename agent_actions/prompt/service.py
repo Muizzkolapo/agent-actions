@@ -870,9 +870,9 @@ class PromptPreparationService:
             StaticDataLoadError: If no seed folder exists at the workflow root, the
                 project root, or under ``seed_data_paths``.
         """
-        from agent_actions.config.path_config import seed_search_folders
+        from agent_actions.config.path_config import record_seed_search_folders
 
-        folders = seed_search_folders(workflow_config_path)
+        folders = record_seed_search_folders(workflow_config_path)
         if folders:
             return folders
 
