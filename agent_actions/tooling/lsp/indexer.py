@@ -261,10 +261,8 @@ def _name_location(
     """Where `<key>: <action_name>` is written in *lines*; the file's start if nowhere."""
     line_no, column = 0, 0
     for i, line in enumerate(lines):
-        # A mapped Jinja file marks each name line it defines an action on, so a name with no
-        # mark has no line to find, and another key is found only on a line the render output
-        # as written. An empty set means the map was not trusted; the first written line is
-        # then the best guess.
+        # In a mapped Jinja file only marked lines are written as-is; an empty set means the
+        # map was not trusted, so the first written line is the best guess.
         if live_lines and (key == "name" or i not in live_lines):
             continue
         match = re.match(

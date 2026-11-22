@@ -459,6 +459,26 @@ class LoadRender:
 
         return _LOADED.sub("<a prompt load_prompt loaded>", _LEFT.sub(name, text))
 
+    def written(self, data: Any) -> Any:
+        """*data* with each left value as the file writes it, and each loaded prompt put in."""
+
+        def put(text: str, _path: str) -> Any:
+            match = _TOKEN.search(text)
+            if match is None:
+                return text
+            if text.strip() != match.group(0):
+                return self.readable(text)
+            region = self._left[int(match.group(1))].region
+            try:
+                parsed = yaml.safe_load(region.document(region.text))
+            except yaml.YAMLError:
+                return region.text.strip()
+            if isinstance(parsed, dict) and list(parsed) == ["k"]:
+                return parsed["k"]
+            return region.text.strip()
+
+        return self.fill_loaded(_strings(data, "", put))
+
     def explain(self, error: Exception) -> str:
         """Why a name the load found undefined is not there yet, when it is a later one."""
         match = _UNDEFINED_NAME.search(str(error))

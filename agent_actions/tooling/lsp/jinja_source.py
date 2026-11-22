@@ -231,8 +231,21 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
         source = _load_yaml_content(yaml_file, project_root=project_root)
     except ConfigurationError as e:
         raise WorkflowRenderError(f"{e} ({raw.strip()})", 0) from e
-    text, _ = _render(LoadRender, source, yaml_file, project_root)
+    try:
+        text, load = _render(LoadRender, source, yaml_file, project_root)
+    except WorkflowRenderError as e:
+        if any(opener in source for opener in _JINJA_OPENERS):
+            raise
+        # Only the templates/ load can fail a file with no tag, and such a file renders
+        # as written, so it is read as YAML.
+        logger.warning("Reading %s as plain YAML: %s", yaml_file, e.message)
+        text = textwrap.dedent(source.replace("\r\n", "\n").replace("\r", "\n"))
+        data, _, _ = _parse(text, source)
+        return _unmapped(text, data, source)
     data, nodes, rendered_paths = _parse(text, source)
+    # A value left for a version or a record is shown as written, not as its token.
+    data = load.written(data)
+    nodes = _written_names(nodes, load)
     if source != raw:
         # The workflow is a prompt store entry; its lines are not the lines of this file.
         return RenderedWorkflow(text=text, data=data, action_sources={})
@@ -265,6 +278,11 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
         line_owners=_line_owners(nodes, written),
         line_paths=_line_paths(rendered_paths, written),
     )
+
+
+def _written_names(nodes: list[_ActionNode], load: LoadRender) -> list[_ActionNode]:
+    written = [(node, load.written(node.name)) for node in nodes]
+    return [node._replace(name=name) for node, name in written if isinstance(name, str)]
 
 
 def _unmapped(text: str, data: dict, source: str) -> RenderedWorkflow:
