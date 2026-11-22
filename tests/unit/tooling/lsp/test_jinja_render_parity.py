@@ -803,6 +803,20 @@ def test_a_prompt_store_workflow_puts_its_actions_on_the_one_line_of_the_file(tm
     assert build_index(tmp_path).file_actions[wf]["a"].location.line == 0
 
 
+def test_a_prompt_store_workflow_read_as_plain_yaml_gets_no_source_lines(tmp_path):
+    wf = _project(tmp_path, "$wfbody.main\n", _BROKEN_TEMPLATES)
+    (tmp_path / "prompt_store").mkdir()
+    (tmp_path / "prompt_store" / "wfbody.md").write_text(
+        "{prompt main}\nname: wf\nactions:\n  - name: x\n    kind: tool\n"
+        "  - name: a\n    kind: tool\n{end_prompt}\n"
+    )
+
+    rendered = render_workflow_source(wf, tmp_path)
+
+    assert [action["name"] for action in rendered.data["actions"]] == ["x", "a"]
+    assert rendered.action_sources == {}
+
+
 def test_a_loop_after_an_action_gives_its_lines_to_no_literal_action(tmp_path):
     wf = _project(
         tmp_path,
