@@ -39,7 +39,7 @@ and service wiring used by CLI commands and runtime agents.
 | `PromptLoader.discover_prompt_files()` | `prompt_store/**/*.md`, `agent_workflow/*/prompt_store/**/*.md` | Reads | — |
 | `PromptFormatter.get_raw_prompt()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt` |
 | `PromptPreparationService.prepare_prompt_with_context()` | `agent_config/{workflow}.yml` | Reads | `actions[].context_scope` |
-| `PromptPreparationService.load_seed_data()` | `seed_data/*.json`, `<seed_data_paths>/*.json` | Reads from the workflow folder, then the shared folders (`config.path_config.seed_search_folders`); per record when an entry has `select_by` | `actions[].context_scope.seed`, `actions[].context_scope.seed.*.{select_by,files}` |
+| `PromptPreparationService.load_seed_data()` | `seed_data/*.json`, `<seed_data_paths>/*.json` | Reads from the workflow folder, then the shared folders (`config.path_config.record_seed_search_folders`, which re-reads `agent_actions.yml` only when its stat changes); per record when an entry has `select_by` | `actions[].context_scope.seed`, `actions[].context_scope.seed.*.{select_by,files}` |
 | `PromptUtils.inject_function_outputs_into_prompt()` | `tools/{workflow}/*.py` | Reads | `actions[].prompt` |
 | `render_pipeline_with_templates()` | `agent_config/{workflow}.yml` | Reads | `actions[].prompt`, `actions[].schema_name` |
 | `render_pipeline_with_templates()` | `prompt_store/**/*.md` | Reads | `actions[].prompt` (`$file.Prompt`; its tags that read `templates/` render at load) |

@@ -66,6 +66,7 @@ Key Functions
 | `path_config.py` | `get_project_name` | Function | Return `project_name` from project config, or `None` with warning if absent. |
 | `path_config.py` | `get_tool_dirs` | Function | Resolve tool directory names from project config, defaulting to `["tools"]`. |
 | `path_config.py` | `warn_unread_project_keys` | Function | Report each top-level `agent_actions.yml` key that no reader takes. |
+| `path_config.py` | `record_seed_search_folders` | Function | `seed_search_folders` for a run's records: keeps the project root and named folders per workflow file until a stat of the project file changes; folder presence is checked on every call. |
 
 ## Cross-Module Touchpoints
 
@@ -98,6 +99,7 @@ Key Functions
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |
 | `get_seed_data_paths` | `agent_actions.yml` | Reads, refuses a missing or outside folder | `seed_data_paths` |
 | `seed_search_folders`, `resolve_seed_file` | `seed_data/`, `<seed_data_paths>/` | Reads; the one search the loader, preflight, the editor and `inspect` share | `seed_data_path`, `seed_data_paths` |
+| `record_seed_search_folders` | `agent_actions.yml`, `seed_data/`, `<seed_data_paths>/` | Stats the project file per record; re-reads it only when the stat changes | `seed_data_path`, `seed_data_paths` |
 | `get_project_name` | `agent_actions.yml` | Reads | `project_name` |
 | `warn_unread_project_keys` | `agent_actions.yml` | Validates | `output_storage` |
 | `ProjectInitializer.init_project` | `agent_actions.yml` | Writes | `project_name`, `default_agent_config`, `schema_path`, `tool_path`, `seed_data_path` |

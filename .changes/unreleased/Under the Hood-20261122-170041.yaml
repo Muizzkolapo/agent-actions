@@ -1,0 +1,8 @@
+kind: Under the Hood
+body: >-
+  A run's records no longer find the project root and re-read `agent_actions.yml` to list the
+  seed folders for every record: the list is kept per workflow file until a stat of the project
+  file changes, and each folder's presence is still checked on every record, so an edit to
+  `agent_actions.yml` or a seed folder made or removed mid-run is seen by the next record.
+  Preflight, the editor and `agac inspect` still read everything afresh.
+time: 2026-11-22T17:00:41.000000+00:00
