@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'The test that places a mapping at the end of a 20,000-deep chain checks that the work grows with the depth by counting function calls at two depths, not by a 2-second wall-clock limit, so a busy machine no longer fails it.'
+time: 2026-11-21T16:00:00Z
