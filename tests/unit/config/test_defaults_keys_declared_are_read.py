@@ -69,9 +69,11 @@ def _defaults_names(tree: ast.AST) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             targets, value = node.targets, node.value
-        elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            targets, value = [node.target], node.value
-        elif isinstance(node, ast.NamedExpr):
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and node.value is not None
+            or isinstance(node, ast.NamedExpr)
+        ):
             targets, value = [node.target], node.value
         else:
             continue

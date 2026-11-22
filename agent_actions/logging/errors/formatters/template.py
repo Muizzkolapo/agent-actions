@@ -106,10 +106,9 @@ class TemplateErrorFormatter(ErrorFormatter):
                 if suggestion:
                     lines.append("")
                     lines.append(f"  Did you mean '{ns}.{suggestion}'?")
-            else:
-                if namespace_context:
-                    namespaces = list(namespace_context.keys())
-                    lines.append(f"  Available namespaces: {', '.join(namespaces)}")
+            elif namespace_context:
+                namespaces = list(namespace_context.keys())
+                lines.append(f"  Available namespaces: {', '.join(namespaces)}")
         else:
             hint = storage_hints.get(var)
             if hint:

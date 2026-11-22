@@ -199,11 +199,10 @@ class FieldReferenceResolver:
                     current = current[idx]
                 else:
                     return self._SENTINEL
+            elif hasattr(current, key):
+                current = getattr(current, key)
             else:
-                if hasattr(current, key):
-                    current = getattr(current, key)
-                else:
-                    return self._SENTINEL
+                return self._SENTINEL
 
         return current
 

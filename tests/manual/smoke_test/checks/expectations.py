@@ -56,9 +56,11 @@ class ExpectationCheck(Check):
                     message = event.get("message", "")
                     if self.action not in message:
                         continue
-                    if event_type in ("DataValidationStartedEvent", "DataValidationPassedEvent"):
-                        validation_count += 1
-                    elif "Validation" in message or "attempt" in message:
+                    if (
+                        event_type in ("DataValidationStartedEvent", "DataValidationPassedEvent")
+                        or "Validation" in message
+                        or "attempt" in message
+                    ):
                         validation_count += 1
         except OSError:
             return [

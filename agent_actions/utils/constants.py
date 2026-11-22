@@ -74,9 +74,8 @@ def contains_dangerous_pattern(
         if pattern == "__":
             if "__" in expression:
                 return "__"
-        else:
-            if re.search(rf"\b{re.escape(pattern)}\b", expression):
-                return pattern
+        elif re.search(rf"\b{re.escape(pattern)}\b", expression):
+            return pattern
     return None
 
 

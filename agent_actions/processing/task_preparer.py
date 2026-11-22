@@ -239,28 +239,26 @@ class TaskPreparer:
 
             snapshot = self._prepare_source_snapshot(item)
             return item, source_guid, snapshot
-        else:
-            if isinstance(item, dict):
-                content = item.get("content")
-                if content is None:
-                    # First-stage records are stamped at ingestion (573 invariant); a blank
-                    # one can't be re-derived here (the envelope would poison identity) —
-                    # fail loud instead of fabricating a guid.
-                    source_guid = item.get("source_guid")
-                    if not source_guid:
-                        raise DataValidationError(
-                            "First-stage record reached task preparation without a "
-                            "source_guid; it must be stamped at ingestion",
-                            context={"keys": sorted(item.keys())},
-                        )
-                    snapshot = self._prepare_source_snapshot(item)
-                    return item, source_guid, snapshot
+        if isinstance(item, dict):
+            content = item.get("content")
+            if content is None:
+                # First-stage records are stamped at ingestion (573 invariant); a blank
+                # one can't be re-derived here (the envelope would poison identity) —
+                # fail loud instead of fabricating a guid.
                 source_guid = item.get("source_guid")
-                if source_guid == "":
-                    source_guid = None  # Left to the guard, then refused by _require_identity
-                return content, source_guid, item
-            else:
-                return item, None, None
+                if not source_guid:
+                    raise DataValidationError(
+                        "First-stage record reached task preparation without a "
+                        "source_guid; it must be stamped at ingestion",
+                        context={"keys": sorted(item.keys())},
+                    )
+                snapshot = self._prepare_source_snapshot(item)
+                return item, source_guid, snapshot
+            source_guid = item.get("source_guid")
+            if source_guid == "":
+                source_guid = None  # Left to the guard, then refused by _require_identity
+            return content, source_guid, item
+        return item, None, None
 
     @staticmethod
     def _require_identity(item: Any, source_guid: str | None, context: PreparationContext) -> None:

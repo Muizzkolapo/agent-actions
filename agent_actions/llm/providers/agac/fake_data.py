@@ -389,13 +389,13 @@ class FakeDataGenerator:
             return None
 
         # Handle oneOf/anyOf (pick based on attempt)
-        if "oneOf" in schema and schema["oneOf"]:
+        if schema.get("oneOf"):
             idx = (attempt - 1) % len(schema["oneOf"])
             return cls.generate_from_schema(schema["oneOf"][idx], attempt, field_name)
-        if "anyOf" in schema and schema["anyOf"]:
+        if schema.get("anyOf"):
             idx = (attempt - 1) % len(schema["anyOf"])
             return cls.generate_from_schema(schema["anyOf"][idx], attempt, field_name)
-        if "allOf" in schema and schema["allOf"]:
+        if schema.get("allOf"):
             merged = {}
             for sub_schema in schema["allOf"]:
                 if isinstance(sub_schema, dict):
@@ -423,25 +423,24 @@ class FakeDataGenerator:
         # Generate based on type
         if schema_type == "string":
             return cls._generate_string(attempt, schema, field_name)
-        elif schema_type == "number":
+        if schema_type == "number":
             return cls._generate_number(attempt, schema, field_name)
-        elif schema_type == "integer":
+        if schema_type == "integer":
             return cls._generate_integer(attempt, schema, field_name)
-        elif schema_type == "boolean":
+        if schema_type == "boolean":
             return cls._generate_boolean(attempt, field_name)
-        elif schema_type == "null":
+        if schema_type == "null":
             return None
-        elif schema_type == "array":
+        if schema_type == "array":
             return cls._generate_array(schema, attempt, field_name)
-        elif schema_type == "object":
+        if schema_type == "object":
             return cls._generate_object(schema, attempt)
-        else:
-            # No type specified - try to infer
-            if "properties" in schema:
-                return cls._generate_object(schema, attempt)
-            if "items" in schema:
-                return cls._generate_array(schema, attempt, field_name)
-            return cls._generate_string(attempt, field_name=field_name)
+        # No type specified - try to infer
+        if "properties" in schema:
+            return cls._generate_object(schema, attempt)
+        if "items" in schema:
+            return cls._generate_array(schema, attempt, field_name)
+        return cls._generate_string(attempt, field_name=field_name)
 
     # The formats _generate_formatted_string can produce; any other gets a sentence.
     KNOWN_FORMATS = frozenset(
@@ -922,20 +921,20 @@ class FakeDataGenerator:
         field_id = field.get("id", "")
 
         # Handle enum values regardless of declared type
-        if "enum" in field and field["enum"]:
+        if field.get("enum"):
             rng = cls._get_rng()
             idx = (attempt - 1 + rng.randint(0, 100)) % len(field["enum"])
             return field["enum"][idx]
 
         if field_type == "string":
             return cls._generate_string(attempt, field, field_id)
-        elif field_type == "number":
+        if field_type == "number":
             return cls._generate_number(attempt, field, field_id)
-        elif field_type == "integer":
+        if field_type == "integer":
             return cls._generate_integer(attempt, field, field_id)
-        elif field_type == "boolean":
+        if field_type == "boolean":
             return cls._generate_boolean(attempt, field_name=field_id)
-        elif field_type == "array":
+        if field_type == "array":
             # Build a JSON Schema-style array schema from the field
             array_schema: dict[str, Any] = {"type": "array"}
             if "items" in field:
@@ -946,7 +945,7 @@ class FakeDataGenerator:
                 if key in field:
                     array_schema[key] = field[key]
             return cls._generate_array(array_schema, attempt, field_id)
-        elif field_type == "object":
+        if field_type == "object":
             # Build a JSON Schema-style object schema from the field
             obj_schema: dict[str, Any] = {"type": "object"}
             if "properties" in field:
@@ -954,9 +953,8 @@ class FakeDataGenerator:
             if "required" in field:
                 obj_schema["required"] = field["required"]
             return cls._generate_object(obj_schema, attempt)
-        else:
-            # Unknown type — fall back to string generation
-            return cls._generate_string(attempt, field_name=field_id)
+        # Unknown type — fall back to string generation
+        return cls._generate_string(attempt, field_name=field_id)
 
     @staticmethod
     def unwrap_schema(schema: dict[str, Any]) -> dict[str, Any]:

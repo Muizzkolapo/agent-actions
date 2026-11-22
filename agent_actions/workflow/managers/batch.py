@@ -190,7 +190,7 @@ class BatchLifecycleManager:
             fire_event(
                 BatchErrorEvent(
                     action_name=agent_name,
-                    error_message=f"Could not process batch results: {str(e)}",
+                    error_message=f"Could not process batch results: {e!s}",
                     error_type=type(e).__name__,
                 )
             )

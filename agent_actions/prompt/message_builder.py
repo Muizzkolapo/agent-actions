@@ -540,7 +540,7 @@ class MessageBuilder:
             # Groq non-json — strip() matches original dedent().strip()
             body = dedent(f"""\
                 Instructions: {prompt_config}
-                Input Text: {str(context_str)}
+                Input Text: {context_str!s}
 
                 Please provide a direct response without any JSON formatting.
                 Begin your response here:""").strip()
@@ -565,7 +565,7 @@ class MessageBuilder:
         # -- TAGGED style (default for most providers) -----------------------
         parts = [
             f"{_OPENING}{prompt_config} :<|end_of_user_instruction|>",
-            f"<|begin_of_text|>: {str(context_str)} :<|end_of_text|>",
+            f"<|begin_of_text|>: {context_str!s} :<|end_of_text|>",
         ]
 
         schema_text = MessageBuilder._inline_schema_text(schema_injection, schema)

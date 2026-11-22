@@ -738,7 +738,7 @@ class PromptPreparationService:
         except Exception as e:
             logger.exception("Unexpected error loading static data: %s", e)
             raise StaticDataLoadError(
-                f"Failed to load static data: {str(e)}",
+                f"Failed to load static data: {e!s}",
                 context={
                     "agent_name": agent_name,
                     "error": str(e),

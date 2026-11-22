@@ -323,9 +323,7 @@ def _reads(
         chained.add(id(root))
         if not counted(root):
             continue
-        if root.name in record_roots:
-            reads.add(path)
-        elif (
+        if root.name in record_roots or (
             root.name == "seed"
             and seed_varies
             and (key not in seed_keys or key in per_record_seed_keys)

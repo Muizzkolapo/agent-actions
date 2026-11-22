@@ -152,7 +152,7 @@ class StaticDataLoader:
                 # Wrap unexpected errors
                 logger.error("Unexpected error loading field '%s': %s", field_name, e)
                 raise StaticDataLoadError(
-                    f"Failed to load static data field '{field_name}': {str(e)}",
+                    f"Failed to load static data field '{field_name}': {e!s}",
                     context={
                         "field_name": field_name,
                         "file_spec": str(raw_entry),
@@ -265,23 +265,22 @@ class StaticDataLoader:
 
         if suffix == ".json":
             return cls._load_json(file_path, field_name)
-        elif suffix in {".yml", ".yaml"}:
+        if suffix in {".yml", ".yaml"}:
             return cls._load_yaml(file_path, field_name)
-        elif suffix in {".md", ".txt"}:
+        if suffix in {".md", ".txt"}:
             return cls._load_text(file_path, field_name)
-        elif suffix == ".csv":
+        if suffix == ".csv":
             return cls._load_csv(file_path, field_name)
-        else:
-            raise StaticDataLoadError(
-                f"Static data field '{field_name}': Unsupported file type '{suffix}'",
-                context={
-                    "field_name": field_name,
-                    "file_path": str(file_path),
-                    "file_type": suffix,
-                    "supported_types": list(cls.SUPPORTED_EXTENSIONS),
-                    "error_type": "unsupported_format",
-                },
-            )
+        raise StaticDataLoadError(
+            f"Static data field '{field_name}': Unsupported file type '{suffix}'",
+            context={
+                "field_name": field_name,
+                "file_path": str(file_path),
+                "file_type": suffix,
+                "supported_types": list(cls.SUPPORTED_EXTENSIONS),
+                "error_type": "unsupported_format",
+            },
+        )
 
     @staticmethod
     def _load_json(file_path: Path, field_name: str) -> Any:

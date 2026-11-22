@@ -40,13 +40,13 @@ class PromptASTAnalyzer:
         """
         if isinstance(node, nodes.Name):
             return str(node.name)
-        elif isinstance(node, nodes.Getattr):
+        if isinstance(node, nodes.Getattr):
             parent_path = self._build_path_from_node(node.node)
             if not parent_path:
                 # Parent is unsupported (e.g., literal) - skip entire path
                 return ""
             return f"{parent_path}.{node.attr}"
-        elif isinstance(node, nodes.Getitem):
+        if isinstance(node, nodes.Getitem):
             parent_path = self._build_path_from_node(node.node)
             if not parent_path:
                 # Parent is unsupported (e.g., literal) - skip entire path
@@ -59,9 +59,8 @@ class PromptASTAnalyzer:
                 return f"{parent_path}[{key}]"
             # Dynamic key - can't resolve at parse time
             return f"{parent_path}[*]"
-        else:
-            # Unsupported node type (Const, Call, etc.) - return empty to skip
-            return ""
+        # Unsupported node type (Const, Call, etc.) - return empty to skip
+        return ""
 
     def _extract_full_paths(self, template_ast: nodes.Template) -> set[str]:
         """Extract full attribute paths from parsed AST, excluding declared variables."""
