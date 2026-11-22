@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
+from agent_actions.logging.core.events import LEVEL_SEVERITY
+
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
 
@@ -65,10 +67,7 @@ class JSONFileHandler:
 
     def accepts(self, event: BaseEvent) -> bool:
         """Check if this event meets the minimum level threshold."""
-        from agent_actions.logging.core.events import EventLevel
-
-        level_order = EventLevel.ordered()
-        return level_order.index(event.level) >= level_order.index(self.min_level)
+        return LEVEL_SEVERITY[event.level] >= LEVEL_SEVERITY[self.min_level]
 
     def handle(self, event: BaseEvent) -> None:
         """Buffer the event for writing to the JSON log file."""
