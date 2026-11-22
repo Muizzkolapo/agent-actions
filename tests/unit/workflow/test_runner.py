@@ -565,6 +565,21 @@ class TestProcessMergedFiles:
 # ---------------------------------------------------------------------------
 
 
+def _reads(by_key):
+    """A read_target side effect answering by upstream action or file, as often as asked.
+
+    The walk reads each file once to check it before processing any, then again to process it.
+    """
+
+    def read(action_name, relative_path):
+        answer = by_key[action_name] if action_name in by_key else by_key[relative_path]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    return read
+
+
 class TestProcessFromStorageBackend:
     def test_no_backend_returns_zero(self, runner):
         params = FileProcessParams(
@@ -618,7 +633,7 @@ class TestProcessFromStorageBackend:
     def test_multiple_sources_merges(self, mock_merge, runner_with_backend, tmp_path):
         backend = runner_with_backend.storage_backend
         backend.list_target_files.side_effect = [["data.json"], ["data.json"]]
-        backend.read_target.side_effect = [[{"id": 1}], [{"id": 2}]]
+        backend.read_target.side_effect = _reads({"dep1": [{"id": 1}], "dep2": [{"id": 2}]})
         mock_merge.return_value = [{"id": 1}, {"id": 2}]
         strategy = _make_strategy()
 
@@ -641,7 +656,7 @@ class TestProcessFromStorageBackend:
     def test_processing_error_returns_partial(self, runner_with_backend, tmp_path):
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = ["a.json", "b.json"]
-        backend.read_target.side_effect = [[{"id": 1}], [{"id": 2}]]
+        backend.read_target.side_effect = _reads({"a.json": [{"id": 1}], "b.json": [{"id": 2}]})
         strategy = _make_strategy()
         strategy.execute.side_effect = [None, Exception("boom")]
 
@@ -661,7 +676,9 @@ class TestProcessFromStorageBackend:
         """read_target() failure → entry skipped, partial results returned."""
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = ["good.json", "bad.json"]
-        backend.read_target.side_effect = [[{"id": 1}], OSError("corrupt data")]
+        backend.read_target.side_effect = _reads(
+            {"good.json": [{"id": 1}], "bad.json": OSError("corrupt data")}
+        )
         strategy = _make_strategy()
 
         params = FileProcessParams(
@@ -701,10 +718,14 @@ class TestProcessFromStorageBackend:
         """SerializationError from a stored row the backend cannot read → entry counted lost."""
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = ["good.json", "bad.json"]
-        backend.read_target.side_effect = [
-            [{"id": 1}],
-            SerializationError("target_data for action 'dep' file 'bad.json' cannot be read"),
-        ]
+        backend.read_target.side_effect = _reads(
+            {
+                "good.json": [{"id": 1}],
+                "bad.json": SerializationError(
+                    "target_data for action 'dep' file 'bad.json' cannot be read"
+                ),
+            }
+        )
         strategy = _make_strategy()
 
         params = FileProcessParams(
@@ -725,10 +746,9 @@ class TestProcessFromStorageBackend:
         """FileNotFoundError (subclass of OSError) → entry skipped."""
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = ["good.json", "missing.json"]
-        backend.read_target.side_effect = [
-            [{"id": 1}],
-            FileNotFoundError("missing.json"),
-        ]
+        backend.read_target.side_effect = _reads(
+            {"good.json": [{"id": 1}], "missing.json": FileNotFoundError("missing.json")}
+        )
         strategy = _make_strategy()
 
         params = FileProcessParams(

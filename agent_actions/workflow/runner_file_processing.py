@@ -1088,9 +1088,12 @@ def process_from_storage_backend(
 
     errors = CollectedErrors()
 
-    # Each stored entry's upstreams, read only when the entry is processed: read up
-    # front, every file of every upstream is held until the walk ends.
+    # Each stored entry's upstreams, read for processing only when the entry is
+    # processed: kept from the first read, every file of every upstream is held
+    # until the walk ends.
     listed: dict[str, list[str]] = {}
+    # Upstream files whose read failed while checking; not read again.
+    failed_reads: set[tuple[str, str]] = set()
     # Entries lost before processing. files_found is computed from what was READ,
     # so without this a walk that loses everything returns (0, 0) and falls through to a
     # walk that finds nothing: the action is skipped and its rows deleted as though its
@@ -1111,6 +1114,40 @@ def process_from_storage_backend(
         upstream_to_read = [
             d for d in params.upstream_data_dirs if Path(d).name != params.action_name
         ]
+
+    def read_branch(action_name: str, relative_path: str) -> Any:
+        """One upstream's rows of the entry, or None for a lost read, counted and named."""
+        nonlocal lost
+        try:
+            return backend.read_target(action_name, relative_path)
+        except (OSError, sqlite3.Error, SerializationError) as e:
+            # Never reaches the handler of the processing loop. Counted and recorded
+            # here instead, or it is absent from files_found and from CollectedErrors.
+            lost += 1
+            errors.record(f"{action_name}/{relative_path}", e)
+            _lose_file(runner, params.action_name)
+            reached.complete = False
+            logger.warning(
+                "Failed to read backend entry %s/%s: %s",
+                action_name,
+                relative_path,
+                e,
+                exc_info=True,
+            )
+            return None
+
+    def read_branches(relative_path: str) -> list[tuple[str, Any]]:
+        """The entry's rows from each upstream whose file the check could read."""
+        branches: list[tuple[str, Any]] = []
+        if merged_versions is not None:
+            branches.append((params.action_name, merged_versions[relative_path]))
+        for action_name in listed[relative_path]:
+            if (action_name, relative_path) in failed_reads:
+                continue
+            rows = read_branch(action_name, relative_path)
+            if rows is not None:
+                branches.append((action_name, rows))
+        return branches
 
     for input_directory in upstream_to_read:
         input_path = Path(input_directory)
@@ -1142,32 +1179,12 @@ def process_from_storage_backend(
             if merged_versions is not None and relative_path not in merged_versions:
                 continue
             listed.setdefault(relative_path, []).append(action_name)
-
-    def read_branches(relative_path: str) -> list[tuple[str, Any]]:
-        """The entry's rows from each upstream that lists it, a lost read counted and named."""
-        nonlocal lost
-        branches: list[tuple[str, Any]] = []
-        if merged_versions is not None:
-            branches.append((params.action_name, merged_versions[relative_path]))
-        for action_name in listed[relative_path]:
-            try:
-                branches.append((action_name, backend.read_target(action_name, relative_path)))
-            except (OSError, sqlite3.Error, SerializationError) as e:
-                # Never reaches the handler of the processing loop. Counted and
-                # recorded here instead, or it is absent from files_found and from
-                # CollectedErrors both.
-                lost += 1
-                errors.record(f"{action_name}/{relative_path}", e)
-                _lose_file(runner, params.action_name)
-                reached.complete = False
-                logger.warning(
-                    "Failed to read backend entry %s/%s: %s",
-                    action_name,
-                    relative_path,
-                    e,
-                    exc_info=True,
-                )
-        return branches
+            # Every file is read once before any is processed and let go, so a store
+            # the read refuses (a record in no lifecycle state, a format this version
+            # cannot read) stops the action before it writes or sends anything.
+            if read_branch(action_name, relative_path) is None:
+                failed_reads.add((action_name, relative_path))
+            backend.forget_reconstructed(action_name, relative_path)
 
     # Sorted, not upstream-major: a file limit truncates this list, and the union of
     # several upstreams is otherwise ordered by which one was read first.
@@ -1217,8 +1234,11 @@ def process_from_storage_backend(
                     e,
                     exc_info=True,
                 )
-        # Released before the next entry is read.
+        # Released before the next entry is read. A batch action writes nothing, and a
+        # write is what otherwise clears the store's cache of reconstructed files.
         del data_sources
+        for action_name in listed[relative_path]:
+            backend.forget_reconstructed(action_name, relative_path)
 
         def _unread(taken: int = seen, total: int = len(paths)) -> bool:
             """Whether any stored entry past this one is still to be read."""
