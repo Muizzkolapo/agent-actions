@@ -1724,6 +1724,18 @@ def test_a_guard_that_reads_a_version_variable_keeps_its_line_and_drops_its_comm
             {"{{ 'score' }}_{{ i }}": "number"},
             id="block-key",
         ),
+        pytest.param(
+            "    dependencies: [{{ 'up' }}_{{ i }}]\n",
+            "dependencies",
+            ["{{ 'up' }}_{{ i }}"],
+            id="list",
+        ),
+        pytest.param(
+            "    schema: {a: {b_{{ i }}: {{ 'x' }}}}\n",
+            "schema",
+            {"a": {"b_{{ i }}": "{{ 'x' }}"}},
+            id="nested-key",
+        ),
     ],
 )
 def test_a_version_value_that_starts_with_a_tag_is_read_as_agac_reads_it(
