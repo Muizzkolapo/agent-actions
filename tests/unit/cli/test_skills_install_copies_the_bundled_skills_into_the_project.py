@@ -84,11 +84,16 @@ def test_a_skill_already_installed_is_kept_unless_forced(project, bundle):
     assert "Skipped (already exists):\n  - demo" in kept.output
     assert "Use --force to overwrite existing skills." in kept.output
     assert (installed / "SKILL.md").read_text() == "edited by the user"
+    assert "Nothing installed." in kept.output
+    assert f"Every skill is already in: {installed.parent}" in kept.output
+    assert "Done!" not in kept.output
+    assert "Skills installed to" not in kept.output
 
     forced = _invoke("install", "--claude", "--force")
 
     assert forced.exit_code == 0
     assert "  - demo (overwritten)" in forced.output
+    assert f"Skills installed to: {installed.parent}" in forced.output
     assert (installed / "SKILL.md").read_text() == "new"
 
 
@@ -147,3 +152,19 @@ def test_list_shows_the_description_from_the_skill_front_matter(bundle):
     result = _invoke("list")
 
     assert "  demo\n    Builds demos.\n" in result.output
+
+
+def test_a_partial_install_still_says_where_the_new_skills_went(project, bundle):
+    for name in ("kept", "new"):
+        (bundle / name).mkdir()
+        (bundle / name / "SKILL.md").write_text(name)
+    target = project / ".codex" / "skills"
+    (target / "kept").mkdir(parents=True)
+
+    result = _invoke("install", "--codex")
+
+    assert result.exit_code == 0
+    assert "Installed:\n  - new" in result.output
+    assert "Skipped (already exists):\n  - kept" in result.output
+    assert f"Skills installed to: {target}" in result.output
+    assert "Nothing installed." not in result.output

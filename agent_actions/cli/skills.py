@@ -138,6 +138,10 @@ def install(tool: str, force: bool):
         click.echo("Use --force to overwrite existing skills.")
 
     click.echo()
+    if not installed:
+        click.echo(click.style("Nothing installed.", fg="yellow", bold=True))
+        click.echo(f"Every skill is already in: {target_dir}")
+        return
     click.echo(click.style("Done!", fg="green", bold=True))
     click.echo(f"Skills installed to: {target_dir}")
 

@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: '`agac skills install` no longer prints "Skills installed to" when every skill was already there and nothing was copied; it says "Nothing installed." instead. `agac expect report --fail-under` prints a threshold with many decimals as given, so a failing rate no longer reads as equal to the bar it missed.'
+time: 2026-11-22T15:00:32.000000+00:00

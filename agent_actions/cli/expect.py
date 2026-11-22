@@ -315,7 +315,7 @@ class ExpectReportCommand:
 
         if not declared:
             raise click.ClickException(
-                f"--fail-under {threshold:g} was asked for, but nothing in {scope} can be "
+                f"--fail-under {threshold:.15g} was asked for, but nothing in {scope} can be "
                 f"checked: no action declares an expect: block."
             )
 
@@ -354,7 +354,7 @@ class ExpectReportCommand:
                     for t in under
                 ]
             )
-            problems.append(f"pass rate under {threshold:g}%: {named}")
+            problems.append(f"pass rate under {threshold:.15g}%: {named}")
 
         if problems:
             raise click.ClickException(
@@ -502,7 +502,7 @@ def _shortfall_rate(passed: int, total: int, threshold: float) -> str:
         if float(text) < threshold:
             return f"{text}%"
     # Below any precision that would still read as under the bar.
-    return f"<{threshold:g}%"
+    return f"<{threshold:.15g}%"
 
 
 def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
