@@ -96,9 +96,10 @@ def test_the_batch_line_holds_a_printed_page_once(vendor):
 
 
 def _estimate(page: str, **settings: Any) -> int | None:
-    """The token guard's estimate for an Anthropic batch line; None when it fits the model."""
+    """The token guard's estimate for an Anthropic batch line; None when it fits 200,000 tokens."""
     row = _batch_row({"source": {"page_content": page}}, _prompt(page))
-    AnthropicBatchClient.prepare_tasks(_batch_client("anthropic"), [row], _config(**settings))
+    config = _config(context_window=200_000, **settings)
+    AnthropicBatchClient.prepare_tasks(_batch_client("anthropic"), [row], config)
     error = row.get(UNSENT_ERROR_KEY)
     return None if error is None else error.context["estimated_tokens"]
 

@@ -227,6 +227,7 @@ class BaseBatchClient(ABC):
                     # None when the action sets none: each client then sends none, as online.
                     "temperature": agent_config.get("temperature"),
                     "max_tokens": agent_config.get("max_tokens"),
+                    "context_window": agent_config.get("context_window"),
                     "json_mode": json_mode,
                     VENDOR_PARAMS_KEY: agent_config.get(VENDOR_PARAMS_KEY),
                     **{

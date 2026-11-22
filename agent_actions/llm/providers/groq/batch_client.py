@@ -100,6 +100,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             batch_task.user_content,
             schema=schema,
             json_mode=batch_task.json_mode(schema),
+            context_window=batch_task.model_config.get("context_window"),
         )
         body: dict[str, Any] = {
             "model": model_name,

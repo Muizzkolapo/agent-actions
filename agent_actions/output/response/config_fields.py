@@ -44,6 +44,7 @@ SIMPLE_CONFIG_FIELDS = {
     "retry": None,  # Default: None (retry disabled unless configured)
     "request_timeout": None,  # Default: None (the provider client applies the default timeout)
     "record_concurrency": None,  # Default: None (one online LLM record at a time)
+    "context_window": None,  # Default: None (the model table, else 128,000 tokens)
     # Runtime-consumed fields (providers and managers read these from agent dict)
     "enable_prompt_caching": None,
     # Chunking defaults (used by expander_merge, initial_pipeline)

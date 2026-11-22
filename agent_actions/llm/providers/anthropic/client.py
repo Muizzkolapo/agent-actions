@@ -278,6 +278,7 @@ class AnthropicClient(BaseClient):
             shared_prompt_len=agent_config.get(SHARED_PROMPT_LEN_KEY),
             model_name=model_name,
             cache_points=cache_points_of(agent_config) if enable_caching else (),
+            context_window=agent_config.get("context_window"),
         )
         messages = message_params(envelope)
 

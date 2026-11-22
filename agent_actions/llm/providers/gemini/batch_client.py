@@ -134,6 +134,7 @@ class GeminiBatchClient(BaseBatchClient):
             batch_task.user_content,
             schema=schema,
             json_mode=json_mode,
+            context_window=batch_task.model_config.get("context_window"),
         )
         generation_config: dict[str, Any] = {}
         if batch_task.model_config.get("temperature") is not None:

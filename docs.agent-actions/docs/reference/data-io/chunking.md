@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Chunking
 
-Chunking splits large text documents (`.txt`, `.md`, `.html`, `.pdf`, `.docx`) into smaller pieces that fit in the context limits of the LLM. The records of JSON, CSV, TSV and Excel files are not chunked. Agent Actions supports multiple chunking strategies. Each strategy is optimized for different use cases.
+Chunking splits large text documents (`.txt`, `.md`, `.html`, `.pdf`, `.docx`) into smaller pieces that fit in the context limits of the LLM. The records of JSON, CSV, TSV and Excel files are not chunked, unless `field` names one long field of the record to split (see [Split one field of a record](#split-one-field-of-a-record)). Agent Actions supports multiple chunking strategies. Each strategy is optimized for different use cases.
 
 ## Configuration
 
@@ -27,8 +27,9 @@ default_agent_config:
 | `chunk_overlap` | 10 | The overlap between consecutive chunks |
 | `split_method` | `tiktoken` | The chunking strategy: `tiktoken`, `chars`, `spacy` or the name of a custom split function (see below) |
 | `tokenizer_model` | `cl100k_base` | The tokenizer that measures the chunk size |
+| `field` | none | The field of each JSON, CSV, TSV or Excel record to split into parts, as `source.<name>`. See [Split one field of a record](#split-one-field-of-a-record) |
 
-`chunk_config` takes only these four keys. Any other key is refused at load, and the error names the field that it resembles. You can also write each of these keys as a separate key on an action, in `defaults:` or in `default_agent_config:`.
+`chunk_config` takes only these five keys. Any other key is refused at load, and the error names the field that it resembles. You can also write each of the first four keys as a separate key on an action, in `defaults:` or in `default_agent_config:`. `field` is read only in the `chunk_config` of an action or of `defaults:`.
 
 Settings merge by name, not by block. Thus a block that omits a name keeps the value that a wider level set for that name. The nearest level has priority. In one level, the block has priority over a key beside it:
 
@@ -53,6 +54,32 @@ actions:
       chunk_overlap: 1000
       split_method: chars
 ```
+
+## Split one field of a record
+
+A record of a JSON, CSV, TSV or Excel file is staged whole. If one field of a record is so long that the prompt does not fit in the context window of the model, `field` splits that field into parts. Each part becomes a record of its own:
+
+```yaml
+actions:
+  - name: assess_scope          # the first action, which reads the staged records
+    chunk_config:
+      field: source.page_content
+      chunk_size: 200000
+      chunk_overlap: 0
+      split_method: chars
+```
+
+- Each part keeps every other field of the record, such as its `url` or its id. Its `field` holds one piece of the text, split by `chunk_size`, `chunk_overlap` and `split_method` as a text file is split.
+- Each part gets two more fields: `chunk_index` (0 for the first part) and `chunk_count` (the number of parts of the record). A prompt can read them as `source.chunk_index` and `source.chunk_count`.
+- A record whose field fits in one chunk, is empty or is missing becomes one part, with `chunk_index: 0` and `chunk_count: 1`. Thus every record of the file has the same fields.
+- Each part has its own identity, so the actions below process and store each part as a record.
+- The load refuses a `field` that does not name one top-level field, as `source.<name>` or `<name>`. A record whose field is not text, or that already holds a field named `chunk_index` or `chunk_count`, stops the file before any record is stored or sent.
+- The split happens where the records are staged, so set it on the first action or in `defaults:`. The `default_agent_config:` of the project refuses it, because the field belongs to the records of one workflow.
+- A text file in the same staging folder is chunked by the same `chunk_size`.
+
+With `split_method: chars`, a field of 638,545 characters and a `chunk_size` of 200,000 gives 4 parts.
+
+To let a model read a larger prompt with no split, set [`context_window`](../configuration/index.md#context-window).
 
 ## Split Methods
 
