@@ -1,5 +1,6 @@
 """One prompt template rendered for many records gives each record its own text and errors."""
 
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -102,3 +103,23 @@ def test_records_rendered_at_once_on_threads_keep_their_own_values_and_places():
         which = "a" if i % 2 else "b"
         assert rendered == f"{i}-{'1' if which == 'a' else 'x'}"
         assert missing == [f"source.{which}.zz"]
+
+
+def test_two_renders_in_flight_at_once_each_search_their_own_context(monkeypatch):
+    from agent_actions.prompt import service
+
+    barrier = threading.Barrier(2, timeout=10)
+    original = service._PROMPT_ENV.place_of
+
+    def place_of_once_both_are_rendering(target):
+        # Both renders have published their context before either reads it.
+        barrier.wait()
+        return original(target)
+
+    monkeypatch.setattr(service._PROMPT_ENV, "place_of", place_of_once_both_are_rendering)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a, b = pool.map(lambda which: _render_error(PICKED, _picked_context(which)), "ab")
+
+    assert a.missing_variables == ["source.a.zz"]
+    assert b.missing_variables == ["source.b.zz"]
