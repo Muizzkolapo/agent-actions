@@ -2122,7 +2122,7 @@ class ActionExecutor:
             return self._handle_halted_action(action_name, start_time)
 
         # Circuit breaker: skip if any upstream dependency has failed.
-        # Must run BEFORE get_previous_outputs to avoid reading corrupt data.
+        # Must run before any upstream output is read, to avoid reading corrupt data.
         failed_dep = self._check_upstream_health(action_name, action_config)
         if failed_dep is not None:
             return self._handle_dependency_skip(

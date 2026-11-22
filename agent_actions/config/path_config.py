@@ -451,6 +451,12 @@ class _SeedCandidates:
     root: Path | None
     candidates: tuple[_SeedCandidate, ...]
 
+    def still_resolved(self) -> bool:
+        """Whether each listed folder still resolves to the path it was checked at."""
+        return all(
+            c.path.resolve() == c.path for c in self.candidates if c.listed_entry is not None
+        )
+
     def present(self) -> list[SeedFolder]:
         folders: list[SeedFolder] = []
         seen: set[Path] = set()
@@ -537,7 +543,8 @@ def record_seed_search_folders(workflow_config_path: str | None) -> list[SeedFol
     """:func:`seed_search_folders` for a run's records, re-reading the project file only when it changes.
 
     The project root and the folders the project file names are kept per workflow
-    file until a stat of the project file differs; each folder's presence is still
+    file until a stat of the project file differs or a listed folder no longer
+    resolves to itself (it became a symlink); each folder's presence is still
     checked on every call. A project root found without a marker file is never
     kept. Long-lived readers (preflight, the editor, ``inspect``) use
     :func:`seed_search_folders`, which reads everything afresh.
@@ -548,7 +555,11 @@ def record_seed_search_folders(workflow_config_path: str | None) -> list[SeedFol
     hit = _record_candidates.get(key)
     if hit is not None:
         signature, candidates = hit
-        if candidates.root and _project_file_signature(candidates.root) == signature:
+        if (
+            candidates.root
+            and _project_file_signature(candidates.root) == signature
+            and candidates.still_resolved()
+        ):
             return candidates.present()
 
     candidates = _seed_candidates(workflow_config_path, None)

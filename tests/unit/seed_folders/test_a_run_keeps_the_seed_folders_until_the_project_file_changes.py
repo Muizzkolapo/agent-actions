@@ -24,6 +24,7 @@ def settled(monkeypatch):
 
 
 def _project(tmp_path, config: str):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "agent_actions.yml").write_text(config)
     workflow = tmp_path / "wf"
     (workflow / "agent_config").mkdir(parents=True)
@@ -127,3 +128,39 @@ def test_the_uncached_search_reads_the_project_file_every_time(tmp_path, settled
         seed_search_folders(config_path)
         seed_search_folders(config_path)
     assert loads.call_count >= 2
+
+
+def test_two_workflows_in_one_process_each_get_their_own_folders(tmp_path, settled):
+    first, first_config = _project(tmp_path / "one", "seed_data_path: seed_one\n")
+    second, second_config = _project(tmp_path / "two", "seed_data_path: seed_two\n")
+    (first / "seed_one").mkdir()
+    (second / "seed_two").mkdir()
+
+    for _ in range(2):
+        assert _names(record_seed_search_folders(first_config)) == ["seed_one"]
+        assert _names(record_seed_search_folders(second_config)) == ["seed_two"]
+
+
+def test_presence_is_checked_on_every_record_not_only_the_first_after_a_change(tmp_path, settled):
+    workflow, config_path = _project(tmp_path, "seed_data_path: seed_data\n")
+    record_seed_search_folders(config_path)
+    for _ in range(2):
+        (workflow / "seed_data").mkdir()
+        assert _names(record_seed_search_folders(config_path)) == ["seed_data"]
+        (workflow / "seed_data").rmdir()
+        assert record_seed_search_folders(config_path) == []
+
+
+def test_a_listed_folder_swapped_for_a_symlink_outside_the_project_is_refused(tmp_path, settled):
+    project = tmp_path / "project"
+    _workflow, config_path = _project(project, "seed_data_paths: [shared]\n")
+    (project / "shared").mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    assert _names(record_seed_search_folders(config_path)) == ["shared"]
+
+    (project / "shared").rmdir()
+    (project / "shared").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ConfigurationError, match="outside the project"):
+        record_seed_search_folders(config_path)
