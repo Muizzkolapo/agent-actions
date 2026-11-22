@@ -1682,6 +1682,7 @@ def test_the_text_for_the_tree_holds_each_version_value_as_written(tmp_path):
             "{{ i }} < up.x and up.s == it's",
             id="apostrophe",
         ),
+        pytest.param("    guard: {{ i }} == 'a #b'\n", "{{ i }} == 'a", id="quote-in-plain-text"),
     ],
 )
 def test_a_guard_that_reads_a_version_variable_keeps_its_line_and_drops_its_comment(
@@ -1697,11 +1698,14 @@ def test_a_guard_that_reads_a_version_variable_keeps_its_line_and_drops_its_comm
 
 
 def test_the_text_for_the_tree_escapes_a_character_yaml_does_not_take_as_written(tmp_path):
-    wf = _project(tmp_path, _VERSIONED + '    output_field: "o\\x7f\\x85\\u2028{{ i }}"\n')
+    written = '"o\\x7f\\x85\\x9f\\u2028\\uffff\\U0001F600{{ i }}"'
+    wf = _project(tmp_path, f"{_VERSIONED}    output_field: {written}\n")
 
     rendered = render_workflow_source(wf, tmp_path)
 
-    assert rendered.data["actions"][1]["output_field"] == "o\x7f\x85\u2028{{ i }}"
+    assert (
+        rendered.data["actions"][1]["output_field"] == "o\x7f\x85\x9f\u2028\uffff\U0001f600{{ i }}"
+    )
     assert yaml.safe_load(rendered.text) == rendered.data
 
 
