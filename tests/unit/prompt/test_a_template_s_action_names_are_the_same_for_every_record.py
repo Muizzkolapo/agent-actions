@@ -5,6 +5,7 @@ import logging
 import pytest
 from jinja2.exceptions import TemplateSyntaxError
 
+from agent_actions.prompt.context import scope_parsing
 from agent_actions.prompt.context.scope_parsing import extract_action_names_from_template
 
 TEMPLATE = "{{ extract.claims }} {{ score.value }} {{ source.text }}"
@@ -35,3 +36,13 @@ def test_a_syntax_error_is_raised_and_reported_on_every_call(caplog):
                 extract_action_names_from_template("{% if broken %}")
 
     assert len(caplog.records) == 2
+
+
+def test_a_template_seen_before_is_not_parsed_again():
+    template = "{{ cache_probe_action.value }}"
+    extract_action_names_from_template(template)
+    hits = scope_parsing._template_action_names.cache_info().hits
+
+    extract_action_names_from_template(template)
+
+    assert scope_parsing._template_action_names.cache_info().hits == hits + 1

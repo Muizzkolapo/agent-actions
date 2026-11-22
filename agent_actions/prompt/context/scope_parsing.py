@@ -135,26 +135,11 @@ def extract_action_names_from_context_scope(context_scope: dict | None) -> set:
 def extract_action_names_from_template(
     template: str | None, names: Mapping[str, str] | None = None
 ) -> set:
-    """
-    Extract unique action names referenced in a Jinja2 template.
+    """Return the action names a Jinja2 template references.
 
-    Parses template AST to extract namespace names, excluding variables scoped
-    by {% for %}, {% set %}, and {% macro %} constructs. A name a top-level
-    {% set a = b %} of the alias header binds to b, as *names* (the action's ``as:``
-    map) agrees, reads b. Logs a warning and
-    returns empty set on Jinja2 syntax errors (syntax errors are caught at
-    render time; this function is a best-effort dependency extractor).
-
-    Args:
-        template: Jinja2 template string
-
-    Returns:
-        Set of action names (potential upstream dependencies) referenced in template.
-        Empty set if the template has syntax errors (a warning is logged).
-
-    Example:
-        template = "{{ summarize_page_content.summary }} and {{ source.text }}"
-        Returns: {"summarize_page_content"}  # 'source' is filtered as special namespace
+    Names scoped by ``{% for %}``, ``{% set %}`` and ``{% macro %}`` are excluded, except
+    that a top-level ``{% set a = b %}`` the action's ``as:`` map (*names*) agrees with
+    reads ``b``. A syntax error is logged as a warning and raised.
     """
     if not template or not isinstance(template, str):
         return set()
