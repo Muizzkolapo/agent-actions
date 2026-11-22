@@ -29,20 +29,21 @@ class PromptService:
             schema: The schema being passed to the LLM (optional)
         """
         if agent_config.get("prompt_debug", False):
-            # click.echo used here because prompt_debug is a user-facing CLI diagnostic
             divider = "=" * 50
-            click.echo(f"\n{divider}\nDEBUG MODE: Prompt being sent to the agent\n{divider}")
-            click.echo(prompt_config)
+            lines = [f"\n{divider}\nDEBUG MODE: Prompt being sent to the agent\n{divider}"]
+            lines.append(prompt_config)
 
             if context_data:
-                click.echo("\n[Context Data Preview]\n" + "-" * 50)
-                click.echo(context_data)
+                lines.append("\n[Context Data Preview]\n" + "-" * 50)
+                lines.append(context_data)
 
             if schema:
-                click.echo("\n[Context Schema Preview]\n" + "-" * 50)
-                click.echo(json.dumps(schema, indent=2, ensure_ascii=False))
+                lines.append("\n[Context Schema Preview]\n" + "-" * 50)
+                lines.append(json.dumps(schema, indent=2, ensure_ascii=False))
 
-            click.echo(f"{divider}\n")
+            lines.append(f"{divider}\n")
+            # One write, so the blocks of actions running in parallel do not interleave.
+            click.echo("\n".join(lines))
             logger.debug(
                 "prompt_debug output displayed for agent %s", agent_config.get("name", "unknown")
             )

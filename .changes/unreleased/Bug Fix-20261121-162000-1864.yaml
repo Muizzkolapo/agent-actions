@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A guard gives the same result for the same record on a busy machine. Its time limit now counts the evaluation only, not the wait for a free worker. A guard that still has no result in its time no longer passes the record: under `on_false: filter` or `skip` the record fails, with the condition, the record and the limit in its reason, and `agac retry` runs it again; under `on_false: warn` it runs. `passthrough_on_error` no longer applies to a timeout. The `G001` event names the record and the action. Set the limit with `timeout:` on the guard or `guard_timeout:` in `defaults:` (default 5 seconds).'
+time: 2026-11-21T16:20:00Z

@@ -31,6 +31,7 @@ def _make_evaluator(pass_fn):
         context=None,
         conditional_clause=None,
         conditional_clause_passthrough_on_error=True,
+        record_id=None,
     ):
         if pass_fn(item):
             return GuardResult.passed()

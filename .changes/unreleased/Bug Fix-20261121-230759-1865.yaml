@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Preparing a batch step no longer holds a parsed copy of each seed file for every record. The prompt read its declared seed through a new loader for each record, so each record parsed the seed file again, and a prompt that observed the seed kept that parse in the record''s prepared request until the batch was sent: memory grew with the records times the parsed seed, and the garbage collector walked every copy. Now each seed file is parsed once in a run and every record of a prompt or a guard reads that one read-only copy, online and in batch; a record adds only the request it sends. A `context_scope` that drops or passes through a seed field still gives each record a copy of its own.'
+time: 2026-11-21T23:07:59Z

@@ -180,16 +180,22 @@ class GuardEvaluationTimeoutEvent(BaseEvent):
 
     guard_clause: str = ""
     timeout_seconds: float = 0.0
+    record_id: str = ""
+    # Filled in from the action the event fires under.
+    action_name: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
         self.category = EventCategories.GUARD
         self.message = (
-            f"Guard evaluation timed out after {self.timeout_seconds}s: {self.guard_clause}"
+            f"Guard evaluation timed out after {self.timeout_seconds}s on record "
+            f"{self.record_id or '?'}: {self.guard_clause}"
         )
         self.data = {
             "guard_clause": self.guard_clause,
             "timeout_seconds": self.timeout_seconds,
+            "record_id": self.record_id,
+            "action_name": self.action_name,
         }
 
     @property

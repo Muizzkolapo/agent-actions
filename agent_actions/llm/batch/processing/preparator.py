@@ -9,6 +9,7 @@ from typing import Any
 from agent_actions.config.types import RunMode
 from agent_actions.errors import (
     ConfigurationError,
+    GuardNotEvaluatedError,
     MissingSourceGuidError,
     RecordContextError,
     TemplateVariableError,
@@ -347,11 +348,17 @@ class BatchTaskPreparator:
             tools_path=None,
         )
         task_preparer = get_task_preparer()
-        return {
-            row["source_guid"]
-            for row in data
-            if task_preparer.judge(row, prep_context) in (GuardStatus.FILTERED, GuardStatus.SKIPPED)
-        }
+        looked_at_again: set[str] = set()
+        for row in data:
+            try:
+                status = task_preparer.judge(row, prep_context)
+            except GuardNotEvaluatedError:
+                # Prepared again, it is judged again, and failed there if it still has no verdict.
+                looked_at_again.add(row["source_guid"])
+                continue
+            if status in (GuardStatus.FILTERED, GuardStatus.SKIPPED):
+                looked_at_again.add(row["source_guid"])
+        return looked_at_again
 
     def _process_single_item(
         self,

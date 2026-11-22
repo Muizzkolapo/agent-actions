@@ -6,6 +6,7 @@ read from, by the value's place in the prompt context.
 """
 
 import pickle
+import sys
 import time
 from unittest.mock import patch
 
@@ -126,18 +127,44 @@ def test_a_mapping_outside_a_large_context_is_given_up_on_quickly():
     assert elapsed < 2.0
 
 
-def test_a_mapping_at_the_end_of_a_deep_chain_is_placed():
+def _chain(depth: int) -> tuple[dict, dict]:
     target: dict = {"leaf": 1}
     node = target
-    for _ in range(20_000 - 1):
+    for _ in range(depth - 1):
         node = {"a": node}
+    return {"deep": node}, target
 
-    started = time.perf_counter()
-    place = _place_in({"deep": node}, target, "")
-    elapsed = time.perf_counter() - started
 
-    assert place == "deep" + ".a" * (20_000 - 1)
-    assert elapsed < 2.0
+def _calls_to_place_the_end_of_a_chain(depth: int) -> int:
+    """Function calls (Python and C) made while placing the end of a *depth*-long chain."""
+    context, target = _chain(depth)
+    calls = 0
+
+    def count(_frame, event, _arg):
+        nonlocal calls
+        if event in ("call", "c_call"):
+            calls += 1
+
+    previous = sys.getprofile()
+    sys.setprofile(count)
+    try:
+        place = _place_in(context, target, "")
+    finally:
+        sys.setprofile(previous)
+
+    assert place == "deep" + ".a" * (depth - 1)
+    return calls
+
+
+def test_a_mapping_at_the_end_of_a_deep_chain_is_placed():
+    """The work grows with the depth, not its square; a count, so machine load cannot fail it."""
+    shallow = _calls_to_place_the_end_of_a_chain(2_000)
+    deep = _calls_to_place_the_end_of_a_chain(4_000)
+
+    assert deep < 2.5 * shallow
+
+    context, target = _chain(20_000)
+    assert _place_in(context, target, "") == "deep" + ".a" * (20_000 - 1)
 
 
 def test_a_missing_field_error_survives_pickling():

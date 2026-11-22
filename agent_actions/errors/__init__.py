@@ -33,6 +33,7 @@ from agent_actions.errors.configuration import (
     ConfigValidationError,
     DuplicateFunctionError,
     FunctionNotFoundError,
+    GuardNotEvaluatedError,
     ProjectNotFoundError,
     RecordContextError,
     UDFLoadError,
@@ -133,6 +134,7 @@ __all__ = [
     "AgentNotFoundError",
     "ProjectNotFoundError",
     "RecordContextError",
+    "GuardNotEvaluatedError",
     # Validation
     "ValidationError",
     "PromptValidationError",

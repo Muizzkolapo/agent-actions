@@ -817,6 +817,13 @@ class DefaultsConfig(_RetryValidators):
         le=3600,
         description="Default HITL timeout in seconds for all hitl actions",
     )
+    guard_timeout: float | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        allow_inf_nan=False,
+        description="Default seconds a condition guard may take on one record (default 5)",
+    )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
     api_key: SecretStr | None = Field(default=None, description="Default API key")

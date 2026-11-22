@@ -474,7 +474,7 @@ Batch mode assigns `source_guid` during `_add_batch_metadata()`, before source s
 
 ### Guard filter thread pool
 
-`GuardFilter` uses a `ThreadPoolExecutor(max_workers=4)` to enforce evaluation timeouts. Every `filter_item()` call submits work to this pool and blocks on `future.result(timeout=N)`. The pool is a per-process singleton cleaned up via `atexit.register()`. In tests, call `reset_global_guard_filter()` to shut down and recreate the pool between test cases.
+`GuardFilter` uses a `ThreadPoolExecutor(max_workers=4)` to enforce evaluation timeouts. Every `filter_item()` call submits work to this pool, waits for a worker to start it, and then blocks on `future.result(timeout=N)`, so the time in the queue does not count. The pool is a per-process singleton cleaned up via `atexit.register()`. In tests, call `reset_global_guard_filter()` to shut down and recreate the pool between test cases.
 
 ### Semantic error circuit breaker
 
