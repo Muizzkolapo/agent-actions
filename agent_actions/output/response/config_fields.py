@@ -32,6 +32,7 @@ SIMPLE_CONFIG_FIELDS = {
     "json_mode": True,  # Default: True (JSON-based system)
     "prompt_debug": False,  # Default: False (no debug output)
     "output_field": "raw_response",  # Default: 'raw_response' (for non-JSON vendors like Ollama)
+    "context_block": "auto",  # Default: observed fields the prompt prints are not sent again
     # Generation parameters (provider-agnostic; mapped to vendor-specific keys in each client)
     "temperature": None,  # Default: None (use provider default)
     "max_tokens": None,  # Default: None (use provider default)
@@ -43,6 +44,7 @@ SIMPLE_CONFIG_FIELDS = {
     "retry": None,  # Default: None (retry disabled unless configured)
     "request_timeout": None,  # Default: None (the provider client applies the default timeout)
     "record_concurrency": None,  # Default: None (one online LLM record at a time)
+    "context_window": None,  # Default: None (the model table, else 128,000 tokens)
     # Runtime-consumed fields (providers and managers read these from agent dict)
     "enable_prompt_caching": None,
     # Chunking defaults (used by expander_merge, initial_pipeline)

@@ -374,6 +374,28 @@ class ChunkConfig(BaseModel):
     )
     tokenizer_model: str | None = Field(default=None, description="Tokenizer used to measure size")
     split_method: str | None = Field(default=None, description="How text is split into chunks")
+    field: str | None = Field(
+        default=None,
+        description="The field of each staged record to split into parts, as source.<name>",
+    )
+
+    @field_validator("field")
+    @classmethod
+    def _one_top_level_field(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        name = split_field_name(value)
+        if not name or "." in name:
+            raise ValueError(
+                f"field '{value}' must name one top-level field of the staged record, "
+                "as source.<name> or <name>"
+            )
+        return value
+
+
+def split_field_name(field: str) -> str:
+    """The staged record's key that ``chunk_config.field`` names."""
+    return field.removeprefix("source.")
 
 
 class MergePattern(str, Enum):
@@ -643,6 +665,11 @@ class ActionConfig(_RetryValidators):
     json_mode: bool | None = Field(default=None, description="JSON mode setting")
     prompt_debug: bool | None = Field(default=None, description="Debug output for prompts")
     output_field: str | None = Field(default=None, description="Output field name")
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None,
+        description="Observed fields sent in the context block: auto (those the prompt does "
+        "not print), all, or none",
+    )
     temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="Generation temperature"
     )
@@ -653,6 +680,12 @@ class ActionConfig(_RetryValidators):
         gt=0,
         allow_inf_nan=False,
         description="Seconds one LLM request may take before it fails as a retriable error",
+    )
+    context_window: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description="Tokens of prompt the model reads; outranks agac's table of models",
     )
     top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
@@ -833,6 +866,9 @@ class DefaultsConfig(_RetryValidators):
     )
     prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
     output_field: str | None = Field(default=None, description="Default output field name")
+    context_block: Literal["auto", "all", "none"] | None = Field(
+        default=None, description="Default observed fields sent in the context block"
+    )
     temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="Default temperature"
     )
@@ -843,6 +879,12 @@ class DefaultsConfig(_RetryValidators):
         gt=0,
         allow_inf_nan=False,
         description="Default seconds one LLM request may take before it fails",
+    )
+    context_window: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description="Default tokens of prompt the model reads; outranks agac's table of models",
     )
     top_p: float | None = Field(default=None, ge=0.0, le=1.0, description="Default top-p")
     frequency_penalty: float | None = Field(

@@ -78,6 +78,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             schema=schema,
             json_mode=json_mode,
             model_name=model_name if json_mode else None,
+            context_window=batch_task.model_config.get("context_window"),
         )
         body = {
             "model": model_name,

@@ -158,6 +158,7 @@ actions:
 | `prompt` | string | An inline prompt or a `$store.template` reference |
 | `schema` | string | The output validation schema |
 | `context_scope` | object | Controls data visibility: `observe`, `drop`, `passthrough`, `seed`. Each action must declare one. See [Context Scope](../context/context-scope.md) |
+| `context_block` | string | Which observed fields the request sends in its context block. `auto` (default) leaves out a field that the prompt prints. `all` sends every field. `none` sends none. See [The context block](../context/context-scope.md#the-context-block) |
 
 ### Model Fields
 
@@ -260,6 +261,7 @@ An Anthropic or Gemini answer that the model ended itself with no text in it is 
 | `record_concurrency` | integer | The number of records of an online LLM action that are sent at the same time (1-32, default 1: one at a time). You can also set it in `defaults:` or in the `default_agent_config:` of the project. See [Record concurrency](#record-concurrency) |
 | `batch_max_workers` | integer | The number of records that an Ollama action in `run_mode: batch` sends at the same time (1-32, default 1). No other action reads it. You can also set it in `defaults:`. See [Ollama batch](../execution/run-modes.md#ollama-batch) |
 | `request_timeout` | number | The number of seconds that one LLM request may take, greater than 0. If a request has no answer after that time, that attempt fails as a network error. [`retry`](../execution/retry.md) retries it like any other network error. When no attempts remain, the record fails and the run names the timeout. If unset (the default), each provider SDK keeps its own timeout. You can also set it in `defaults:` or in the `default_agent_config:` of the project. See [Request timeout](#request-timeout) |
+| `context_window` | integer | The number of tokens of prompt that the model reads, greater than 0. A prompt that is estimated as larger fails its record, and Agent Actions does not send it. If unset (the default), Agent Actions uses the window that it knows for the model, or 128,000 tokens for a model that it does not know. You can also set it in `defaults:` or in the `default_agent_config:` of the project. See [Context window](#context-window) |
 
 ### Request timeout
 
@@ -284,6 +286,26 @@ actions:
 - The OpenAI, Groq and Anthropic SDKs retry a timed-out request two times on their own before they report it. Thus, with those vendors, one attempt can last up to three times `request_timeout`, plus their short backoff.
 - On a [declared endpoint](./endpoints.md), the `request_timeout` of an action has priority over the `timeout_seconds` of the endpoint. If the action value is unset, `timeout_seconds` applies.
 - The value applies to online requests only. In `run_mode: batch`, the provider runs the batch on its side, and `request_timeout` does not apply. The in-process batch for `ollama_local` and `ollama_cloud` is the exception: each of its requests waits `request_timeout`, or 600 seconds if the value is unset. See [Ollama batch](../execution/run-modes.md#ollama-batch).
+
+### Context window
+
+Before Agent Actions sends a prompt, it estimates the size of the prompt as the number of characters divided by 4. If the estimate is larger than the context window of the model, the record fails, and Agent Actions does not send the prompt. Agent Actions knows the window of many models. For example, the current Claude models (Claude Fable 5.2, Opus 5.5, Sonnet 5.5 and Haiku 5.5) read 1,000,000 tokens, and Claude Haiku 4.5 reads 200,000. For a model that it does not know, Agent Actions uses 128,000 tokens.
+
+`context_window` sets the window, in tokens. It has priority over the window that Agent Actions knows for the model:
+
+```yaml
+defaults:
+  context_window: 200000     # every action
+actions:
+  - name: assess_scope
+    context_window: 400000   # this action
+```
+
+- The value is a whole number greater than 0.
+- It applies online and in `run_mode: batch`, and to the judge calls of the action.
+- It changes only this check. Agent Actions does not send the value to the provider. A prompt that is larger than the real window of the model fails at the provider.
+- It does not change any answer. Thus a change to it keeps the answers that an action holds.
+- To send a record that is too large for the window, split its longest field into parts with [`chunk_config.field`](../data-io/chunking.md#split-one-field-of-a-record).
 
 ### Record concurrency
 

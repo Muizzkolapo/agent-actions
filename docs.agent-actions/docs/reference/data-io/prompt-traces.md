@@ -16,7 +16,7 @@ Every time an action processes a record, Agent Actions captures a **prompt trace
 | Field | Description |
 |-------|-------------|
 | `compiled_prompt` | The fully rendered Jinja template sent to the LLM |
-| `llm_context` | The context dict, serialized to JSON (template variables) |
+| `llm_context` | The context block sent to the model, serialized to JSON. Under `context_block: auto` it leaves out a field that the prompt prints. See [The context block](../context/context-scope.md#the-context-block) |
 | `response_text` | The raw response text of the LLM |
 | `model_name` | The model identifier (for example, `llama3.2:latest`, `gpt-4o-mini`) |
 | `model_vendor` | The provider name (for example, `ollama_local`, `openai`) |

@@ -171,7 +171,12 @@ def _call_ollama_json(
     """JSON-mode invocation shared by local and cloud clients."""
     model = agent_config[MODEL_NAME_KEY]
     envelope = MessageBuilder.build(
-        vendor_slug, prompt_config, context_data, schema=schema, json_mode=True
+        vendor_slug,
+        prompt_config,
+        context_data,
+        schema=schema,
+        json_mode=True,
+        context_window=agent_config.get("context_window"),
     )
     messages = envelope.to_dicts()
 
@@ -243,7 +248,13 @@ def _call_ollama_non_json(
 ) -> list[dict[str, str]]:
     """Non-JSON invocation shared by local and cloud clients."""
     model = agent_config[MODEL_NAME_KEY]
-    envelope = MessageBuilder.build(vendor_slug, prompt_config, context_data, json_mode=False)
+    envelope = MessageBuilder.build(
+        vendor_slug,
+        prompt_config,
+        context_data,
+        json_mode=False,
+        context_window=agent_config.get("context_window"),
+    )
     messages = envelope.to_dicts()
 
     request_id = str(uuid.uuid4())

@@ -152,6 +152,7 @@ class AnthropicBatchClient(BaseBatchClient):
             shared_prompt_len=batch_task.shared_prompt_len,
             model_name=model_name,
             cache_points=batch_task.cache_points,
+            context_window=batch_task.model_config.get("context_window"),
         )
         params = {"model": model_name, "messages": message_params(envelope)}
         self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
