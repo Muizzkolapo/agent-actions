@@ -168,7 +168,10 @@ def main() -> None:
     # A script's sys.path[0] is the folder of its resolved path.
     sys.path[0] = os.path.dirname(os.path.realpath(agac))
     before_import = dict(os.environ)
-    importlib.import_module("agent_actions.cli.main")
+    cli_main = importlib.import_module("agent_actions.cli.main")
+    # The CLI imports a command on first use; warm them all, so no child pays for it.
+    for import_path, _summary in cli_main._COMMANDS.values():
+        importlib.import_module(import_path.split(":")[0])
     set_at_import = {
         key: value for key, value in os.environ.items() if before_import.get(key) != value
     }

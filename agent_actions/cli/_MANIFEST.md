@@ -74,7 +74,9 @@
 | `classify_outcome` | Function | The `RunOutcome` of a workflow, `run_status` told apart further: `FAILED` when every action is terminal and one failed; `PAUSED_FOR_BATCH` when an action is not terminal and one is `batch_submitted`, `PAUSED` when none is; otherwise `RECORD_FAILURES` when an action is `completed_with_failures` (it holds a `failed` or `exhausted` record, `storage.backend.FAILURE_DISPOSITIONS`), else `SUCCESS`. | - |
 | `actions_with_record_failures` | Function | The actions whose status is `completed_with_failures`, in execution order. | - |
 | `report_quota_stop` | Function | Prints a `ProviderQuotaStop` on stderr unless the workflow that raised it has shown it (`_already_displayed`), so the stop is reported once. | - |
-| `main.py` | Module | Main entry point for the Agent Actions CLI. A usage error is printed as Click words it (`format_message`), so a missing option is named by its flags: `Missing option '-w' / '--workflow' / '-a' / '--agent'.` | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
+| `main.py` | Module | Main entry point for the Agent Actions CLI. Each command module is imported on first lookup (`_COMMANDS`, `_LazyGroup`), so `agac --help` imports none of them. A usage error is printed as Click words it (`format_message`), so a missing option is named by its flags: `Missing option '-w' / '--workflow' / '-a' / '--agent'.` | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
+| `_COMMANDS` | Constant | Each top-level command's `module:attribute` and the one-line summary `agac --help` lists it by until it is imported. | - |
+| `_LazyGroup` | Class | Click group that imports a command on first `get_command`; `format_commands` shortens a command not yet imported from its summary as Click shortens its help. | - |
 | `CLI` | Class | Agent Actions CLI application. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
