@@ -1,0 +1,19 @@
+
+Building catalog
+  Found 3 workflows
+  Compiled 6 actions
+  Discovered 3 prompts
+  Loaded 2 schemas
+  Indexed 2 tool functions
+  Loaded 5 workflow runs with metrics
+  Parsed logs: 2 errors, 1 warning
+  Runtime events: 6 errors, 2 warnings
+  Scanned 2 vendors
+  Cataloged 5 error types
+  Mapped 4 event types
+  Found 2 example projects
+  Indexed 2 data loaders
+  Parsed 2 processing types
+  Exported 2 data nodes with previews
+
+Done. Documentation compiled to artefact/
