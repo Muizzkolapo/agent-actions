@@ -14,15 +14,13 @@ def _make_index(tmp_path: Path) -> ProjectIndex:
 
 def _run_indexer(tmp_path: Path, yaml_content: str) -> ProjectIndex:
     """Write YAML to a temp file and index it; return the resulting index."""
-    from ruamel.yaml import YAML
-
     yaml_file = tmp_path / "test_action.yml"
     yaml_file.write_text(yaml_content)
     index = _make_index(tmp_path)
     index.file_actions[yaml_file] = {}
     index.references_by_file[yaml_file] = []
     index.duplicate_actions_by_file[yaml_file] = set()
-    _index_workflow_file(index, yaml_file, YAML(typ="safe"))
+    _index_workflow_file(index, yaml_file)
     return index
 
 

@@ -729,8 +729,6 @@ class TestTheIndexerReadsRealWorkflowText:
 
     @staticmethod
     def _index(tmp_path: Path, text: str):
-        from ruamel.yaml import YAML
-
         from agent_actions.tooling.lsp.indexer import _index_workflow_file
 
         wf = tmp_path / "w.yml"
@@ -739,7 +737,7 @@ class TestTheIndexerReadsRealWorkflowText:
         idx.file_actions[wf] = {}
         idx.references_by_file[wf] = []
         idx.duplicate_actions_by_file[wf] = set()
-        _index_workflow_file(idx, wf, YAML(typ="safe"))
+        _index_workflow_file(idx, wf)
         return idx, wf
 
     def test_an_inline_guard_yields_variables(self, tmp_path: Path):

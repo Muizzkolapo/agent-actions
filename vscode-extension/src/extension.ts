@@ -19,6 +19,7 @@ import { logger, initializeLogger } from './utils/logger';
 
 // Model
 import { WorkflowModel } from './model/workflowModel';
+import type { RenderedWorkflowResult } from './model/workflowText';
 
 // Providers
 import { WorkflowTreeProvider } from './providers/treeViewProvider';
@@ -37,6 +38,15 @@ import { QueryResultsPanel } from './views/queryResultsPanel';
 import { registerCommands } from './commands/index';
 
 let client: LanguageClient | undefined;
+let workflowModelRef: WorkflowModel | undefined;
+
+/** The workflow rendered by the server, which runs the same Jinja step as agac. */
+async function renderWorkflowViaLsp(uri: string): Promise<RenderedWorkflowResult | null> {
+    if (!client || !client.isRunning()) {
+        return null;
+    }
+    return client.sendRequest<RenderedWorkflowResult>('agentActions/renderedWorkflow', { uri });
+}
 let outputChannel: vscode.OutputChannel;
 
 // Lifecycle serialization — prevents concurrent start/stop cycles
@@ -172,6 +182,8 @@ function restartServer(context: vscode.ExtensionContext): Promise<void> {
             }
             await startClient(context);
             outputChannel.appendLine('LSP lifecycle: started.');
+            // A Jinja workflow loads only through the server, so reload once it is up.
+            void workflowModelRef?.refresh();
         } catch (err: unknown) {
             client = undefined;
             const msg = err instanceof Error ? err.message : String(err);
@@ -202,6 +214,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.workspace.createFileSystemWatcher('**/prompt_store/**/*.md'),
         vscode.workspace.createFileSystemWatcher('**/tools/**/*.py'),
         vscode.workspace.createFileSystemWatcher('**/schema/**/*.yml'),
+        vscode.workspace.createFileSystemWatcher('**/templates/**/*.{jinja2,j2}'),
     ];
     context.subscriptions.push(...lspFileWatchers);
 
@@ -226,7 +239,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     // ── Workflow Model (constructor schedules initial refresh via debounce) ──
-    const workflowModel = new WorkflowModel();
+    const workflowModel = new WorkflowModel(renderWorkflowViaLsp);
+    workflowModelRef = workflowModel;
     context.subscriptions.push(workflowModel);
 
     // ── UI Providers ──

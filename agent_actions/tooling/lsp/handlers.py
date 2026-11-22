@@ -58,7 +58,7 @@ def build_hover_content(reference, index: ProjectIndex, current_file=None) -> st
     elif reference.type == ReferenceType.ACTION:
         meta = index.get_action_metadata(reference.value, current_file)
         if meta:
-            return _build_action_hover(meta)
+            return _build_action_hover(meta, current_file, index.root)
         location = index.get_action(reference.value)
         if location:
             return f"**Action**: `{reference.value}`\n\nDefined at line {location.line + 1}"
@@ -69,7 +69,7 @@ def build_hover_content(reference, index: ProjectIndex, current_file=None) -> st
     return None
 
 
-def _build_action_hover(meta) -> str:
+def _build_action_hover(meta, current_file=None, root=None) -> str:
     """Build a rich markdown hover card from ActionMetadata."""
     from .models import ActionMetadata
 
@@ -102,7 +102,13 @@ def _build_action_hover(meta) -> str:
         pt_list = ", ".join(f"`{p}`" for p in m.context_passthrough[:6])
         lines.append(f"\n**Passthrough**: {pt_list}")
 
-    lines.append(f"\n_Defined at line {m.location.line + 1}_")
+    if current_file is None or m.location.file_path == current_file:
+        lines.append(f"\n_Defined at line {m.location.line + 1}_")
+    else:
+        shown = m.location.file_path
+        if root is not None and shown.is_relative_to(root):
+            shown = shown.relative_to(root)
+        lines.append(f"\n_Defined at `{shown}` line {m.location.line + 1}_")
 
     return "\n".join(lines)
 

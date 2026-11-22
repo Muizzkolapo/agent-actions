@@ -5,13 +5,16 @@
 ## Overview
 
 Bundled skills for the Agent Actions CLI are stored under standardized directories
-per provider (Claude/Codex). This package ships the `agac` skill.
+per provider (Claude/Codex). This package ships four skills.
 
 ## Sub-Modules
 
 | Sub-Module | Description |
 |------------|-------------|
 | [agac-agent-skills](agac-agent-skills/SKILL.md) | Build, run, inspect, and debug agent-actions workflows. |
+| [agac-operations](agac-operations/SKILL.md) | Run large workflows safely: batch or online, resume, `--rerun`, `retry --all`, exit codes, usage, scale limits, and a health check of the output counts. |
+| [agac-expectations](agac-expectations/SKILL.md) | Declare output-quality rules with `expect:` blocks, and calibrate a rule before it may block records. |
+| [agac-blind-verification](agac-blind-verification/SKILL.md) | Check outputs with independent verifiers that never see the reference, with display ids and a vote rule. |
 
 ## Project Surface
 
@@ -36,6 +39,8 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/{source,store,target}/` | Writes (`--full` wipes) | — |
 | `scripts/reset_workflow.py` | `.agac/batch_state/` | Writes (`--full` reclaims) | — |
 | `scripts/inspect_action.py` | `agent_config/{workflow}.yml` | Reads (via `agac inspect`) | — |
+| `agac-operations/scripts/run_health.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Reads | — |
+| `agac-operations/scripts/run_health.py` | `agac dispositions -w {workflow} --json` | Reads (runs the command) | — |
 
 ## Dependencies
 

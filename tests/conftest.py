@@ -13,10 +13,6 @@ def pytest_configure():
     root = Path(__file__).resolve().parents[1]
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
-    # The warm agac process copies this process's environment as agac_cli is imported. Import
-    # it before any test module imports agent_actions, whose import sets variables a fresh
-    # agac would set itself; the warm process must see them unset to hand them to each child.
-    import tests._support.agac_cli  # noqa: F401
 
 
 def pytest_report_header():

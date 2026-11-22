@@ -17,7 +17,24 @@ import { WorkflowModel } from '../model/workflowModel';
 /**
  * Tree node types
  */
-type TreeNode = WorkflowNode | ActionNode | ActionGroupNode | DataPreviewNode;
+type TreeNode = WorkflowNode | ActionNode | ActionGroupNode | DataPreviewNode | LoadErrorNode;
+
+/**
+ * Why a workflow did not load, under its workflow row
+ */
+class LoadErrorNode extends vscode.TreeItem {
+    constructor(message: string, configPath: string) {
+        super(message, vscode.TreeItemCollapsibleState.None);
+        this.contextValue = 'agentActions.loadError';
+        this.tooltip = message;
+        this.iconPath = new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'));
+        this.command = {
+            command: 'vscode.open',
+            title: 'Open Workflow Config',
+            arguments: [vscode.Uri.file(configPath)],
+        };
+    }
+}
 
 /**
  * Workflow root node
@@ -29,9 +46,11 @@ class WorkflowNode extends vscode.TreeItem {
     ) {
         super(workflow.name, vscode.TreeItemCollapsibleState.Expanded);
         this.contextValue = 'agentActions.workflow';
-        this.description = this.formatDescription();
-        this.tooltip = this.buildTooltip();
-        this.iconPath = getStatusIcon(status);
+        this.description = workflow.loadError ? 'does not load' : this.formatDescription();
+        this.tooltip = workflow.loadError ?? this.buildTooltip();
+        this.iconPath = workflow.loadError
+            ? new vscode.ThemeIcon('error', new vscode.ThemeColor('errorForeground'))
+            : getStatusIcon(status);
         // Without this the row is inert: it has no context-menu contribution
         // either, so a click would do nothing at all.
         this.command = {
@@ -229,6 +248,10 @@ export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 
         // Workflow level: show actions (with grouping)
         if (element instanceof WorkflowNode) {
+            const { loadError, configPath } = element.workflow;
+            if (loadError) {
+                return [new LoadErrorNode(loadError, configPath)];
+            }
             return this.buildActionNodes(element.workflow.actions);
         }
 

@@ -621,6 +621,25 @@ def _load_yaml_content(yaml_path, project_root: Path | None = None):
     return content
 
 
+def new_load_render(
+    yaml_content: str,
+    templates_folder: Path,
+    project_root: Path | None,
+    load_class: type[LoadRender] = LoadRender,
+    yaml_path: str | Path = "workflow",
+) -> tuple[LoadRender, frozenset[str]]:
+    """A load of *yaml_content* with the prompt loader, `env()`, the filters and the
+    templates/ globals, and the names templates/ set."""
+    load = load_class(templates_folder, yaml_content)
+    env = load.env
+    env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
+    env.globals["env"] = functools.partial(_env, yaml_path=yaml_path)
+    env.filters["dedent"] = textwrap.dedent
+    own_names = set(env.globals)
+    _load_template_globals(load, str(templates_folder))
+    return load, frozenset(set(env.globals) - own_names)
+
+
 def render_pipeline_with_templates(
     yaml_path: str | Path,
     templates_folder: str | Path,
@@ -659,14 +678,9 @@ def render_pipeline_with_templates(
     """
     yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
 
-    load = LoadRender(Path(templates_folder), yaml_content)
-    env = load.env
-    env.globals["load_prompt"] = functools.partial(_load_prompt, project_root=project_root)
-    env.globals["env"] = functools.partial(_env, yaml_path=yaml_path)
-    env.filters["dedent"] = textwrap.dedent
-    own_names = set(env.globals)
-    _load_template_globals(load, str(templates_folder))
-    folder_names = frozenset(set(env.globals) - own_names)
+    load, folder_names = new_load_render(
+        yaml_content, Path(templates_folder), project_root, yaml_path=yaml_path
+    )
 
     # Step 1: Jinja2 template rendering. A prompt that reads what only a record supplies,
     # and a value that reads a version variable, are left for the stage that has them.

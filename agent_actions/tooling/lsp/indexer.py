@@ -21,9 +21,11 @@ from agent_actions.utils.file_utils import load_structured_file, read_python_sou
 from agent_actions.utils.path_utils import resolve_relative_to
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
 
+from .jinja_source import WorkflowRenderError, render_workflow_source
 from .models import (
     ActionMetadata,
     Location,
+    ParseError,
     ProjectIndex,
     PromptDefinition,
     Reference,
@@ -116,7 +118,6 @@ def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
     if not workflow_dir.exists():
         return
 
-    yaml = YAML(typ="safe")
     project_output_field = _project_output_field(project_root)
 
     for workflow_path in workflow_dir.iterdir():
@@ -130,35 +131,90 @@ def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
             continue
 
         for yaml_file in config_dir.glob("*.yml"):
-            _index_workflow_file(index, yaml_file, yaml, project_output_field)
+            _index_workflow_file(index, yaml_file, project_output_field)
 
 
 def _index_workflow_file(
-    index: ProjectIndex, yaml_file: Path, yaml: YAML, project_output_field: str | None = None
+    index: ProjectIndex, yaml_file: Path, project_output_field: str | None = None
 ) -> None:
-    """Index a single workflow YAML file."""
+    """Index a single workflow file, from the text `agac` renders it to."""
+    index.file_actions[yaml_file] = {}
+    index.references_by_file[yaml_file] = []
+    index.duplicate_actions_by_file[yaml_file] = set()
+    workflow_name = index.workflow_for_file(yaml_file)
+    if workflow_name:
+        index.file_to_workflow[yaml_file] = workflow_name
     try:
-        content = yaml_file.read_text()
-        lines = content.split("\n")
+        lines = yaml_file.read_text().split("\n")
+        try:
+            rendered = render_workflow_source(yaml_file, index.root)
+        except WorkflowRenderError as e:
+            index.parse_errors[yaml_file] = ParseError(e.message, Location(yaml_file, e.line))
+            return
 
-        data = yaml.load(content) or {}
-        index.file_actions[yaml_file] = {}
-        index.references_by_file[yaml_file] = []
-        index.duplicate_actions_by_file[yaml_file] = set()
-
-        actions = data.get("actions", []) if isinstance(data, dict) else []
+        data = rendered.data
+        actions = data.get("actions", [])
         action_data_map = _build_action_data_map(actions)
-        defaults = data.get("defaults") if isinstance(data, dict) else None
+        defaults = data.get("defaults")
         workflow_default = defaults.get("output_field") if isinstance(defaults, dict) else None
         default_output_field = workflow_default or project_output_field
 
-        _index_workflow_lines(index, yaml_file, lines, action_data_map, default_output_field)
-        _backfill_unseen_actions(index, yaml_file, lines, action_data_map, default_output_field)
-        _index_included_outputs(index, yaml_file, actions, yaml, default_output_field)
-        _index_entry_actions(index, yaml_file, lines, actions)
+        _index_workflow_lines(
+            index,
+            yaml_file,
+            lines,
+            action_data_map,
+            default_output_field,
+            action_lines=rendered.action_lines,
+            live_lines=rendered.live_lines,
+            line_owners=rendered.line_owners,
+            line_paths=rendered.line_paths,
+        )
+        _backfill_unseen_actions(
+            index,
+            yaml_file,
+            lines,
+            action_data_map,
+            default_output_field,
+            rendered.action_sources,
+            rendered.live_lines,
+        )
+        _drop_jinja_line_references(index, yaml_file, lines)
+        index.duplicate_actions_by_file[yaml_file].update(_repeated_names(actions))
+        _index_included_outputs(index, yaml_file, actions, default_output_field)
+        _index_entry_actions(index, yaml_file, lines, actions, rendered.live_lines)
 
     except Exception as e:
         logger.warning("Error indexing %s: %s", yaml_file, e)
+
+
+_TAGS_ONLY = re.compile(r"\s*(?:(?:\{%.*?%\}|\{#.*?#\})\s*)+")
+_MAY_OUTPUT = re.compile(r"\{\{|\{%[-+]?\s*(?:include|call)\b")
+
+
+def _defines_action(
+    line_no: int, name: str, action_lines: frozenset[int] | None, action_data_map: dict
+) -> bool:
+    return name in action_data_map and (action_lines is None or line_no in action_lines)
+
+
+def _drop_jinja_line_references(index: ProjectIndex, yaml_file: Path, lines: list[str]) -> None:
+    """A line that holds a Jinja tag names what the render makes of it, not its literal words."""
+    index.references_by_file[yaml_file] = [
+        ref
+        for ref in index.references_by_file[yaml_file]
+        if not any(opener in lines[ref.location.line] for opener in ("{{", "{%", "{#"))
+    ]
+
+
+def _repeated_names(actions: Any) -> set[str]:
+    seen: set[str] = set()
+    repeated: set[str] = set()
+    for action in actions if isinstance(actions, list) else []:
+        name = action.get("name") if isinstance(action, dict) else None
+        if isinstance(name, str):
+            (repeated if name in seen else seen).add(name)
+    return repeated
 
 
 def _backfill_unseen_actions(
@@ -167,6 +223,8 @@ def _backfill_unseen_actions(
     lines: list[str],
     action_data_map: dict,
     default_output_field: str | None,
+    action_sources: dict[str, Location],
+    live_lines: frozenset[int] | None = None,
 ) -> None:
     """Index an action the line pass could not see, so the index matches the document.
 
@@ -180,9 +238,10 @@ def _backfill_unseen_actions(
     for action_name, action_data in action_data_map.items():
         if action_name in known:
             continue
-        meta = ActionMetadata(
-            name=action_name, location=_name_location(yaml_file, lines, action_name)
+        location = action_sources.get(action_name) or _name_location(
+            yaml_file, lines, action_name, live_lines=live_lines
         )
+        meta = ActionMetadata(name=action_name, location=location)
         _populate_versions_summary(meta, action_data)
         _populate_from_parsed(meta, action_data, default_output_field)
         known[action_name] = meta
@@ -193,16 +252,24 @@ def _backfill_unseen_actions(
 
 
 def _name_location(
-    file_path: Path, lines: list[str], action_name: str, key: str = "name"
+    file_path: Path,
+    lines: list[str],
+    action_name: str,
+    key: str = "name",
+    live_lines: frozenset[int] | None = None,
 ) -> Location:
     """Where `<key>: <action_name>` is written in *lines*; the file's start if nowhere."""
     line_no, column = 0, 0
     for i, line in enumerate(lines):
+        # In a mapped Jinja file only marked lines are written as-is; an empty set means the
+        # map was not trusted, so the first written line is the best guess.
+        if live_lines and (key == "name" or i not in live_lines):
+            continue
         match = re.match(
-            rf"^\s*-?\s*{key}:\s*['\"]?{re.escape(action_name)}['\"]?\s*(?:#.*)?$", line
+            rf"^\s*-?\s*{key}:\s*['\"]?({re.escape(action_name)})['\"]?\s*(?:#.*)?$", line
         )
         if match:
-            line_no, column = i, line.index(action_name)
+            line_no, column = i, match.start(1)
             break
     return Location(
         file_path=file_path,
@@ -217,7 +284,6 @@ def _index_included_outputs(
     index: ProjectIndex,
     yaml_file: Path,
     actions: list,
-    yaml: YAML,
     default_output_field: str | None,
 ) -> None:
     """Index the outputs of each branch the workflow includes as actions of the workflow.
@@ -237,7 +303,7 @@ def _index_included_outputs(
         branch_path = index.root / branch_file(entry["include"])
         try:
             content = branch_path.read_text()
-            branch = yaml.load(content)
+            branch = YAML(typ="safe").load(content)
         except (OSError, YAMLError) as e:
             logger.warning("Error indexing branch file %s: %s", branch_path, e)
             continue
@@ -267,7 +333,11 @@ _ENTRY_KEYS = ("route", "join", "loop")
 
 
 def _index_entry_actions(
-    index: ProjectIndex, yaml_file: Path, lines: list[str], actions: list
+    index: ProjectIndex,
+    yaml_file: Path,
+    lines: list[str],
+    actions: list,
+    live_lines: frozenset[int] | None = None,
 ) -> None:
     """Index the action each `- route:`, `- join:` and `- loop:` entry becomes, by its name.
 
@@ -283,7 +353,10 @@ def _index_entry_actions(
         if key is None or entry[key] in known:
             continue
         name = entry[key]
-        meta = ActionMetadata(name=name, location=_name_location(yaml_file, lines, name, key))
+        meta = ActionMetadata(
+            name=name,
+            location=_name_location(yaml_file, lines, name, key, live_lines=live_lines),
+        )
         meta.dependencies.extend(_entry_reads(key, entry))
         known[name] = meta
         index.actions[name] = meta.location
@@ -310,24 +383,38 @@ def _build_action_data_map(actions: list) -> dict:
     """Build a map of action name to parsed action data."""
     action_map = {}
     for action in actions:
-        if isinstance(action, dict) and action.get("name"):
+        # PyYAML reads `name: yes` as True, which names no action.
+        if isinstance(action, dict) and isinstance(action.get("name"), str) and action["name"]:
             action_map[action["name"]] = action
     return action_map
 
 
-def _index_workflow_lines(
+def _index_workflow_lines(  # noqa: C901
     index: ProjectIndex,
     yaml_file: Path,
     lines: list[str],
     action_data_map: dict,
     default_output_field: str | None = None,
+    action_lines: frozenset[int] | None = None,
+    live_lines: frozenset[int] | None = None,
+    line_owners: dict[int, str | None] | None = None,
+    line_paths: dict[int, tuple[str, ...] | None] | None = None,
 ) -> None:
     """Index action metadata and references from workflow lines.
 
-    `default_output_field` comes from the parsed `defaults:` block rather than from these
-    lines, because a `defaults:` written after `actions:` is legal and a line scan reaches
-    it only before the first action.
+    `default_output_field` comes from the parsed `defaults:`, which may follow `actions:`.
+    The lines are the file as written: `live_lines` skips what the render drops,
+    `action_lines` says which `- name:` lines define an action, and `line_owners` says
+    which action the render puts each line in. A reference is taken only where
+    `line_paths` puts its line under the key its type reads.
     """
+
+    def under(line_no: int, *keys: str | None) -> bool:
+        if line_paths is None or line_no not in line_paths:
+            return True
+        path = line_paths[line_no]
+        return path is not None and all(key in path for key in keys)
+
     workflow_name = index.workflow_for_file(yaml_file)
     if workflow_name:
         index.file_to_workflow[yaml_file] = workflow_name
@@ -341,6 +428,31 @@ def _index_workflow_lines(
 
     for i, line in enumerate(lines):
         action_match = re.match(r"^(\s*)-\s*name:\s*['\"]?([^'\"#]+?)['\"]?\s*(?:#.*)?$", line)
+        if action_match and not _defines_action(
+            i, action_match.group(2), action_lines, action_data_map
+        ):
+            # Not an action of the render: a name a tag renders, a line in a dropped branch,
+            # or a `- name:` inside a prompt or schema. A sibling of the current action ends it.
+            if current_action_indent is None or len(action_match.group(1)) <= current_action_indent:
+                current_action = None
+                current_action_indent = None
+            continue
+        if (live_lines is not None and i not in live_lines) or _TAGS_ONLY.fullmatch(line):
+            # A dropped line, or a line of `{% %}` / `{# #}` tags. A line that can output
+            # text can open a key, so it closes each nested block it is not inside; the
+            # action itself ends where `line_owners` says.
+            if _MAY_OUTPUT.search(line):
+                indent = len(line) - len(line.lstrip())
+                if dependencies_indent is not None and indent <= dependencies_indent:
+                    dependencies_indent = None
+                if context_scope_indent is not None and indent <= context_scope_indent:
+                    context_scope_indent = None
+                    context_list_indent = None
+                    current_context_list = None
+                if context_list_indent is not None and indent <= context_list_indent:
+                    context_list_indent = None
+                    current_context_list = None
+            continue
         if action_match:
             action_name = action_match.group(2)
             action_indent = len(action_match.group(1))
@@ -387,10 +499,20 @@ def _index_workflow_lines(
             context_list_indent = None
             current_context_list = None
             continue
+        if (
+            line_owners is not None
+            and line_owners.get(i, current_action.name) != current_action.name
+        ):
+            # A tag above this line output another action, and this line is its text. A
+            # line with no mark (a `filter` body) is output where it is written.
+            continue
+
+        # A tag on the line renders to words the line does not show.
+        holds_tag = any(opener in line for opener in ("{{", "{%", "{#"))
 
         # Prompt reference
         prompt_match = re.search(r"prompt:\s*\$(\w+)\.(\w+)", line)
-        if prompt_match:
+        if prompt_match and not holds_tag and under(i, "prompt"):
             full_ref = f"{prompt_match.group(1)}.{prompt_match.group(2)}"
             current_action.prompt_ref = full_ref
             _add_reference(
@@ -408,7 +530,7 @@ def _index_workflow_lines(
         impl_match = re.search(r"impl:\s*(\w+)", line)
         if impl_match and re.match(r"agac\.(route|pick)\b", line[impl_match.start(1) :]):
             impl_match = None
-        if impl_match:
+        if impl_match and not holds_tag and under(i, "impl"):
             current_action.impl_ref = impl_match.group(1)
             _add_reference(
                 index,
@@ -423,7 +545,12 @@ def _index_workflow_lines(
 
         # Schema reference
         schema_match = re.search(r"schema:\s*(\w+)", line)
-        if schema_match and not _dispatches_schema(line[schema_match.start(1) :]):
+        if (
+            schema_match
+            and not holds_tag
+            and under(i, "schema")
+            and not _dispatches_schema(line[schema_match.start(1) :])
+        ):
             current_action.schema_ref = schema_match.group(1)
             _add_reference(
                 index,
@@ -446,7 +573,7 @@ def _index_workflow_lines(
                 dependencies_indent = None
             else:
                 dep_match = re.match(r"^\s*-\s*([^\s#]+)", line)
-                if dep_match:
+                if dep_match and under(i, "dependencies"):
                     dep_name, _ = _unquoted(dep_match.group(1).strip().strip(","))
                     _add_reference(
                         index,
@@ -460,7 +587,7 @@ def _index_workflow_lines(
                     )
 
         deps_list_match = re.search(r"dependencies:\s*\[([^\]]+)\]", line)
-        if deps_list_match:
+        if deps_list_match and under(i, "dependencies"):
             list_content = deps_list_match.group(1)
             list_start = deps_list_match.start(1)
             for action_match in re.finditer(r"(\w+)", list_content):
@@ -505,7 +632,7 @@ def _index_workflow_lines(
                     if not item_match and line.strip() and line_indent <= context_list_indent:
                         # A non-list-item at or before list indent means we've exited the list
                         current_context_list = None
-                    else:
+                    elif under(i, "context_scope", current_context_list):
                         # Only the reference range is taken here. The quotes are YAML's:
                         # left on, `- 'up.title'` resolves as the action `'up` and is
                         # reported unresolvable at Error severity.

@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from ruamel.yaml import YAML
 
 from agent_actions.tooling.lsp.diagnostics import collect_diagnostics
 from agent_actions.tooling.lsp.indexer import _index_workflow_file
@@ -52,7 +51,7 @@ def _indexed(tmp_path: Path, entries: str) -> tuple[ProjectIndex, Path]:
     index.file_actions[yaml_file] = {}
     index.references_by_file[yaml_file] = []
     index.duplicate_actions_by_file[yaml_file] = set()
-    _index_workflow_file(index, yaml_file, YAML(typ="safe"))
+    _index_workflow_file(index, yaml_file)
     return index, yaml_file
 
 
