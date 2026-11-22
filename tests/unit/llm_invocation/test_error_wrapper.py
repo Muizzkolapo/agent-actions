@@ -119,11 +119,15 @@ class TestExtractRetryAfter:
         from datetime import UTC, datetime, timedelta
         from email.utils import format_datetime
 
-        ahead = format_datetime(datetime.now(UTC) + timedelta(seconds=5), usegmt=True)
+        # An HTTP-date holds whole seconds, so the time is built whole: written from
+        # a time with microseconds, the date loses up to a second before it is read.
+        when = (datetime.now(UTC) + timedelta(seconds=5)).replace(microsecond=0)
+        ahead = format_datetime(when, usegmt=True)
 
         seconds = _extract_retry_after(self._with_headers({"retry-after": ahead}))
 
-        assert seconds is not None and 4.0 <= seconds <= 5.0
+        # At most 5 s ahead, minus the part of a second dropped and the time spent reading.
+        assert seconds is not None and 3.0 < seconds <= 5.0
 
 
 class TestWrapVendorErrorTypeBased:
