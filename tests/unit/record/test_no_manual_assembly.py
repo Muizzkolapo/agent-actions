@@ -6,7 +6,6 @@ They act as a CI gate — if a new module manually builds content dicts,
 these tests fail before the PR can merge.
 """
 
-import re
 import subprocess
 from pathlib import Path
 
@@ -106,7 +105,7 @@ class TestNoPrintInLibraryCode:
             # Bundled skill payload — standalone helpers shipped via
             # `agac skills install`, not framework library code. They need to
             # print to the user's terminal.
-            if re.search(r"/agent_actions/skills/[^/]+/scripts/", line):
+            if "/skills/agac-agent-skills/scripts/" in line:
                 continue
             parts = line.split(":", 2)
             if len(parts) >= 2 and _is_inside_docstring(parts[0], int(parts[1])):

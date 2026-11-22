@@ -112,26 +112,27 @@ def main(argv: list[str] | None = None) -> int:
     else:
         root = find_project_root(Path.cwd())
         if root is None:
-            print("health: no agent_actions.yml at or above this folder", file=sys.stderr)
+            sys.stderr.write("health: no agent_actions.yml at or above this folder\n")
             return 2
         status_file = root / "agent_workflow" / args.workflow / "agent_io" / ".agent_status.json"
     try:
         report = read_counts(args.workflow, args.counts)
         finished = finished_actions(status_file)
     except (OSError, ValueError, RuntimeError) as exc:
-        print(f"health: cannot read the counts or the status: {exc}", file=sys.stderr)
+        sys.stderr.write(f"health: cannot read the counts or the status: {exc}\n")
         return 2
 
     rows = check(report, finished, args.max_bad, args.min_records)
     for row in rows:
         mark = "  ABOVE THE LIMIT" if row["above_limit"] else ""
-        print(
-            f"health: {row['action']}: {row['bad']} bad of {row['checked']} ({row['bad_share']:.0%}){mark}"
+        sys.stdout.write(
+            f"health: {row['action']}: {row['bad']} bad of {row['checked']} "
+            f"({row['bad_share']:.0%}){mark}\n"
         )
     if any(row["above_limit"] for row in rows):
-        print(
+        sys.stdout.write(
             f"health: STOP. An action has more than {args.max_bad:.0%} bad records. "
-            "Read 'agac dispositions -w <workflow> --quarantined' before you run again."
+            "Read 'agac dispositions -w <workflow> --quarantined' before you run again.\n"
         )
         return 1
     return 0
