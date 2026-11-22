@@ -509,6 +509,7 @@ It also rewrites a path: surrounding whitespace is stripped and a backslash beco
 | `__init__.py` | Factory: `get_storage_backend(workflow_path, workflow_name, backend_type)` and `BACKENDS` registry |
 | `backend.py` | Abstract base class: `StorageBackend`, disposition constants, `Disposition` enum, `NODE_LEVEL_RECORD_ID`, `FAILURE_DISPOSITIONS`, `RUNNING_CLEAR_DISPOSITIONS` |
 | `backends/sqlite_backend.py` | SQLite implementation: all 5 tables, schema migration, maintenance, thread-safe CRUD |
+| `backends/sqlite/` | Mixins `SQLiteBackend` composes, one per concern: payload codec, metadata, source data, target data, dispositions, checkpoints, prompt traces, maintenance |
 
 ---
 
