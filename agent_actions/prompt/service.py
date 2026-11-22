@@ -1,14 +1,16 @@
 """Unified prompt preparation service for batch and online modes."""
 
+import functools
 import logging
 import re
 import sys
 from collections import deque
 from collections.abc import Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
-from jinja2 import StrictUndefined, TemplateSyntaxError
+from jinja2 import StrictUndefined, Template, TemplateSyntaxError
 
 if TYPE_CHECKING:
     from agent_actions.config.path_config import SeedFolder
@@ -135,6 +137,42 @@ def _named_in(template: str, place: str) -> bool:
     """Whether *template* reads *place* as a dotted reference (list positions left out)."""
     dotted = re.sub(r"\[\d+\]", "", place)
     return re.search(r"(?<![\w.])" + re.escape(dotted) + r"(?!\w)", template) is not None
+
+
+# The context and template of the render running in this thread or task, which a
+# missing-field error searches for the place of the mapping it was read off.
+_RENDERING: ContextVar[tuple[Mapping[str, Any], str] | None] = ContextVar(
+    "prompt_rendering", default=None
+)
+
+
+def _place_in_render(target: Any) -> str | None:
+    rendering = _RENDERING.get()
+    if rendering is None:
+        return None
+    context, template = rendering
+    return _place_in(context, target, template)
+
+
+def _finalize(value: Any) -> Any:
+    return "" if is_null_namespace(value) else value
+
+
+# Shared by every render: it holds nothing of one render, which `_RENDERING` carries.
+_PROMPT_ENV = DictKeyFirstEnvironment(
+    undefined=StrictUndefined,
+    trim_blocks=True,
+    lstrip_blocks=True,
+    keep_trailing_newline=True,
+    finalize=_finalize,
+    place_of=_place_in_render,
+    extensions=PROMPT_EXTENSIONS,
+)
+
+
+@functools.lru_cache(maxsize=256)
+def _compile_prompt(escaped_prompt: str) -> Template:
+    return _PROMPT_ENV.from_string(escaped_prompt)
 
 
 def _too_deep_to_render(prompt_context: dict[str, Any]) -> RecordContextError | None:
@@ -474,19 +512,13 @@ class PromptPreparationService:
             return raw_prompt
 
         try:
-            jinja_env = DictKeyFirstEnvironment(
-                undefined=StrictUndefined,
-                trim_blocks=True,
-                lstrip_blocks=True,
-                keep_trailing_newline=True,
-                finalize=lambda x: "" if is_null_namespace(x) else x,
-                place_of=lambda obj: _place_in(prompt_context, obj, raw_prompt),
-                extensions=PROMPT_EXTENSIONS,
-            )
-
             raw_prompt = escape_jinja_in_inline_code(raw_prompt)
-            template = jinja_env.from_string(raw_prompt)
-            formatted_prompt = template.render(**prompt_context)
+            template = _compile_prompt(raw_prompt)
+            rendering = _RENDERING.set((prompt_context, raw_prompt))
+            try:
+                formatted_prompt = template.render(**prompt_context)
+            finally:
+                _RENDERING.reset(rendering)
             logger.debug("Rendered prompt template with Jinja2")
             return str(formatted_prompt)
 

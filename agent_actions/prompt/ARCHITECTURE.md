@@ -232,11 +232,13 @@ _render_prompt_template(raw_prompt, prompt_context)
   |
   1. If prompt_context is empty --> return raw_prompt unchanged
   |
-  2. Create Environment(undefined=StrictUndefined,
-  |                     finalize=lambda x: "" if x is None else x)
-  |
-  3. escape_jinja_in_inline_code(raw_prompt)
+  2. escape_jinja_in_inline_code(raw_prompt)
   |     Escapes {{ }} inside code fences so they are not interpreted
+  |
+  3. _compile_prompt(escaped) -- compiled once per distinct text (LRU), against
+  |     one shared DictKeyFirstEnvironment(undefined=StrictUndefined, finalize
+  |     blanks a null namespace); the render's context and template reach its
+  |     place_of through a ContextVar set around the render
   |
   4. template.render(**prompt_context)
   |     |
