@@ -88,6 +88,19 @@ def retrieve_and_reconcile(
     return batch_results
 
 
+def wrap_carried_text(results: list[BatchResult], agent_config: dict[str, Any] | None) -> None:
+    """Put each carried text answer of a text-mode action under its output field.
+
+    A recovery state that a version before the retrieval wrap wrote holds such an answer
+    as a bare string, while this round's answers are wrapped; one output must not mix both.
+    """
+    if agent_config is None or agent_config.get("json_mode", get_default("json_mode")):
+        return
+    for result in results:
+        if result.success and isinstance(result.content, str):
+            (result.content,) = ResponseBuilder.wrap_non_json(result.content, agent_config)
+
+
 def count_batch_usage(
     batch_id: str, batch_results: list[BatchResult], *, kind: str, model: str | None
 ) -> None:
