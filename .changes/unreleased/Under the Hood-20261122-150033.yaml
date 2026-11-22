@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  The test pinning the order of `agac` static-analysis findings now gives every check a
+  finding, including lineage reachability, unloadable named schemas, template syntax errors,
+  cache-point errors and, in a second workflow, dependency cycles, so swapping any two adjacent
+  checks whose order shows in the result fails it.
+time: 2026-11-22T15:00:33.000000+00:00
