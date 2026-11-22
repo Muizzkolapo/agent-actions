@@ -63,7 +63,7 @@ def _github_request(url: str) -> bytes:
     """Make a GET request to the GitHub API with a User-Agent header."""
     req = Request(url, headers={"User-Agent": "agac-cli", "Accept": "application/json"})
     try:
-        with urlopen(req, timeout=30) as resp:
+        with urlopen(req, timeout=30) as resp:  # nosec B310  # callers pass only fixed https:// GitHub URLs
             data: bytes = resp.read()
             return data
     except URLError as exc:

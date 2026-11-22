@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'Pre-commit hooks run ruff, mypy and a new bandit check through `uv run`, so they use the same locked versions as CI. Dev dependencies move to a single `[dependency-groups]` dev group, and ruff now blocks new functions above a cyclomatic complexity of 30.'
+time: 2026-11-22T10:00:02Z

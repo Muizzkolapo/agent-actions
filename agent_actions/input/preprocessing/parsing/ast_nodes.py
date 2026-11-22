@@ -337,7 +337,7 @@ class FunctionNode(ASTNode):
         self.arguments = arguments
 
 
-def evaluate_node(
+def evaluate_node(  # noqa: C901
     node: ASTNode,
     data: dict[str, Any],
     functions: dict[str, Callable[..., Any]] | None = None,

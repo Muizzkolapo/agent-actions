@@ -57,7 +57,7 @@ class ReferenceExtractor:
 
     def __init__(self) -> None:
         """Initialize with a Jinja2 environment for AST parsing."""
-        self._env = Environment(extensions=PROMPT_EXTENSIONS)
+        self._env = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
 
     def _parse(self, template: str) -> nodes.Template:
         """Parse template after escaping Jinja syntax in inline code spans."""

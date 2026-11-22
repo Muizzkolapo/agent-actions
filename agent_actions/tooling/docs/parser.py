@@ -128,7 +128,7 @@ class WorkflowParser:
     """Parse and extract information from agent workflow YAML files."""
 
     @staticmethod
-    def parse_workflow(
+    def parse_workflow(  # noqa: C901
         yaml_path: str, project_root: Path | None = None, *, rendered: bool = False
     ) -> dict[str, Any] | None:
         """Parse a workflow YAML file and extract all relevant information.

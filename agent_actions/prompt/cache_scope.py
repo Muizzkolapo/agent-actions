@@ -247,7 +247,7 @@ def _chains(ast: nodes.Template) -> Iterator[tuple[nodes.Name, str, str | None]]
 
 @lru_cache(maxsize=256)
 def _parse(template: str) -> nodes.Template:
-    return Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))
+    return Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))  # nosec B701  # prompt text, not HTML
 
 
 def _unbound_names(template: str) -> set[str]:

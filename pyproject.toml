@@ -106,8 +106,8 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["agent_actions"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.4.0,<10",
     "pytest-cov>=4.1.0,<8",
     "mypy>=1.8.0,<3",
@@ -125,6 +125,7 @@ dev-dependencies = [
     "ruff>=0.8.0,<1",
     "pre-commit>=3.6.0,<4",
     "vulture>=2.11,<3",
+    "bandit>=1.7.0,<2",
 ]
 
 [tool.mypy]
@@ -194,10 +195,15 @@ select = [
     "LOG",  # flake8-logging rules
     "G",    # flake8-logging-format rules
     "T20",  # flake8-print (bans bare print())
+    "C90",  # mccabe complexity
 ]
 ignore = [
     "G004",  # Allow f-strings in logging (project standard)
 ]
+
+[tool.ruff.lint.mccabe]
+# Functions already above this carry `# noqa: C901`; the gate blocks new ones.
+max-complexity = 30
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["LOG", "G", "T201"]
@@ -205,3 +211,6 @@ ignore = [
 "agent_actions/logging/core/handlers/*" = ["T201"]
 ".claude/*" = ["T201"]
 "examples/*" = ["T201"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "agent_actions/vendors/manual_vendor_checks"]

@@ -1437,7 +1437,7 @@ class WorkflowStaticAnalyzer:
 
         return warnings
 
-    def _check_filter_fanin_observe_hazard(self) -> list[StaticTypeWarning]:
+    def _check_filter_fanin_observe_hazard(self) -> list[StaticTypeWarning]:  # noqa: C901
         """Warn when observe refs target a filter-guarded action at a fan-in point.
 
         When action A has ``guard.on_false`` set to ``"filter"`` and a downstream
