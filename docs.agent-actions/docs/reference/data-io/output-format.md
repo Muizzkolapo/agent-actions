@@ -21,7 +21,7 @@ After a workflow runs, the action outputs are in a single SQLite database for ea
         └── <workflow>.db    # SQLite database — all source, target, disposition, and trace data
 ```
 
-There is exactly one `.db` file for each workflow. The framework creates and migrates it automatically on `agac run`.
+There is exactly one `.db` file for each workflow. The framework creates it automatically on the first `agac run`.
 
 ## Tables
 

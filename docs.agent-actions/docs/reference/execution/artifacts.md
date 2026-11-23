@@ -118,8 +118,7 @@ they were when the run loaded them. `output_settings_hash` covers the settings t
 it is stored: `granularity`, `on_empty` and the `expect:` block, and for an LLM action `json_mode`, `output_field` and
 the run mode that the action runs in. `endpoint_hash` covers where an LLM action sends its requests: its `base_url`, or the
 `url` of the declared endpoint that its `model_vendor` names. It is empty for a tool or hitl action. The model and these
-digests are outside `config_hash` on purpose. Thus, when the framework added them, they could not change
-all stored digests at the same time. They also could not name each completed action as edited after an upgrade.
+digests are outside `config_hash`.
 
 A change to one of these items counts as an edit to a completed action:
 
@@ -148,15 +147,13 @@ If you reorder or repeat the entries of an `observe`, `passthrough` or `drop` li
 an edit. If you reorder `dependencies`, that change is an edit, because a fan-in merges its inputs in that order. The framework
 tracks a tool or a guard by its whole file. Thus an edit anywhere in that file names each
 action whose tool or guard that file defines. The framework does not track a module that the file imports, or
-the contents of a seed data file. Thus, after you change one of these, use `--rerun` or `--fresh`. A stamp written before a digest existed holds no value
-for that digest. Thus the framework does not name an edit that the digest would catch until the action completes again.
+the contents of a seed data file. Thus, after you change one of these, use `--rerun` or `--fresh`.
 
 A changed `record_limit` re-runs the action only when the old limit could have held
 back some records. An untruncated run processed all of the records that there were. Thus a limit at
 or above that count would also drop nothing, and the action stays complete. A
 run that did truncate gives no guarantee for any limit. Some stamps cannot say what the run processed:
 
-- A stamp written before these counts existed.
 - A stamp written by a run that never sliced.
 - A stamp written by a run that lost an input file to an error. The run never counted the records that it never got to.
 
@@ -176,8 +173,7 @@ A record that no staged file holds any more
 loses its rows, its dispositions and its checkpoints at that action. It also loses them at each action
 that reads it. This occurs after a walk has read all of the staged files. The prompt traces of the record stay. The framework
 forgets nothing under a file limit, after a file failed to read, or during `agac retry`.
-`--rerun` answers each record again. Staging that did not change still skips. A stamp written before this key existed holds no value. The framework does
-not change that stamp until the action completes again.
+`--rerun` answers each record again. Staging that did not change still skips.
 
 When an action starts work, it also records the config that the work is answered under.
 This is `answered_under`, which holds the same `config_hash`, `model_name`, `model_vendor`,
