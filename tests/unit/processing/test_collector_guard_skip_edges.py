@@ -55,3 +55,14 @@ def test_a_guard_skip_is_not_a_status_of_its_own():
     stats = CollectionStats(unprocessed=1, guard_skipped=1)
 
     assert not stats.only_guard_outcomes
+
+
+def test_a_skipped_result_without_a_reason_is_stamped_empty_output(backend):
+    from agent_actions.record.reasons import EMPTY_OUTPUT
+
+    skipped = ProcessingResult.skipped(_row("s1"), EMPTY_OUTPUT, source_guid="s1")
+    skipped.skip_reason = None
+
+    output, _ = collect_results_from_processing_results([skipped], "act", storage_backend=backend)
+
+    assert [row["_state_history"][-1]["reason"] for row in output] == [EMPTY_OUTPUT]

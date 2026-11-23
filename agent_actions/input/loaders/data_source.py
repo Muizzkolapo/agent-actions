@@ -15,6 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.input.loaders.database_source import (
+    DEFAULT_SNAPSHOT_FILES,
+    REMOTE_CACHE_DIR,
+    refuse_a_statement_that_writes,
+    snapshot_directory,
+    snapshot_fingerprint,
+    snapshot_needs_reading,
+    snapshot_query,
+)
 from agent_actions.utils import deep_json
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.project_root import find_project_root
@@ -26,6 +35,7 @@ class DataSourceType(str, Enum):
     STAGING = "staging"
     LOCAL = "local"
     API = "api"
+    DATABASE = "database"
 
 
 class DataSourceConfig(BaseModel):
@@ -43,6 +53,16 @@ class DataSourceConfig(BaseModel):
     query: dict[str, str] | None = Field(
         default=None, description="Query parameters for API requests"
     )
+    sql: str | None = Field(default=None, description="The query to read (for type=database)")
+    connection: str | None = Field(
+        default=None, description="Name of a project connection (for type=database)"
+    )
+    files: int = Field(
+        default=DEFAULT_SNAPSHOT_FILES,
+        ge=1,
+        le=256,
+        description="Files the rows are spread over (for type=database)",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -52,7 +72,7 @@ logger = logging.getLogger(__name__)
 # Safety limits for API fetches
 _MAX_RESPONSE_BYTES = ApiDefaults.MAX_RESPONSE_BYTES
 _REQUEST_TIMEOUT_SECONDS = ApiDefaults.REQUEST_TIMEOUT_SECONDS
-_REMOTE_CACHE_DIR = "_remote_cache"
+_REMOTE_CACHE_DIR = REMOTE_CACHE_DIR
 
 # Type names that require dict config — used to catch bare-string typos early
 _KNOWN_TYPES = {t.value for t in DataSourceType}
@@ -318,6 +338,41 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
         ) from e
 
 
+def _resolve_database(
+    config: DataSourceConfig, agent_folder: Path, agent_name: str, project_root: Path | None
+) -> DataSourceResolutionResult:
+    """Resolve a database data source -- read the query once and keep its rows on disk.
+
+    A snapshot is kept per action, query, file count and connection settings (a
+    ``${NAME}`` setting by its value, a credential by its name), so changing any
+    of them reads again. ``agac run --refresh-input`` reads it again too.
+    """
+    if not config.connection or not config.sql or not config.sql.strip():
+        raise ConfigurationError(
+            "Database data source requires a 'connection' and an 'sql' query",
+            context={
+                "data_source": config.model_dump(exclude={"headers"}),
+                "operation": "resolve_database_data_source",
+            },
+        )
+    refuse_a_statement_that_writes(config.sql)
+
+    from agent_actions.connections import connection_settings, open_connection
+    from agent_actions.connections.settings import settings_as_resolved
+
+    root = project_root or find_project_root(str(agent_folder)) or agent_folder.resolve().parent
+    settings = settings_as_resolved(connection_settings(config.connection, root))
+    fingerprint = snapshot_fingerprint(config.connection, config.sql, settings, config.files)
+    snapshot_dir = snapshot_directory(agent_folder, agent_name, fingerprint)
+    if not snapshot_needs_reading(snapshot_dir):
+        logger.info("Using the stored snapshot of '%s': %s", config.connection, snapshot_dir)
+        return DataSourceResolutionResult(directories=[snapshot_dir])
+
+    with open_connection(config.connection, root, read_only=True) as connector:
+        snapshot_query(connector, config.sql, snapshot_dir, config.files)
+    return DataSourceResolutionResult(directories=[snapshot_dir])
+
+
 def is_api_data_source(data_source: Any) -> bool:
     """Whether *data_source* names an API, whose resolution may fetch over the network."""
     return bool(data_source) and _parse_data_source(data_source).type == DataSourceType.API
@@ -327,6 +382,7 @@ def resolve_start_node_data_source(
     agent_folder: Path,
     data_source: Any,
     agent_name: str,
+    project_root: Path | None = None,
 ) -> DataSourceResolutionResult:
     """Resolve the data source for a start node.
 
@@ -346,6 +402,9 @@ def resolve_start_node_data_source(
 
     if config.type == DataSourceType.API:
         return _resolve_api(config, agent_folder, agent_name)
+
+    if config.type == DataSourceType.DATABASE:
+        return _resolve_database(config, agent_folder, agent_name, project_root)
 
     raise ConfigurationError(
         f"Unsupported data source type: {config.type}",

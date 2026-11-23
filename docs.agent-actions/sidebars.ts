@@ -123,6 +123,7 @@ const sidebars: SidebarsConfig = {
             'reference/data-io/output-format',
             'reference/data-io/data-lineage',
             'reference/data-io/chunking',
+            'reference/data-io/databases',
           ],
         },
         {

@@ -148,7 +148,9 @@ class ActionRunner:
 
     def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> list[Path]:
         """Resolve upstream directories for a start node (no dependencies)."""
-        result = resolve_start_node_data_source(agent_folder, self.data_source_config, agent_name)
+        result = resolve_start_node_data_source(
+            agent_folder, self.data_source_config, agent_name, self.project_root
+        )
         return result.directories
 
     def _resolve_dependency_directories(
@@ -284,12 +286,16 @@ class ActionRunner:
         """The input files a first stage reads, or None for an action reading another.
 
         None for an API source too: resolving one can fetch, and this is asked on every
-        skip check.
+        skip check. A database source is resolved here: its snapshot is the input, and
+        one that is missing or asked to refresh is read before the check compares it.
         """
         if action_config.get("dependencies") or is_api_data_source(self.data_source_config):
             return None
         result = resolve_start_node_data_source(
-            Path(self.get_action_folder(action_name)), self.data_source_config, action_name
+            Path(self.get_action_folder(action_name)),
+            self.data_source_config,
+            action_name,
+            self.project_root,
         )
         return staged_input_fingerprint(result.directories, result.file_type_filter)
 
@@ -377,7 +383,7 @@ class ActionRunner:
         if not params.action_config.get("dependencies") and not params.previous_action_type:
             agent_folder_path = Path(agent_folder)
             result = resolve_start_node_data_source(
-                agent_folder_path, self.data_source_config, params.action_name
+                agent_folder_path, self.data_source_config, params.action_name, self.project_root
             )
             file_type_filter = result.file_type_filter
 

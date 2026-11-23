@@ -34,7 +34,11 @@ from agent_actions.cli.exit_codes import (
     classify_outcome,
     report_quota_stop,
 )
-from agent_actions.cli.run import start_tracked_run
+from agent_actions.cli.run import (
+    check_declared_outputs,
+    start_tracked_run,
+    write_declared_outputs,
+)
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.errors import ProviderQuotaStop
@@ -447,6 +451,7 @@ class RetryCommand:
         for action in downstream_actions:
             state_mgr.update_status(action, ActionStatus.PENDING, **{REPAIRED_BY: created_at})
 
+        check_declared_outputs(workflow, project_root)
         tracker, run_id = start_tracked_run(workflow, self.agent_name, project_root)
 
         outcome = RunOutcome.FAILED
@@ -495,6 +500,8 @@ class RetryCommand:
         _delete_manifest(manifest_file)
 
         self._report(outcome, state_mgr, execution_order)
+        if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
+            write_declared_outputs(workflow, project_root, self.args.agent)
         return outcome
 
     def _report(self, outcome: RunOutcome, state_mgr, execution_order: list[str]) -> None:

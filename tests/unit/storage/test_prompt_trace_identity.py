@@ -10,7 +10,6 @@ an earlier run left behind; an expansion's children reach their prompt through
 from __future__ import annotations
 
 import logging
-import sqlite3
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -104,73 +103,6 @@ class TestTraceRowsCarryDurableIdentity:
             (ACTION,),
         )
         assert cursor.fetchone()["n"] == 1
-
-    def test_legacy_store_gains_identity_columns_on_open(self, tmp_path):
-        """A pre-migration store gets the columns ALTER-added; old rows keep
-        NULL and stay readable."""
-        db_path = tmp_path / "legacy.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute(
-            "CREATE TABLE prompt_trace ("
-            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "  action_name TEXT NOT NULL,"
-            "  record_id TEXT NOT NULL,"
-            "  attempt INTEGER NOT NULL DEFAULT 0,"
-            "  compiled_prompt TEXT NOT NULL,"
-            "  llm_context TEXT, response_text TEXT, model_name TEXT,"
-            "  model_vendor TEXT, run_mode TEXT, prompt_length INTEGER,"
-            "  context_length INTEGER, response_length INTEGER,"
-            "  created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
-            "  UNIQUE(action_name, record_id, attempt))"
-        )
-        conn.execute(
-            "INSERT INTO prompt_trace (action_name, record_id, compiled_prompt)"
-            " VALUES ('act', 'tid-old', 'old prompt')"
-        )
-        conn.commit()
-        conn.close()
-
-        b = SQLiteBackend(str(db_path), workflow_name="legacy")
-        b.initialize()
-        rows = b.get_prompt_traces("act")
-        assert len(rows) == 1
-        assert rows[0]["compiled_prompt"] == "old prompt"
-        assert rows[0]["source_guid"] is None
-        assert rows[0]["run_id"] is None
-
-    def test_legacy_store_stays_readable_opened_read_only(self, tmp_path):
-        """A read-only open never runs the ALTER pass, so naming the new
-        columns unconditionally would turn every read of an old store into
-        an error — which is how the docs scanner reads them."""
-        db_path = tmp_path / "legacy_ro.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute(
-            "CREATE TABLE prompt_trace ("
-            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "  action_name TEXT NOT NULL, record_id TEXT NOT NULL,"
-            "  attempt INTEGER NOT NULL DEFAULT 0, compiled_prompt TEXT NOT NULL,"
-            "  llm_context TEXT, response_text TEXT, model_name TEXT,"
-            "  model_vendor TEXT, run_mode TEXT, prompt_length INTEGER,"
-            "  context_length INTEGER, response_length INTEGER,"
-            "  created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
-            "  UNIQUE(action_name, record_id, attempt))"
-        )
-        conn.execute(
-            "INSERT INTO prompt_trace (action_name, record_id, compiled_prompt)"
-            " VALUES ('act', 'tid-old', 'old prompt')"
-        )
-        conn.commit()
-        conn.close()
-
-        b = SQLiteBackend.create_readonly(db_path)
-        try:
-            rows = b.get_prompt_traces("act")
-            assert [r["compiled_prompt"] for r in rows] == ["old prompt"]
-            preview = b.preview_prompt_traces("act")
-            assert preview["total_count"] == 1
-            assert "source_guid" not in preview["records"][0]
-        finally:
-            b.close()
 
     def test_a_records_own_identifier_is_never_rejected(self, backend):
         """A first-stage row may bring its own source_guid — an order number,

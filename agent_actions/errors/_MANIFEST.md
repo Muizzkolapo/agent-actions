@@ -23,6 +23,7 @@
 | `configuration.py` | Module | Configuration-related errors. `ConfigurationError.__init__` guards `config_key` with `config_key or message or "<no key>"` to ensure the interpolated key is never `None`. | `errors` |
 | `ConfigurationError` | Class | Base exception for configuration-related errors. | - |
 | `ConfigValidationError` | Class | Raised when configuration validation fails. | - |
+| `StoreFormatError` | Class | Raised when a store records a storage format other than the one this version writes. The message names the store and `agac clean -a <workflow> --all`. | - |
 | `DuplicateFunctionError` | Class | Raised when duplicate @udf_tool function names are detected. | - |
 | `FunctionNotFoundError` | Class | Raised when a UDF is not found in the registry. | - |
 | `UDFLoadError` | Class | Raised when a UDF module fails to load. `DISCOVERY_SENTINEL` class attribute marks failures of the user-code directory itself (vs. a specific module import), so formatters can render directory-appropriate messages. | - |

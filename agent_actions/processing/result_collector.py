@@ -28,8 +28,8 @@ from agent_actions.record.elsewhere import guard_filter_reason
 from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import (
     CONSUMED_INTO_OUTPUT,
+    EMPTY_OUTPUT,
     EXPECTATIONS_FAILED,
-    GUARD_SKIP,
     GUARD_SKIP_REASONS,
     PARSE_ERROR,
     RETRY_EXHAUSTED,
@@ -627,7 +627,7 @@ def _collect_success(acc: _Collection, idx: int, result: ProcessingResult, statu
 
 def _collect_skipped(acc: _Collection, idx: int, result: ProcessingResult) -> None:
     data = result.data or []
-    reason = result.skip_reason or GUARD_SKIP
+    reason = result.skip_reason or EMPTY_OUTPUT
     if data:
         for d in data:
             _stamp(d, RecordState.GUARD_SKIPPED, acc.action_name, reason)

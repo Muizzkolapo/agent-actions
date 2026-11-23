@@ -12,7 +12,7 @@ from typing import Any  # noqa: F401
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.classification import mark_action_fatal
-from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.errors.configuration import ConfigValidationError, StoreFormatError
 from agent_actions.errors.processing import SerializationError  # noqa: F401
 from agent_actions.errors.validation import DataValidationError  # noqa: F401
 from agent_actions.logging.diagnostics import DIAGNOSTIC  # noqa: F401
@@ -66,7 +66,7 @@ class SQLiteBackend(
             source_guid TEXT NOT NULL,
             data TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            repeat_of_source_guid TEXT DEFAULT NULL,
+            repeat_of_source_guid TEXT NOT NULL DEFAULT '',
             UNIQUE(relative_path, source_guid)
         )
     """
@@ -77,7 +77,7 @@ class SQLiteBackend(
             action_name TEXT NOT NULL,
             relative_path TEXT NOT NULL,
             data TEXT NOT NULL,
-            record_count INTEGER,
+            record_count INTEGER NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(action_name, relative_path)
         )
@@ -172,47 +172,6 @@ class SQLiteBackend(
         ON checkpoint_output(action_name, relative_path)
     """
 
-    # Required columns per table — missing ones are ALTER-added on open
-    # (see _enforce_schema; tables are never dropped or rebuilt).
-    _REQUIRED_COLUMNS: dict[str, set[str]] = {
-        "source_data": {
-            "relative_path",
-            "source_guid",
-            "data",
-            "created_at",
-            "repeat_of_source_guid",
-        },
-        "target_data": {"action_name", "relative_path", "data", "record_count", "created_at"},
-        "record_disposition": {
-            "action_name",
-            "record_id",
-            "disposition",
-            "reason",
-            "relative_path",
-            "input_snapshot",
-            "detail",
-            "created_at",
-        },
-        "prompt_trace": {
-            "action_name",
-            "record_id",
-            "source_guid",
-            "run_id",
-            "attempt",
-            "compiled_prompt",
-            "llm_context",
-            "response_text",
-            "model_name",
-            "model_vendor",
-            "run_mode",
-            "prompt_length",
-            "context_length",
-            "response_length",
-            "answered_under",
-            "created_at",
-        },
-    }
-
     # Allowlist for identifiers (action names, relative paths).
     # Restrictive as defense-in-depth; all SQL is parameterized.
     _VALID_IDENTIFIER_CHARS = set(string.ascii_letters + string.digits + "_-./ ")
@@ -281,6 +240,16 @@ class SQLiteBackend(
             conn = sqlite3.connect(f"file://{encoded_path}?immutable=1", uri=True)
             conn.row_factory = sqlite3.Row
 
+        try:
+            # A file with no tables is a store not yet created, not one of another format.
+            cursor = conn.cursor()
+            if instance._has_tables(cursor):
+                instance._refuse_other_format(
+                    instance._recorded_format(cursor), str(db_path), instance.workflow_name
+                )
+        except BaseException:
+            conn.close()
+            raise
         instance._connection = conn
         return instance
 
@@ -347,36 +316,38 @@ class SQLiteBackend(
             return self._connection
 
     def initialize(self) -> None:
-        """Create connection, enforce schema, create tables and indexes."""
+        """Create a new store, or open one that records the current storage format."""
         if self._readonly:
             raise RuntimeError("Cannot initialize a read-only backend instance.")
         with self._lock:
             self._open_connection()
             cursor = self.connection.cursor()
             try:
-                self._enforce_schema(cursor)
-                cursor.execute(self.SOURCE_TABLE_SQL)
-                cursor.execute(self.TARGET_TABLE_SQL)
-                cursor.execute(self.DISPOSITION_TABLE_SQL)
-                cursor.execute(self.SOURCE_INDEX_SQL)
-                cursor.execute(self.SOURCE_INDEX_REPEAT_OF_SQL)
-                cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
-                cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
-                cursor.execute(self.DISPOSITION_INDEX_ACTION_RECORD_SQL)
-                cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
-                cursor.execute(self.TRACE_INDEX_ACTION_SQL)
-                cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
-                cursor.execute(self.TRACE_INDEX_ACTION_SOURCE_SQL)
-                cursor.execute(self.TRACE_DICTIONARY_TABLE_SQL)
-                cursor.execute(self.CHECKPOINT_TABLE_SQL)
-                cursor.execute(self.CHECKPOINT_INDEX_SQL)
-                cursor.execute(self.METADATA_TABLE_SQL)
+                # A store that has tables is only read here, so a reader never waits for
+                # the write lock a run holds.
+                if self._has_tables(cursor):
+                    self._refuse_other_format(
+                        self._recorded_format(cursor), str(self.db_path), self.workflow_name
+                    )
+                    return
+                # One transaction, so another process sees no tables without the format.
+                cursor.execute("BEGIN IMMEDIATE")
+                if self._has_tables(cursor):
+                    self._refuse_other_format(
+                        self._recorded_format(cursor), str(self.db_path), self.workflow_name
+                    )
+                else:
+                    self._create_tables(cursor)
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
                     self.db_path,
                     extra={"workflow_name": self.workflow_name},
                 )
+            except StoreFormatError:
+                self.connection.rollback()
+                self.close()
+                raise
             except sqlite3.Error as e:
                 self.connection.rollback()
                 logger.error(
@@ -386,45 +357,49 @@ class SQLiteBackend(
                 )
                 raise
 
-    def _enforce_schema(self, cursor: sqlite3.Cursor) -> None:
-        """Add missing columns to existing tables via ALTER TABLE.
+    def _create_tables(self, cursor: sqlite3.Cursor) -> None:
+        for sql in (
+            self.SOURCE_TABLE_SQL,
+            self.TARGET_TABLE_SQL,
+            self.DISPOSITION_TABLE_SQL,
+            self.SOURCE_INDEX_SQL,
+            self.SOURCE_INDEX_REPEAT_OF_SQL,
+            self.DISPOSITION_INDEX_ACTION_SQL,
+            self.DISPOSITION_INDEX_ACTION_DISP_SQL,
+            self.DISPOSITION_INDEX_ACTION_RECORD_SQL,
+            self.PROMPT_TRACE_TABLE_SQL,
+            self.TRACE_INDEX_ACTION_SQL,
+            self.TRACE_INDEX_ACTION_RECORD_SQL,
+            self.TRACE_INDEX_ACTION_SOURCE_SQL,
+            self.TRACE_DICTIONARY_TABLE_SQL,
+            self.CHECKPOINT_TABLE_SQL,
+            self.CHECKPOINT_INDEX_SQL,
+            self.METADATA_TABLE_SQL,
+        ):
+            cursor.execute(sql)
+        cursor.execute(
+            "INSERT OR IGNORE INTO workflow_metadata (key, value)"
+            " VALUES ('storage_format_version', ?)",
+            (str(self._STORAGE_FORMAT_VERSION),),
+        )
 
-        Never drops tables — user data must survive framework upgrades.
-        Only adds columns; does not remove or rename existing columns.
-        """
-        for table_name, required in self._REQUIRED_COLUMNS.items():
-            # Quote identifier to prevent SQL injection (table_name is from
-            # hardcoded _REQUIRED_COLUMNS keys, but defense-in-depth)
-            quoted_table = f'"{table_name}"'
-            # PRAGMA does not support quoted identifiers — but table_name
-            # is safe (from hardcoded _REQUIRED_COLUMNS keys, not user input)
-            cursor.execute(f"PRAGMA table_info({table_name})")
-            rows = cursor.fetchall()
-            if not rows:
-                continue  # table doesn't exist yet — CREATE TABLE handles it
+    @staticmethod
+    def _has_tables(cursor: sqlite3.Cursor) -> bool:
+        cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' LIMIT 1"
+        )
+        return cursor.fetchone() is not None
 
-            existing = {row[1] for row in rows}
-            missing = required - existing
-            if missing:
-                columns_to_add = sorted(missing)
-                for column in columns_to_add:
-                    logger.debug(
-                        "Table '%s' missing column '%s' — adding via ALTER TABLE",
-                        table_name,
-                        column,
-                    )
-                    # Quote column name for safety; TEXT DEFAULT NULL is
-                    # the most permissive — application code handles types
-                    quoted_col = f'"{column}"'
-                    cursor.execute(
-                        f"ALTER TABLE {quoted_table} ADD COLUMN {quoted_col} TEXT DEFAULT NULL"
-                    )
-                logger.info(
-                    "Schema migration complete for '%s': added %d column(s): %s",
-                    table_name,
-                    len(columns_to_add),
-                    columns_to_add,
-                )
+    @staticmethod
+    def _recorded_format(cursor: sqlite3.Cursor) -> str | None:
+        cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'workflow_metadata'"
+        )
+        if cursor.fetchone() is None:
+            return None
+        cursor.execute("SELECT value FROM workflow_metadata WHERE key = 'storage_format_version'")
+        row = cursor.fetchone()
+        return None if row is None else str(row[0])
 
     def close(self) -> None:
         """Close the database connection and clear caches."""

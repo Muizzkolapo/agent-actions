@@ -23,8 +23,8 @@ def _make_record(guid: str) -> dict:
     return {"source_guid": guid, "content": f"data_{guid}"}
 
 
-def _two_rows_one_older_one_carried():
-    """r0 answered with two rows, r1 checkpointed by an earlier version, r2 with one row."""
+def _two_rows_and_two_carried():
+    """r0 answered with two rows, r1 and r2 with one row each."""
     backend = MagicMock()
     backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target yet")
     backend.read_checkpoint_records.return_value = [
@@ -33,7 +33,6 @@ def _two_rows_one_older_one_carried():
         _make_record("r1"),
         _make_record("r2"),
     ]
-    backend.checkpointed_without_row_count.return_value = {"r1"}
     return backend
 
 
@@ -96,38 +95,25 @@ class TestCheckpointResume:
         assert found == [_make_record("r1")]
         assert missing == {"r0"}
 
-    def test_a_record_an_earlier_version_checkpointed_is_answered_again(self):
-        """That version kept one row per record, the last it was answered with, so the row
-        cannot say whether the record had others."""
-        backend = MagicMock()
-        backend.read_target_for_rewrite.side_effect = FileNotFoundError("no target yet")
-        backend.read_checkpoint_records.return_value = [_make_record("r0"), _make_record("r1")]
-        backend.checkpointed_without_row_count.return_value = {"r0"}
-
-        found, missing = build_carry_forward({"r0", "r1"}, "action_a", "output.json", backend)
-
-        assert found == [_make_record("r1")]
-        assert missing == {"r0"}
-
     def test_a_record_answered_again_is_not_reported_as_lost(self, caplog):
         """Its rows are in the checkpoint, so the warning for carried records nothing holds
         would point the user at a loss that did not happen."""
         with caplog.at_level(logging.INFO, logger="agent_actions.processing.disposition_gate"):
             build_carry_forward(
-                {"r0", "r1", "r2"}, "action_a", "output.json", _two_rows_one_older_one_carried()
+                {"r0", "r1", "r2"}, "action_a", "output.json", _two_rows_and_two_carried()
             )
 
         messages = [record.getMessage() for record in caplog.records]
         assert not [m for m in messages if "not found in prior output" in m]
-        assert [m for m in messages if "2 checkpointed record(s)" in m and "answered again" in m]
+        assert [m for m in messages if "1 checkpointed record(s)" in m and "answered again" in m]
 
     def test_the_checkpointed_records_counted_as_carried_are_the_ones_carried(self, caplog):
         with caplog.at_level(logging.INFO, logger="agent_actions.processing.disposition_gate"):
             build_carry_forward(
-                {"r0", "r1", "r2"}, "action_a", "output.json", _two_rows_one_older_one_carried()
+                {"r0", "r1", "r2"}, "action_a", "output.json", _two_rows_and_two_carried()
             )
 
-        assert "using 1 checkpointed records for carry-forward" in caplog.text
+        assert "using 2 checkpointed records for carry-forward" in caplog.text
 
 
 class TestFirstStageCheckpointResume:
@@ -197,17 +183,15 @@ class TestAnsweredSinceStored:
 class TestCheckpointedAnswers:
     """The checkpoint rows that stand as the answers of the records named, one per record."""
 
-    def test_only_the_records_named_with_one_row_of_this_version_are_answered(self):
+    def test_only_the_records_named_with_one_row_are_answered(self):
         rows = checkpointed_answers(
-            _two_rows_one_older_one_carried(), "action_a", "output.json", {"r0", "r1", "r2"}
+            _two_rows_and_two_carried(), "action_a", "output.json", {"r0", "r1", "r2"}
         )
 
-        assert rows == [_make_record("r2")]
+        assert rows == [_make_record("r1"), _make_record("r2")]
 
     def test_a_record_not_named_is_not_answered(self):
-        rows = checkpointed_answers(
-            _two_rows_one_older_one_carried(), "action_a", "output.json", {"r9"}
-        )
+        rows = checkpointed_answers(_two_rows_and_two_carried(), "action_a", "output.json", {"r9"})
 
         assert rows == []
 

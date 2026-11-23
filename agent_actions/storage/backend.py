@@ -11,6 +11,7 @@ from types import TracebackType
 from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
+from agent_actions.errors.configuration import StoreFormatError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
 from agent_actions.record.reasons import PARSE_ERROR
@@ -96,16 +97,14 @@ class StorageBackend(ABC):
     consumers — they see the exact same list[dict] as before.
     """
 
-    # Version 1 = full records, 2 = delta storage, 3 = compressed payload columns
-    _STORAGE_FORMAT_VERSION = 3
+    # Written when a store is made. A backend refuses to open a store of any other.
+    _STORAGE_FORMAT_VERSION = 4
 
     def __init__(self) -> None:
         """Initialize base storage backend state."""
         self._reconstruction_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._execution_order_cache: list[str] | None = None
         self._dependency_graph_cache: dict[str, list[str]] | None = None
-        self._format_version_written = False
-        self._format_version_checked = False
         self._rows_collected: dict[str, int] = {}
         self._rows_collected_lock = threading.Lock()
         self._staged_this_run: dict[str, set[str]] = {}
@@ -156,8 +155,30 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def initialize(self) -> None:
-        """Create tables, indexes, and other infrastructure required by the backend."""
+        """Create tables, indexes, and other infrastructure required by the backend.
+
+        A new store records ``_STORAGE_FORMAT_VERSION``. An existing store passes
+        :meth:`_refuse_other_format` before anything reads or writes it.
+        """
         ...
+
+    def _refuse_other_format(self, stored: str | None, store: str, workflow_name: str) -> None:
+        """Raise unless *stored* is the storage format this version writes."""
+        if stored == str(self._STORAGE_FORMAT_VERSION):
+            return
+        found = "records no storage format" if stored is None else f"uses storage format {stored}"
+        raise StoreFormatError(
+            f"The store {store} {found}. This version of agent-actions reads only storage "
+            f"format {self._STORAGE_FORMAT_VERSION}. Run `agac clean -a {workflow_name} --all` "
+            f"to remove the store, then run the workflow again.",
+            context={
+                "store": store,
+                "stored_version": stored,
+                "supported": self._STORAGE_FORMAT_VERSION,
+                "hint": f"Run `agac clean -a {workflow_name} --all` to remove the store, "
+                "then run the workflow again.",
+            },
+        )
 
     def _gate_schema_echo_records(
         self,
@@ -255,10 +276,6 @@ class StorageBackend(ABC):
         # LLM output — the carry-forward / resume path bypasses the live-LLM guard.
         delta_records = self._gate_schema_echo_records(action_name, delta_records)
 
-        if not self._format_version_written:
-            self.save_metadata("storage_format_version", str(self._STORAGE_FORMAT_VERSION))
-            self._format_version_written = True
-
         self._reconstruction_cache.clear()
         return self._write_target_raw(action_name, relative_path, delta_records)
 
@@ -268,33 +285,6 @@ class StorageBackend(ABC):
         Raises:
             FileNotFoundError: If the target data doesn't exist.
         """
-        if not self._format_version_checked:
-            stored_version = self.load_metadata("storage_format_version")
-            if stored_version is not None:
-                try:
-                    version_int = int(stored_version)
-                except ValueError:
-                    from agent_actions.errors.configuration import ConfigValidationError
-
-                    raise ConfigValidationError(
-                        f"Corrupt storage_format_version in workflow_metadata: {stored_version!r}. "
-                        f"Expected an integer. Re-run with --fresh to reset.",
-                        context={"stored_version": stored_version},
-                    ) from None
-                if version_int > self._STORAGE_FORMAT_VERSION:
-                    from agent_actions.errors.configuration import ConfigValidationError
-
-                    raise ConfigValidationError(
-                        f"Database uses storage format version {version_int}, "
-                        f"but this code supports up to version {self._STORAGE_FORMAT_VERSION}. "
-                        f"Please upgrade agent-actions.",
-                        context={
-                            "stored_version": version_int,
-                            "supported": self._STORAGE_FORMAT_VERSION,
-                        },
-                    )
-            self._format_version_checked = True
-
         result = self._reconstructed_target(action_name, relative_path)
         reset_for_downstream(result, action_name=action_name)
         return result
@@ -915,14 +905,6 @@ class StorageBackend(ABC):
     ) -> list[dict[str, Any]]:
         """Every row checkpointed for an action/path, in the order their records were saved."""
         return []
-
-    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
-        """Records of an action/path whose checkpoint cannot say how many rows answered them.
-
-        An earlier version kept one row per record, the last given under its identity, so
-        such a row may be one of several.
-        """
-        return set()
 
     def clear_checkpoint_records(  # noqa: B027
         self,
