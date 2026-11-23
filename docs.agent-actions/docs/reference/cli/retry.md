@@ -353,7 +353,7 @@ record that is still failed upstream stays quarantined, as in a run.
 If the tool writes a row again exactly as it was, the row is the same row. The row keeps the
 identifiers that it was stored under. What the downstream actions hold for the row stays.
 Only the values that a run makes again can be different: the identifiers of the row, its
-lineage, its `lineage_sources` (the node ids of the rows that it was made from) and its state
+lineage, its `lineage_sources` (the node ids in the lineage of each row that it was made from) and its state
 history.
 
 Each downstream action of the tool answers a file that the tool rewrote, as a run answers

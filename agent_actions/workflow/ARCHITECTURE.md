@@ -414,8 +414,8 @@ the rows it held, every one unchanged), and once it is written a repair reaching
 file below answers it as a plain run does: every record whose row changed, and what still
 answers carried. A plain run finishing a stopped retry finds those dispositions gone and
 answers the file again the same way. What a run mints for a row is never what changed: its
-identifiers, `lineage`, `lineage_sources` (the node ids of the rows it was made from, minted
-again for a row an action above keeps) and the history's stamps. A FILE tool below of the
+identifiers, `lineage`, `lineage_sources` (the node ids in the lineage of each row it was made
+from, minted again for a row an action above keeps) and the history's stamps. A FILE tool below of the
 config held writes its file again and puts back what it writes unchanged in the same way,
 so what its rows name is forgotten at it alone, and nothing below it is forgotten for the
 file above: it decides that when it writes its own file. An online record action puts back
