@@ -17,6 +17,7 @@ from agent_actions.storage.backend import (
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
+    from agent_actions.workflow.managers.loop import CorrelatedInput
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,7 @@ class ActionOutputManager:
                 )
         return outputs, list(target_files)
 
-    def resolve_correlated_input(self, idx: int) -> dict[str, list[dict[str, Any]]] | None:
+    def resolve_correlated_input(self, idx: int) -> Optional["CorrelatedInput"]:
         """Return a version consumer's merged input by file path, or None for any other action.
 
         Safe for parallel execution — the caller passes the returned input to
@@ -204,8 +205,8 @@ class ActionOutputManager:
         # prepare_correlated_input returns the merged input, or raises
         # AllVersionsFilteredError (every source empty → executor cascade-skips)
         # or ConfigurationError (correlation/storage fault).
-        correlated: dict[str, list[dict[str, Any]]] = (
-            self.version_correlator.prepare_correlated_input(current_agent, version_sources, idx)
+        correlated: CorrelatedInput = self.version_correlator.prepare_correlated_input(
+            current_agent, version_sources, idx
         )
         logger.debug(
             "Correlated input for %s from %d version sources (pattern: %s)",
