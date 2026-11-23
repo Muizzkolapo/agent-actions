@@ -181,20 +181,6 @@ def test_a_project_block_key_the_schema_refuses_names_the_replacement():
     assert "did you mean 'chunk_overlap'?" in str(exc.value)
 
 
-def test_a_retired_spelling_beside_the_project_block_is_refused_too():
-    """`default_agent_config` allows extras, so the one place `overlap:` is
-    actually written in the wild is the one place it could still be swallowed."""
-    root = _project_tree(
-        {"api_key": "k", "model_name": "gpt-4", "chunk_size": 4000, "overlap": 500}
-    )
-    manager = _manager(root)
-
-    with pytest.raises(ConfigurationError) as exc:
-        manager.get_user_agents()
-
-    assert "did you mean 'chunk_overlap'?" in str(exc.value)
-
-
 def test_an_overlap_at_or_above_the_chunk_size_is_refused_at_load():
     """Merging by name lets a nearer chunk_size pair with an outer overlap, a
     combination the splitter rejects. Both values are known at load, so the run

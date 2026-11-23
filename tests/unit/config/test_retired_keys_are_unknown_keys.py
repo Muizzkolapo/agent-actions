@@ -40,6 +40,9 @@ RETIRED_KEYS = [
     "skip_if",
     "version_mode",
     "where_clause",
+    # Renamed spellings: `dependencies` and `chunk_overlap`.
+    "depends_on",
+    "overlap",
 ]
 
 REPO = Path(__file__).resolve().parents[3]

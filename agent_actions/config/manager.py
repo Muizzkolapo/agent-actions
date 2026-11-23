@@ -37,14 +37,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Legacy top-level `agents:` configs are validated against AgentConfig
-# (extra="allow", since the expander also uses it for post-expansion dicts)
-# rather than the strict ActionConfig, so a removed spelling would
-# otherwise pass through silently instead of being refused.
-_REMOVED_AGENT_SPELLINGS = {
-    "depends_on": "dependencies",
-}
-
 
 def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, Any]:
     """Return *project_defaults* with its chunk block spread into loose keys.
@@ -54,18 +46,6 @@ def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, 
     block they would outrank the workflow's own loose keys; as loose keys the
     shallow merge below puts the workflow above them, which is the real order.
     """
-    retired = set(ChunkConfig.retired_spellings()) & project_defaults.keys()
-    if retired:
-        raise ConfigurationError(
-            "default_agent_config: "
-            + "; ".join(
-                f"unknown chunk setting '{key}' — did you mean "
-                f"'{ChunkConfig.retired_spellings()[key]}'?"
-                for key in sorted(retired)
-            ),
-            context={"operation": "load_project_defaults"},
-        )
-
     block = project_defaults.get("chunk_config")
     if block is None:
         return project_defaults
@@ -160,7 +140,6 @@ def project_agent_config(project_config: dict[str, Any]) -> dict[str, Any]:
 
     defaults = project_config.get("default_agent_config", {})
     _refuse_or_raise(defaults, "default_agent_config", "merge_agent_configs")
-    _refuse_removed_spellings_or_raise(defaults, "default_agent_config", "merge_agent_configs")
     _refuse_project_split_field(defaults)
     return DefaultAgentConfig.model_validate(defaults).model_dump()
 
@@ -199,31 +178,6 @@ def _refuse_undeclared_or_raise(project_defaults: Any, operation: str) -> None:
         refuse_undeclared_default_agent_keys(project_defaults)
     except ValueError as e:
         raise ConfigurationError(str(e), context={"operation": operation}) from e
-
-
-def _refuse_removed_spellings_or_raise(
-    block: Any, surface: str, operation: str, agent_type: str | None = None
-) -> None:
-    """Raise the framework's own error for a field spelling that was renamed.
-
-    Called on the project block as well as each agent: refused per-agent but
-    accepted in `default_agent_config:`, a removed spelling is an escape hatch
-    rather than a gap — hoisting the key to silence the per-agent error applies
-    it to every agent instead, and the canonical `dependencies` stays empty, so
-    DAG ordering changes silently rather than merely losing a setting (1065).
-    """
-    if not isinstance(block, dict):
-        return
-    removed = _REMOVED_AGENT_SPELLINGS.keys() & block.keys()
-    if not removed:
-        return
-    context: dict[str, Any] = {
-        "replacements": {k: _REMOVED_AGENT_SPELLINGS[k] for k in sorted(removed)},
-        "operation": operation,
-    }
-    if agent_type is not None:
-        context["agent_type"] = agent_type
-    raise ConfigurationError(f"{surface} uses a removed field spelling", context=context)
 
 
 class ConfigManager:
@@ -505,12 +459,6 @@ class ConfigManager:
         default_agent_config = project_agent_config(self.default_config or {})
         for agent in user_agents:
             _refuse_or_raise(agent, "agent", "merge_agent_configs")
-            _refuse_removed_spellings_or_raise(
-                agent,
-                "Agent configuration",
-                "merge_agent_configs",
-                agent.get("agent_type") or "NOT_SET",
-            )
             try:
                 agent_model = AgentConfig.model_validate(agent)
             except ValidationError as e:
