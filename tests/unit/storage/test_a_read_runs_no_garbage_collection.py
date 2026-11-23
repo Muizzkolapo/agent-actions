@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import gc
 import json
+import sys
 import threading
 from collections.abc import Iterator
 from typing import Any
@@ -83,7 +84,9 @@ def collector_enabled() -> Iterator[None]:
     was = gc.isenabled()
     gc.enable()
     yield
-    if not was:
+    if was:
+        gc.enable()
+    else:
         gc.disable()
 
 
@@ -143,3 +146,42 @@ def test_a_pause_inside_a_pause_resumes_only_at_the_outer_end():
             assert not gc.isenabled()
         assert not gc.isenabled()
     assert gc.isenabled()
+
+
+@pytest.mark.parametrize("was_enabled", [True, False])
+def test_many_threads_pausing_at_once_leave_the_count_and_the_collector_as_they_were(
+    was_enabled,
+):
+    """Without the lock, a thread can begin a pause between another thread's stop of the
+    collector and its count, and note the collector as stopped: then no pause starts it.
+
+    Few threads that start and end their pauses often hit that gap the most; a pause in
+    a pause checks that the count still balances.
+    """
+    from agent_actions.utils import gc_pause
+
+    if not was_enabled:
+        gc.disable()
+
+    def pause_many(start: threading.Barrier) -> None:
+        start.wait(5)
+        for index in range(50_000):
+            with collector_paused():
+                if index % 8 == 0:
+                    with collector_paused():
+                        pass
+
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        for _ in range(3):
+            start = threading.Barrier(4)
+            threads = [threading.Thread(target=pause_many, args=(start,)) for _ in range(4)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(60)
+            assert gc_pause._pauses == 0
+            assert gc.isenabled() is was_enabled
+    finally:
+        sys.setswitchinterval(interval)
