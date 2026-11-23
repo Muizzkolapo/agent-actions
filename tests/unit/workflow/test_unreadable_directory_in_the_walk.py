@@ -45,7 +45,6 @@ class _Backend:
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-    monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
 
 
 @pytest.fixture

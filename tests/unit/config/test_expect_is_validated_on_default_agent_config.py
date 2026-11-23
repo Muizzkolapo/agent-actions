@@ -1,9 +1,7 @@
 """`expect:` in `default_agent_config:` goes through ExpectConfig like anywhere else.
 
 `DefaultAgentConfig` is extra="allow", so the block reached ExpectationService unchecked
-while the identical block is refused on an action. That matters more since #1066, whose
-refusal message sends a migrating author to this very block — landing them back in the
-silence the refusal exists to end.
+while the identical block is refused on an action.
 """
 
 import pytest
