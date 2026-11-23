@@ -509,10 +509,24 @@ class BatchProcessingService:
                             "registry_size": len(all_jobs),
                         },
                     )
+                    # A recovery round is sent from its parent's context map.
+                    owner = entry.parent_file_name or file_name
+                    owner_entry = manager.get_batch_job(owner)
+                    if owner_entry is not None and owner_entry.collected_at is not None:
+                        # Collected in this pass, so finalize wrote its records' answers and
+                        # no later pass reads it again: failing them now would overwrite those.
+                        logger.warning(
+                            "%s failed after %s was already collected: %s. Its records keep "
+                            "what finalize wrote",
+                            file_name,
+                            owner,
+                            e,
+                        )
+                        collected_before = True
+                        continue
                     if (
                         not self._fail_abandoned_records(
-                            # A recovery round is sent from its parent's context map.
-                            file_name=entry.parent_file_name or file_name,
+                            file_name=owner,
                             output_directory=output_directory,
                             action_name=effective_action_name,
                             error=e,

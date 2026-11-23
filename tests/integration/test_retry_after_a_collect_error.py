@@ -1,8 +1,8 @@
 """After a batch collect pass fails, `agac retry` points the way, and the way works.
 
-A collect pass can raise an ordinary error while it reads one file's results, for
-example when the provider drops the connection. The action reads `failed`, the file's
-records stay `deferred`, and its finished batch stays in the registry, uncollected.
+A collect pass can raise an error declared fatal to the action while it reads one file's
+results, for example when the store cannot write the file. The action reads `failed`, the
+file's records stay `deferred`, and its finished batch stays in the registry, uncollected.
 `retry` looked only for failed records, found none, and printed a green "Nothing to
 retry", so nothing told the user that running the workflow again is what collects it.
 """

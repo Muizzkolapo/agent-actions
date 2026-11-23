@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
@@ -33,7 +35,11 @@ from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
-from agent_actions.storage.backend import DISPOSITION_DEFERRED, DISPOSITION_FAILED
+from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
+    DISPOSITION_FAILED,
+    DISPOSITION_SUCCESS,
+)
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
 
@@ -68,8 +74,9 @@ class _Action:
         tmp_path: Path,
         collected: tuple[str, ...] = (),
         statuses: dict[str, str] | None = None,
+        pages: tuple[str, ...] = PAGES,
     ) -> None:
-        statuses = {name: (statuses or {}).get(name, BatchStatus.COMPLETED) for name in PAGES}
+        statuses = {name: (statuses or {}).get(name, BatchStatus.COMPLETED) for name in pages}
         self.out = str(tmp_path / "target" / ACTION)
         self.backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
         self.backend.initialize()
@@ -95,6 +102,7 @@ class _Action:
         self.finalized: list[str] = []
         self.broken: set[str] = set()
         self.read_through: set[str] = set()
+        self.reads: dict[str, Callable[[BatchRegistryManager], str | None]] = {}
         service = BatchProcessingService(
             client_resolver=resolver,
             context_manager=BatchContextManager(),
@@ -114,6 +122,8 @@ class _Action:
     def _finalize(self, *, file_name: str, manager: BatchRegistryManager, **kwargs) -> str | None:
         if file_name in self.read_through:
             return self._read(file_name=file_name, manager=manager, **kwargs)
+        if file_name in self.reads:
+            return self.reads[file_name](manager)
         if file_name in self.broken:
             raise ValueError(f"{file_name} cannot be read")
         self.finalized.append(file_name)
@@ -299,6 +309,74 @@ def test_a_file_whose_records_cannot_be_marked_failed_fails_the_action(tmp_path)
     with pytest.raises(ProcessingError, match="page2.json"):
         action.check()
     assert action.finalized == ["page1.json", "page3.json"]
+
+
+def _finalized_then_the_store_locks(action: _Action, collects: str, *record_ids: str):
+    """Finalize writes the records' answers and stamps *collects*, then the cleanup after
+    it cannot write the registry."""
+
+    def read(manager: BatchRegistryManager) -> str | None:
+        for record_id in record_ids:
+            action.backend.set_disposition(ACTION, record_id, DISPOSITION_SUCCESS)
+        manager.mark_collected(collects)
+        raise sqlite3.OperationalError("database is locked")
+
+    return read
+
+
+def test_a_recovery_round_failing_after_its_file_is_collected_keeps_the_answers(tmp_path):
+    """The file is collected, so no later pass reads it again: failed now, its records
+    would stay failed over the answers finalize wrote."""
+    action = _Action(tmp_path)
+    action.send("page3.json", "page3-a", "page3-b")
+    action.register(_retry_of("page3.json"))
+    action.reads["page3.json_retry_1"] = _finalized_then_the_store_locks(
+        action, "page3.json", "page3-a", "page3-b"
+    )
+
+    assert action.check() == (action.out, "completed")
+    assert action.dispositions() == {
+        "page3-a": DISPOSITION_SUCCESS,
+        "page3-b": DISPOSITION_SUCCESS,
+    }
+
+
+def test_a_file_failing_after_it_is_collected_keeps_the_answers(tmp_path):
+    action = _Action(tmp_path)
+    action.send("page2.json", "page2-a", "page2-b")
+    action.reads["page2.json"] = _finalized_then_the_store_locks(
+        action, "page2.json", "page2-a", "page2-b"
+    )
+
+    assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page3.json"]
+    assert action.dispositions() == {
+        "page2-a": DISPOSITION_SUCCESS,
+        "page2-b": DISPOSITION_SUCCESS,
+    }
+
+
+def test_the_only_file_failing_after_it_is_collected_does_not_fail_the_action(tmp_path):
+    """Its results are written: the pass counts it collected, not as one it failed."""
+    action = _Action(tmp_path, pages=("page1.json",))
+    action.send("page1.json", "page1-a")
+    action.reads["page1.json"] = _finalized_then_the_store_locks(action, "page1.json", "page1-a")
+
+    assert action.check() == (action.out, "completed")
+    assert action.dispositions() == {"page1-a": DISPOSITION_SUCCESS}
+
+
+def test_a_file_failing_after_it_is_collected_names_itself_and_its_error(tmp_path, caplog):
+    action = _Action(tmp_path)
+    action.send("page2.json", "page2-a")
+    action.reads["page2.json"] = _finalized_then_the_store_locks(action, "page2.json", "page2-a")
+
+    with caplog.at_level(logging.WARNING, logger="agent_actions.llm.batch.services.processing"):
+        action.check()
+
+    warning = next(r for r in caplog.records if "already collected" in r.getMessage())
+    assert "page2.json" in warning.getMessage()
+    assert "database is locked" in warning.getMessage()
 
 
 @pytest.mark.parametrize("ended", [BatchStatus.FAILED, BatchStatus.CANCELLED])

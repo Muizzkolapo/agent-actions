@@ -183,8 +183,20 @@ workflow again.
 The run can fail while it reads the results of one file. An example is an error from the SDK
 of the provider while the run downloads the results. This error is a failure of that file only.
 The run marks the records of that file as failed, with the error as the reason. Then the run
-reads the other files. The action completes with failures, and `agac retry` sends the records
-of that file again.
+reads the other files.
+
+- If the run reads another file of the action, or an earlier run read one, the action completes
+  with failures (exit code 3). `agac retry` sends the records of that file again.
+- If no file of the action is read, because the action has one file or because every file
+  fails, the action fails with the error "No batch results were successfully processed" (exit
+  code 1). The files stay in the batch registry, not collected. Run the workflow again without
+  `--fresh` to read them. The first run after the failure can report the batch as submitted. Run
+  again until the run reads the results.
+- If the run waits for another file (see the section above), the action pauses.
+
+If the run fails after it wrote the results of the file, for example while it removes the
+recovery batches of that file, the records keep the answers that the run wrote. The run logs a
+warning that names the file and the error.
 
 Some errors stop the run at the file, because each file fails in the same way, or because the
 run cannot keep what it read:
@@ -199,7 +211,10 @@ The action fails, and the next run reads that file again.
 
 To mark the records of a file as failed, the run reads what it sent in the batch of that file.
 If the run cannot read it, the records stay `deferred`. Thus the run reads the other files, and
-then fails the action. The error names each of these files. The next run reads them again.
+then fails the action with an error that names each of these files. If another file halts the
+action in the same pass (for example under `on_exhausted: raise`), the action fails with that
+halt instead, and these files are named only in a warning in the log. In both cases the files
+stay in the batch registry, not collected, and the next run reads them again.
 
 ### When the provider omits a record {/* #when-the-provider-leaves-a-record-out */}
 
