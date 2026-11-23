@@ -159,6 +159,29 @@ in the same way. The run continues to pause for as long as the provider cannot b
 asked. To abandon those batches, use `agac run --fresh`. This command sends each record of the
 workflow again.
 
+### When the run cannot read the results of one file
+
+The run can fail while it reads the results of one file. An example is an error from the SDK
+of the provider while the run downloads the results. This error is a failure of that file only.
+The run marks the records of that file as failed, with the error as the reason. Then the run
+reads the other files. The action completes with failures, and `agac retry` sends the records
+of that file again.
+
+Some errors stop the run at the file, because each file fails in the same way, or because the
+run cannot keep what it read:
+
+- An `expect:` block that the run cannot resolve. An example is a `suite:` that the run cannot
+  load.
+- A store that fails to write the file.
+- A batch that an earlier version deferred, in a recovery phase that this version does not run.
+  The error tells you to run the action again with `--fresh`.
+
+The action fails, and the next run reads that file again.
+
+To mark the records of a file as failed, the run reads what it sent in the batch of that file.
+If the run cannot read it, the records stay `deferred`. Thus the run reads the other files, and
+then fails the action. The error names each of these files. The next run reads them again.
+
 ### When the provider omits a record {/* #when-the-provider-leaves-a-record-out */}
 
 A batch can come back finished, with a record missing from its results. If retry is enabled
