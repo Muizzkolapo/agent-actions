@@ -66,16 +66,15 @@ def classify_error(error: Exception) -> str:
 
     if isinstance(error, RateLimitError):
         return "rate_limit"
-    elif isinstance(error, NetworkError):
+    if isinstance(error, NetworkError):
         if "timeout" in error_str:
             return "timeout"
         return "network_error"
-    elif isinstance(error, ResponseTruncatedError):
+    if isinstance(error, ResponseTruncatedError):
         return "truncated"
-    elif isinstance(error, VendorAPIError):
+    if isinstance(error, VendorAPIError):
         return "api_error"
-    else:
-        return "unknown"
+    return "unknown"
 
 
 def is_retriable_error(error: Exception) -> bool:

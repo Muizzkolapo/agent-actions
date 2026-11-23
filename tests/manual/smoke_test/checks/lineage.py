@@ -86,7 +86,7 @@ class LineageCheck(Check):
     10. Lineage depth >= pipeline depth from config
     """
 
-    def verify(self, ctx: RunContext) -> list[CheckResult]:
+    def verify(self, ctx: RunContext) -> list[CheckResult]:  # noqa: C901
         results: list[CheckResult] = []
 
         if ctx.exit_code != 0:

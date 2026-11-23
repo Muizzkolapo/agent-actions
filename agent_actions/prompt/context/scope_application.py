@@ -164,7 +164,7 @@ __all__ = [
 ]
 
 
-def apply_context_scope(
+def apply_context_scope(  # noqa: C901
     field_context: dict,
     context_scope: dict,
     static_data: dict | None = None,
@@ -675,10 +675,11 @@ def plan_flat_observed_keys(
     ):
         qualified = f"{ns}.{field}"
         if key != qualified:
-            if key in declared_reserved:
-                key = qualified
-                announced.add(key)
-            elif from_wildcard and named_field_owners.get(field, set()) - {ns}:
+            if (
+                key in declared_reserved
+                or from_wildcard
+                and named_field_owners.get(field, set()) - {ns}
+            ):
                 key = qualified
                 announced.add(key)
             elif key in reserved_names:

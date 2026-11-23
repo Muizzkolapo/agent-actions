@@ -67,7 +67,7 @@ class PromptUtils:
                     raise
                 except Exception as e:
                     raise AgentActionsError(
-                        f"An unexpected error occurred in function '{function_name}': {str(e)}"
+                        f"An unexpected error occurred in function '{function_name}': {e!s}"
                     ) from e
 
         matches = re.finditer(pattern, text)
@@ -95,7 +95,7 @@ class PromptUtils:
                 raise
             except Exception as e:
                 raise AgentActionsError(
-                    f"An unexpected error occurred in function '{function_name}': {str(e)}"
+                    f"An unexpected error occurred in function '{function_name}': {e!s}"
                 ) from e
         return text
 

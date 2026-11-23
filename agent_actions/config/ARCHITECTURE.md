@@ -278,7 +278,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 | File | Role |
 |------|------|
 | `paths.py` | `PathManager` — project root discovery with CWD-aware cache, standard path templates, boundary-guarded `clean_path()`, permission validation |
-| `path_config.py` | `find_project_root_dir()` (walk-up marker search), `load_project_config()` (YAML loader with search order), `resolve_project_root()`, `get_tool_dirs()`, `get_schema_path()`, `get_seed_data_path()`, `get_seed_data_paths()`, `seed_search_folders()`, `resolve_seed_file()` |
+| `path_config.py` | `find_project_root_dir()` (walk-up marker search), `load_project_config()` (YAML loader with search order), `resolve_project_root()`, `get_tool_dirs()`, `get_schema_path()`, `get_seed_data_path()`, `get_seed_data_paths()`, `seed_search_folders()`, `record_seed_search_folders()`, `resolve_seed_file()` |
 | `project_paths.py` | `ProjectPathsFactory.create_project_paths()` — resolves all standard directories, validates required dirs, auto-creates optional dirs |
 
 ### Config Assembly
@@ -290,7 +290,7 @@ The `.env` file path is resolved by `ConfigManager._resolve_dotenv()` relative t
 ### Interfaces
 | File | Role |
 |------|------|
-| `interfaces.py` | `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader` interface ABCs |
+| `interfaces.py` | `ILoader`, `IDataLoader`, `ISourceDataLoader` interface ABCs |
 
 ### Project Lifecycle
 | File | Role |
@@ -442,7 +442,7 @@ Both `ActionConfig` and `DefaultsConfig` have validators that accept `retry: fal
 
 ### 20. seed_data_path rejects path traversal; seed_data_paths refuses a bad folder
 
-`seed_search_folders()` lists every folder a `$file:` reference is looked for in: the workflow's own folder, the project folder, then each folder of `seed_data_paths`. `get_seed_data_paths()` resolves each listed entry against the project root with symlinks followed and raises `ConfigurationError` for an absolute path, a path outside the project, or a folder that does not exist; nothing is skipped in silence. `resolve_seed_file()` picks the first folder that holds the file, lets a workflow file win over a shared one, and raises `SeedFileError` when no folder has it or two shared folders do. The loader, preflight, the editor and `inspect context` all call these two.
+`seed_search_folders()` lists every folder a `$file:` reference is looked for in: the workflow's own folder, the project folder, then each folder of `seed_data_paths`. `get_seed_data_paths()` resolves each listed entry against the project root with symlinks followed and raises `ConfigurationError` for an absolute path, a path outside the project, or a folder that does not exist; nothing is skipped in silence. `resolve_seed_file()` picks the first folder that holds the file, lets a workflow file win over a shared one, and raises `SeedFileError` when no folder has it or two shared folders do. The loader, preflight, the editor and `inspect context` all call these two. A run's records search through `record_seed_search_folders()`, the same list without re-reading the project file per record: the project root and the folders it names are kept per workflow file until a stat of the project file (`st_mtime_ns`, `st_ctime_ns`, `st_size`, `st_ino`) differs, while each folder's presence is checked on every call. A project file changed in the last two seconds is never kept (a same-size edit in one timestamp tick keeps its stat), nor is a root found without a marker file. Preflight, the editor and `inspect` keep calling `seed_search_folders()`, which reads everything afresh.
 
 
 `get_seed_data_path()` in `path_config.py` rejects any `seed_data_path` containing `..`, `/`, or `\\`. These are interpreted as path traversal attempts and fall back to the default `"seed_data"` with a warning. The `seed_data_path` must be a simple directory name, not a path.

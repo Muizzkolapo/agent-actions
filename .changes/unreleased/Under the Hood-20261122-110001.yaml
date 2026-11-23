@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  Split `SQLiteBackend` into per-concern mixins under `storage/backends/sqlite/` (payload codec,
+  metadata, source data, target data, dispositions, checkpoints, prompt traces, maintenance),
+  composed back into the class at its existing import path. No behavior change.
+time: 2026-11-22T11:00:01Z

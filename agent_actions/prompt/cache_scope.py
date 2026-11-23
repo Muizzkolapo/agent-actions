@@ -247,7 +247,7 @@ def _chains(ast: nodes.Template) -> Iterator[tuple[nodes.Name, str, str | None]]
 
 @lru_cache(maxsize=256)
 def _parse(template: str) -> nodes.Template:
-    return Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))
+    return Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))  # nosec B701  # prompt text, not HTML
 
 
 def _unbound_names(template: str) -> set[str]:
@@ -323,9 +323,7 @@ def _reads(
         chained.add(id(root))
         if not counted(root):
             continue
-        if root.name in record_roots:
-            reads.add(path)
-        elif (
+        if root.name in record_roots or (
             root.name == "seed"
             and seed_varies
             and (key not in seed_keys or key in per_record_seed_keys)

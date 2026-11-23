@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  A run no longer copies every earlier action's whole output before each action for a skip
+  check that has no strategy to feed, and the event handlers rank levels from a map built once
+  instead of rebuilding it per event. On the review_analyzer example scaled to 576 records, a
+  full `agac run --fresh` on the offline mock provider went from a median of 54.5s to 51.4s.
+time: 2026-11-22T17:00:42.000000+00:00

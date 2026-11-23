@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  Three tests that relied on `chmod` to provoke an `OSError` now pass when the suite runs as
+  root, which `chmod` does not stop. One blocks a `mkdir` with a regular file in its path, and
+  two patch `os.stat` to raise `EACCES` for one file.
+time: 2026-11-22T10:00:03Z

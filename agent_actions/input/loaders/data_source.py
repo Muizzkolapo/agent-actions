@@ -288,7 +288,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
             for key, value in config.headers.items():
                 req.add_header(key, value)
 
-        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
+        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:  # nosec B310  # _resolve_api rejects non-http(s) schemes
             data = resp.read(_MAX_RESPONSE_BYTES + 1)
             if len(data) > _MAX_RESPONSE_BYTES:
                 raise ConfigurationError(

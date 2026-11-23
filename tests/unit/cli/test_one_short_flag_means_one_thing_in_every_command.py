@@ -22,7 +22,10 @@ WORKFLOW_PARAMS = {"agent", "agent_opt", "agent_name", "workflow"}
 
 
 def _commands(group: click.Group, path: tuple[str, ...] = ()):
-    for name, command in sorted(group.commands.items()):
+    ctx = click.Context(group)
+    for name in group.list_commands(ctx):
+        command = group.get_command(ctx, name)
+        assert command is not None
         if isinstance(command, click.Group):
             yield from _commands(command, (*path, name))
         yield " ".join((*path, name)), command

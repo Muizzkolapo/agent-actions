@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
+from agent_actions.logging.core.events import LEVEL_SEVERITY
+
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
 
@@ -52,7 +54,8 @@ class JSONFileHandler:
         self._shedding = False
         self.include_all_fields = include_all_fields
 
-        self._buffer: list[dict[str, Any]] = []
+        self._buffer: list[str] = []
+        self._buffered_chars = 0
         self._lock = threading.Lock()
         self._file: TextIO | None = None
         self._current_size = 0
@@ -64,10 +67,7 @@ class JSONFileHandler:
 
     def accepts(self, event: BaseEvent) -> bool:
         """Check if this event meets the minimum level threshold."""
-        from agent_actions.logging.core.events import EventLevel
-
-        level_order = EventLevel.ordered()
-        return level_order.index(event.level) >= level_order.index(self.min_level)
+        return LEVEL_SEVERITY[event.level] >= LEVEL_SEVERITY[self.min_level]
 
     def handle(self, event: BaseEvent) -> None:
         """Buffer the event for writing to the JSON log file."""
@@ -75,10 +75,10 @@ class JSONFileHandler:
 
         if self.max_debug_bytes and event.level is EventLevel.DEBUG:
             with self._lock:
-                if self._current_size + self._buffered_bytes() >= self.max_debug_bytes:
+                if self._current_size + self._buffered_chars >= self.max_debug_bytes:
                     if not self._shedding:
                         self._shedding = True
-                        self._buffer.append(self._cap_event(event).to_dict())
+                        self._append(self._cap_event(event).to_dict())
                     return
 
         if self.include_all_fields:
@@ -94,7 +94,7 @@ class JSONFileHandler:
             }
 
         with self._lock:
-            self._buffer.append(event_dict)
+            self._append(event_dict)
 
             if len(self._buffer) >= self.buffer_size:
                 self._flush_buffer()
@@ -125,18 +125,20 @@ class JSONFileHandler:
 
         written = 0
         try:
-            for event_dict in self._buffer:
-                line = json.dumps(event_dict, default=str) + "\n"
+            for line in self._buffer:
                 self._file.write(line)
                 self._current_size += len(line.encode("utf-8"))
+                self._buffered_chars -= len(line)
                 written += 1
         finally:
             if written > 0:
                 del self._buffer[:written]
 
-    def _buffered_bytes(self) -> int:
-        """Approximate size of buffered rows; the buffer holds at most ``buffer_size`` events."""
-        return sum(len(json.dumps(row, default=str)) + 1 for row in self._buffer)
+    def _append(self, event_dict: dict[str, Any]) -> None:
+        """Serialize one row into the buffer, keeping its running size (must hold lock)."""
+        line = json.dumps(event_dict, default=str) + "\n"
+        self._buffer.append(line)
+        self._buffered_chars += len(line)
 
     def _cap_event(self, event: BaseEvent) -> BaseEvent:
         from agent_actions.logging.events.io_events import LogFileCapReachedEvent

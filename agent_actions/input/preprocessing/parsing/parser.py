@@ -477,7 +477,7 @@ class WhereClauseParser:
             logger.debug("Unexpected error parsing WHERE clause: %s", e, exc_info=True)
             return ParseResult(
                 success=False,
-                error=ParseError(f"Unexpected error: {str(e)}", 1, 1, "UnexpectedError"),
+                error=ParseError(f"Unexpected error: {e!s}", 1, 1, "UnexpectedError"),
             )
 
     def clear_cache(self):

@@ -34,7 +34,7 @@ def create_dynamic_agent(
         agent_config: Agent configuration with model/prompt settings.
         context_data_str: Context data for LLM (may be transformed with
             context_scope.drop applied).
-        formatted_prompt: Pre-formatted prompt (optional, from DataGenerator).
+        formatted_prompt: Pre-formatted prompt (optional, from PromptPreparationService).
         tools_path: Path to tool functions (optional).
         tool_args: Tool arguments (optional).
         source_content: Source content for tool handler (optional).
@@ -54,7 +54,7 @@ def create_dynamic_agent(
             "formatted_prompt is required. "
             "Please use PromptPreparationService.prepare_prompt_with_context() "
             "to prepare the prompt before calling create_dynamic_agent(). "
-            "See agent_actions/prompt_generation/data_generator.py for an example."
+            "See TaskPreparer in agent_actions/processing/task_preparer.py for an example."
         )
 
     # Dispatch already handled by PromptPreparationService

@@ -384,7 +384,14 @@ schema is never valid output.
 ### Static analyzer (Phase 2)
 | File | Role |
 |------|------|
-| `static_analyzer/workflow_static_analyzer.py` | Main orchestrator, all Phase 2 checks, wildcard expansion, guard analysis |
+| `static_analyzer/workflow_static_analyzer.py` | Main orchestrator: `analyze()` runs the Phase 2 checks in a fixed order and builds the graph |
+| `static_analyzer/scope_checks.py` | Wildcard expansion, context_scope required, template and seed coverage checks |
+| `static_analyzer/file_mode_checks.py` | FILE-granularity checks: first-stage FILE actions, flat observed-key collisions |
+| `static_analyzer/schema_checks.py` | Named schemas load, schema structures, json_mode/schema mismatch |
+| `static_analyzer/guard_checks.py` | Guard analysis: literal type mismatch, skip-guard observes, filter fan-in hazard |
+| `static_analyzer/lineage_checks.py` | Drop directives and observe lineage through passthrough chains |
+| `static_analyzer/cache_checks.py` | Prompt caching on record data, `{% cache_point %}` checks |
+| `static_analyzer/graph_reporting.py` | Graph views: action schemas, data flow summary |
 | `static_analyzer/data_flow_graph.py` | DataFlowGraph, DataFlowNode, OutputSchema, InputSchema |
 | `static_analyzer/type_checker.py` | StaticTypeChecker: field reference validation against schemas |
 | `static_analyzer/reference_extractor.py` | Extracts field references from prompts, guards, context_scope |

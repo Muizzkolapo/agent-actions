@@ -56,7 +56,7 @@ class PromptFormatter:
             return raw_prompt
         except Exception as e:
             raise PromptValidationError(
-                f"Failed to get raw prompt: {str(e)}",
+                f"Failed to get raw prompt: {e!s}",
                 context={
                     "field": "raw_prompt",
                     "agent_config": str(_redact_sensitive_data(agent_config)),

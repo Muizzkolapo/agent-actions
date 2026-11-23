@@ -36,31 +36,31 @@ SCHEMA_DICT = {"properties": {"sentiment": {"type": "string"}}, "type": "object"
 
 def _original_anthropic(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Anthropic client.py _call_api line 143."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
+    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
     return dedent(prompt)
 
 
 def _original_openai_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce OpenAI client.py call_json line 80."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            RULES: ALWAYS READ INPUT AS STRING\n        "
+    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            RULES: ALWAYS READ INPUT AS STRING\n        "
     return dedent(prompt)
 
 
 def _original_openai_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce OpenAI client.py call_non_json line 201."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
+    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
     return dedent(prompt)
 
 
 def _original_gemini_json(prompt_config: str, context_data_str: str, schema) -> str:
     """Reproduce Gemini client.py call_json line 102."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
+    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
     return dedent(prompt)
 
 
 def _original_gemini_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Gemini client.py call_non_json line 189."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
+    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
     return dedent(prompt)
 
 
@@ -72,7 +72,7 @@ def _original_groq_json(prompt_config: str, context_data_str: str) -> str:
 
 def _original_groq_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Groq client.py call_non_json line 170."""
-    prompt = f"\n                Instructions: {prompt_config}\n                Input Text: {str(context_data_str)}\n                \n                Please provide a direct response without any JSON formatting.\n                Begin your response here:\n            "
+    prompt = f"\n                Instructions: {prompt_config}\n                Input Text: {context_data_str!s}\n                \n                Please provide a direct response without any JSON formatting.\n                Begin your response here:\n            "
     return dedent(prompt).strip()
 
 
@@ -86,7 +86,7 @@ def _original_cohere_json(
 
 def _original_cohere_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Cohere client.py call_non_json line 214."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
+    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
     return dedent(prompt)
 
 

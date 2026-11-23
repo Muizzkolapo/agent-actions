@@ -288,8 +288,10 @@ def answered_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]
 
 
 # What a run mints for a row whatever it holds: its identifiers, and the history's stamps.
+# `lineage_sources` is the node ids of the rows a row was made from, minted again for a
+# row an action keeps; like `lineage`, nothing reads it to compute a row.
 _MINTED_PER_RUN: frozenset[str] = frozenset(
-    {"target_id", "node_id", "lineage", "_state_history", "_delta_mode"}
+    {"target_id", "node_id", "lineage", "lineage_sources", "_state_history", "_delta_mode"}
 )
 
 
@@ -346,6 +348,30 @@ def rows_written_again_unchanged(
 
     rows = [was if was is not None else row for was, row in zip(out, produced, strict=True)]
     return rows, frozenset(unchanged)
+
+
+def guard_skips_as_stored(
+    produced: list[dict[str, Any]], stored: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """*produced*, in order, with each guard skip holding what its stored row holds put back.
+
+    A skip answers nothing, so each run puts the record to the guard again and mints the
+    row anew; put back, what is below it reads the row it was built on.
+    """
+    stored_per_guid = Counter(row.get("source_guid") or "" for row in stored)
+    was_stored = {
+        guid: row
+        for row in stored
+        if (guid := row.get("source_guid")) and stored_per_guid[guid] == 1
+    }
+    produced_per_guid = Counter(row.get("source_guid") or "" for row in produced)
+    rows: list[dict[str, Any]] = []
+    for row in produced:
+        guid = row.get("source_guid") or ""
+        was = was_stored.get(guid) if produced_per_guid[guid] == 1 else None
+        skipped = row.get("_state") == RecordState.GUARD_SKIPPED.value
+        rows.append(was if skipped and was is not None and _holds_the_same(row, was) else row)
+    return rows
 
 
 def _holds_the_same(row: dict[str, Any], other: dict[str, Any]) -> bool:

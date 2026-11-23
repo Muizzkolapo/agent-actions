@@ -167,9 +167,20 @@ def main() -> None:
     socket_path, agac = sys.argv[1], sys.argv[2]
     # A script's sys.path[0] is the folder of its resolved path.
     sys.path[0] = os.path.dirname(os.path.realpath(agac))
+    # The package sets defaults as it imports. Import it with an empty environment to learn
+    # them: this process may have inherited them from a parent that imported it already.
+    inherited = dict(os.environ)
+    os.environ.clear()
+    importlib.import_module("agent_actions")
+    package_defaults = dict(os.environ)
+    os.environ.clear()
+    os.environ.update(inherited)
     before_import = dict(os.environ)
-    importlib.import_module("agent_actions.cli.main")
-    set_at_import = {
+    cli_main = importlib.import_module("agent_actions.cli.main")
+    # The CLI imports a command on first use; warm them all, so no child pays for it.
+    for import_path, _summary in cli_main._COMMANDS.values():
+        importlib.import_module(import_path.split(":")[0])
+    set_at_import = package_defaults | {
         key: value for key, value in os.environ.items() if before_import.get(key) != value
     }
     # The child's normal interpreter exit would otherwise walk every imported object

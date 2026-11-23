@@ -91,10 +91,7 @@ def _collect_field_nodes(node: ASTNode) -> list[str]:
         elif isinstance(operand, FunctionNode):
             for argument in operand.arguments:
                 walk(argument)
-        elif isinstance(operand, ComparisonNode):
-            walk(operand.left)
-            walk(operand.right)
-        elif isinstance(operand, LogicalNode):
+        elif isinstance(operand, ComparisonNode) or isinstance(operand, LogicalNode):
             walk(operand.left)
             walk(operand.right)
 
@@ -140,10 +137,7 @@ def _check_function_calls(ast_root: ASTNode, clause: str, action_name: str) -> l
                     )
             for argument in node.arguments:
                 walk(argument)
-        elif isinstance(node, ComparisonNode):
-            walk(node.left)
-            walk(node.right)
-        elif isinstance(node, LogicalNode):
+        elif isinstance(node, ComparisonNode) or isinstance(node, LogicalNode):
             walk(node.left)
             walk(node.right)
 

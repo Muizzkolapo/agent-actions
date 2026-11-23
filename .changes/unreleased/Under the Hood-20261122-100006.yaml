@@ -1,0 +1,5 @@
+kind: Under the Hood
+body: >-
+  `agac example install` and `agac init example` now share one install helper, and `agac run` and
+  `agac retry` start their run tracking and log files through one `start_tracked_run`. No behavior change.
+time: 2026-11-22T10:00:06Z

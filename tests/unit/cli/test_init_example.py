@@ -330,3 +330,77 @@ class TestExampleCommand:
         with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
             result = runner.invoke(example, ["install", "nonexistent", "-o", str(tmp_path)])
         assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# project_name injection and next-steps output (shared by both commands)
+# ---------------------------------------------------------------------------
+
+
+_INSTALL_COMMANDS = [
+    pytest.param(example, ["install"], "agent_actions.cli.example", id="example-install"),
+    pytest.param(init, ["example"], "agent_actions.cli.init", id="init-example"),
+]
+
+
+class TestExampleProjectSetup:
+    @pytest.mark.parametrize(("group", "prefix", "logger_name"), _INSTALL_COMMANDS)
+    def test_injects_project_name_and_keeps_keys(
+        self, group: click.Group, prefix: list[str], logger_name: str, tmp_path: Path
+    ) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(
+                group, [*prefix, "contract_reviewer", "my_proj", "-o", str(tmp_path)]
+            )
+        assert result.exit_code == 0, result.output
+        text = (tmp_path / "my_proj" / "agent_actions.yml").read_text(encoding="utf-8")
+        assert text == "name: contract_reviewer\nproject_name: my_proj\n"
+
+    @pytest.mark.parametrize(("group", "prefix", "logger_name"), _INSTALL_COMMANDS)
+    def test_prints_next_steps(
+        self, group: click.Group, prefix: list[str], logger_name: str, tmp_path: Path
+    ) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(
+                group, [*prefix, "contract_reviewer", "my_proj", "-o", str(tmp_path)]
+            )
+        assert result.exit_code == 0, result.output
+        dest = tmp_path / "my_proj"
+        assert result.output == (
+            "Downloading example 'contract_reviewer' from GitHub...\n"
+            f"Created project from example 'contract_reviewer': {dest}\n"
+            "\nNext steps:\n"
+            "  cd my_proj\n"
+            "  agac run\n"
+        )
+
+    @pytest.mark.parametrize(("group", "prefix", "logger_name"), _INSTALL_COMMANDS)
+    def test_unparseable_config_is_left_alone_with_a_warning(
+        self,
+        group: click.Group,
+        prefix: list[str],
+        logger_name: str,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        bad_yaml = "name: [unclosed\n"
+        tarball = _make_tarball({"contract_reviewer": {"agent_actions.yml": bad_yaml}})
+
+        def mock_req(url: str) -> bytes:
+            if "/tarball/" in url:
+                return tarball
+            return _mock_github_request(url)
+
+        runner = CliRunner()
+        with (
+            caplog.at_level("WARNING"),
+            patch("agent_actions.cli.init._github_request", side_effect=mock_req),
+        ):
+            result = runner.invoke(group, [*prefix, "contract_reviewer", "-o", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        config = tmp_path / "contract_reviewer" / "agent_actions.yml"
+        assert config.read_text(encoding="utf-8") == bad_yaml
+        warnings = [r for r in caplog.records if "Could not inject project_name" in r.message]
+        assert [r.name for r in warnings] == [logger_name]

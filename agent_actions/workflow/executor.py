@@ -1889,22 +1889,6 @@ class ActionExecutor:
                 ", ".join(held),
             )
 
-    def _skipped_by_a_strategy(self, action_config: ActionConfigDict, action_idx: int) -> bool:
-        """Whether a skip strategy skips the action.
-
-        The earlier actions' outputs are read only for a registered strategy, and are not
-        kept while the action runs: read whole, they hold every record of every earlier
-        action, on the event loop's thread.
-        """
-        evaluator = self.deps.skip_evaluator
-        if not evaluator.has_strategies():
-            return False
-        return bool(
-            evaluator.should_skip_action(
-                action_config, self.deps.output_manager.get_previous_outputs(action_idx)
-            )
-        )
-
     def _check_upstream_health(
         self, action_name: str, action_config: ActionConfigDict
     ) -> str | None:
@@ -2138,14 +2122,17 @@ class ActionExecutor:
             return self._handle_halted_action(action_name, start_time)
 
         # Circuit breaker: skip if any upstream dependency has failed.
-        # Must run BEFORE a skip strategy reads the outputs above, to avoid reading corrupt data.
+        # Must run before any upstream output is read, to avoid reading corrupt data.
         failed_dep = self._check_upstream_health(action_name, action_config)
         if failed_dep is not None:
             return self._handle_dependency_skip(
                 action_name, action_idx, action_config, start_time, failed_dep
             )
 
-        if self._skipped_by_a_strategy(action_config, action_idx):
+        skip = self.deps.skip_evaluator
+        if skip.needs_previous_outputs() and skip.should_skip_action(
+            action_config, self.deps.output_manager.get_previous_outputs(action_idx)
+        ):
             return self._handle_action_skip(action_name, action_idx, action_config, start_time)
 
         return self._execute_action_run(
@@ -2211,7 +2198,10 @@ class ActionExecutor:
                 action_name, action_idx, action_config, start_time, failed_dep
             )
 
-        if self._skipped_by_a_strategy(action_config, action_idx):
+        skip = self.deps.skip_evaluator
+        if skip.needs_previous_outputs() and skip.should_skip_action(
+            action_config, self.deps.output_manager.get_previous_outputs(action_idx)
+        ):
             return self._handle_action_skip(action_name, action_idx, action_config, start_time)
 
         return await self._execute_action_run_async(

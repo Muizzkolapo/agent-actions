@@ -6,10 +6,15 @@ import sys
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from agent_actions.logging.core.events import BaseEvent, EventLevel
-
 from agent_actions.logging.core._compat import RICH_AVAILABLE, Console
+from agent_actions.logging.core.events import LEVEL_SEVERITY, EventLevel
+
+if TYPE_CHECKING:
+    from agent_actions.logging.core.events import BaseEvent
+
+# WARN and ERROR always shown regardless of category — errors from
+# any module (llm, processing, prompt, etc.) must be visible.
+_ALWAYS_SHOWN = frozenset({EventLevel.WARN, EventLevel.ERROR})
 
 
 class ConsoleEventHandler:
@@ -25,8 +30,6 @@ class ConsoleEventHandler:
         show_diagnostics: bool = False,
     ) -> None:
         """Initialize the console handler."""
-        from agent_actions.logging.core.events import EventLevel
-
         self.min_level = min_level or EventLevel.INFO
         self.show_timestamp = show_timestamp
         self.formatter = formatter
@@ -42,19 +45,14 @@ class ConsoleEventHandler:
 
     def accepts(self, event: BaseEvent) -> bool:
         """Check if this event passes level and category filters."""
-        from agent_actions.logging.core.events import EventLevel
-
-        level_order = EventLevel.ordered()
-        if level_order.index(event.level) < level_order.index(self.min_level):
+        if LEVEL_SEVERITY[event.level] < LEVEL_SEVERITY[self.min_level]:
             return False
 
         # Framework internals: the log files keep these, the terminal does not.
         if event.diagnostic and not self.show_diagnostics:
             return False
 
-        # WARN and ERROR always shown regardless of category — errors from
-        # any module (llm, processing, prompt, etc.) must be visible.
-        if event.level in (EventLevel.WARN, EventLevel.ERROR):
+        if event.level in _ALWAYS_SHOWN:
             return True
 
         if self.categories is not None and event.category not in self.categories:
@@ -94,8 +92,6 @@ class ConsoleEventHandler:
 
     def _default_format(self, event: BaseEvent) -> str:
         """Default event formatting."""
-        from agent_actions.logging.core.events import EventLevel
-
         parts = []
 
         if self.show_timestamp:

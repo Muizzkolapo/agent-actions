@@ -236,7 +236,7 @@ class PromptLoader:
 def _refuse_unexpanded_load_prompt(prompt_name: str, text: str) -> None:
     outside_raw = _RAW_OR_LOAD_TAG.sub(lambda m: "" if m.group("raw") else m.group(0), text)
     try:
-        environment = jinja2.Environment(extensions=PROMPT_EXTENSIONS)
+        environment = jinja2.Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
         names = meta.find_undeclared_variables(environment.parse(outside_raw))
     except jinja2.TemplateSyntaxError:
         # The per-record render reports the prompt's syntax error.

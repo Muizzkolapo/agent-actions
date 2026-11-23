@@ -2,7 +2,7 @@
 
 import collections
 import logging
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.errors import (
@@ -468,6 +468,438 @@ def write_node_level_disposition(
     )
 
 
+@dataclass
+class _Collection:
+    """What one walk over the results gathers before it is written and reported."""
+
+    action_name: str
+    storage_backend: Optional["StorageBackend"]
+    output: list[dict[str, Any]] = field(default_factory=list)
+    stats: collections.Counter[str] = field(default_factory=collections.Counter)
+    causes: list[str] = field(default_factory=list)
+    pending: list[DispositionRow] = field(default_factory=list)
+    echoed: set[str] = field(default_factory=set)
+    guard_skipped: int = 0
+    # Records whose rows shipped a failing verdict, and failing rows with no record id.
+    failed_guids: set[str] = field(default_factory=set)
+    unidentified_failed: int = 0
+    carried_rows: int = 0
+    routed: list[dict[str, Any]] = field(default_factory=list)
+
+    def collected(self, idx: int, status: str) -> None:
+        fire_event(
+            ResultCollectedEvent(
+                action_name=self.action_name,
+                result_index=idx,
+                status=status,
+            )
+        )
+
+    def record(
+        self,
+        guid: str,
+        disposition: str,
+        reason: str | None = None,
+        input_snapshot: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        self.pending.append(
+            (self.action_name, guid, disposition, reason, None, input_snapshot, detail)
+        )
+
+    def record_each(
+        self,
+        data: list[dict[str, Any]],
+        disposition: str,
+        reason: str | None = None,
+        input_snapshot: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        _per_item_dispositions(
+            self.pending,
+            self.action_name,
+            data,
+            disposition,
+            reason=reason,
+            input_snapshot=input_snapshot,
+            detail=detail,
+        )
+
+
+def _collect_carried(acc: _Collection, data: list[dict[str, Any]], status_key: str) -> None:
+    """Count a row the gate carried from the stored file, not one this pass produced."""
+    if data:
+        acc.output.extend(data)
+        acc.carried_rows += len(data)
+    acc.stats[status_key] -= 1
+    acc.stats["carry_forward"] += 1
+    if _holds_answer(data):
+        acc.stats["carried_success"] += 1
+
+
+def _fail_parse_errors(
+    acc: _Collection, idx: int, result: ProcessingResult, data: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Fail the rows holding a ``_parse_error``, returning the rows that still succeed.
+
+    The LLM provider returns {"_parse_error": ...} on JSON parse failure, which
+    flows through as SUCCESS data. The repair loop has already had its chance (it
+    runs during invocation, before result collection).
+    """
+    action_name = acc.action_name
+    # A bundled FILE result holds one row per record, so only the
+    # rows that hold the error fail; a keyed result is one record.
+    if result.source_guid is None:
+        broken = [d for d in data if _data_has_parse_error([d])]
+        data = [d for d in data if not _data_has_parse_error([d])]
+    else:
+        broken, data = data, []
+    for d in broken:
+        _stamp(d, RecordState.FAILED, action_name, PARSE_ERROR)
+    acc.stats["failed"] += len(broken) if result.source_guid is None else 1
+    logger.warning(
+        "[%s] SUCCESS result source_guid=%s contains _parse_error in %d row(s) "
+        "— dispositioned as FAILED",
+        action_name,
+        result.source_guid,
+        len(broken),
+    )
+    acc.collected(idx, "failed")
+    if acc.storage_backend and result.source_guid:
+        acc.record(result.source_guid, DISPOSITION_FAILED, PARSE_ERROR)
+    elif acc.storage_backend:
+        acc.record_each(broken, DISPOSITION_FAILED, reason=PARSE_ERROR)
+    return data
+
+
+def _record_success(acc: _Collection, result: ProcessingResult, data: list[dict[str, Any]]) -> None:
+    """Note failing verdicts and queue the SUCCESS dispositions of *result*'s rows."""
+    action_name = acc.action_name
+    if result.source_guid:
+        if any(failed_its_checks(d, action_name) for d in data):
+            acc.failed_guids.add(result.source_guid)
+        if acc.storage_backend:
+            acc.record(result.source_guid, DISPOSITION_SUCCESS)
+    elif result.source_guid is None and data:
+        # A bundled FILE result: each row carries its record's own source_guid.
+        for d in data:
+            if failed_its_checks(d, action_name):
+                if d.get("source_guid"):
+                    acc.failed_guids.add(d["source_guid"])
+                else:
+                    acc.unidentified_failed += 1
+        if acc.storage_backend:
+            acc.record_each(data, DISPOSITION_SUCCESS)
+    if acc.storage_backend:
+        for guid in result.collapse_contributor_guids:
+            acc.record(guid, DISPOSITION_SUCCESS, CONSUMED_INTO_OUTPUT)
+
+
+def _collect_success(acc: _Collection, idx: int, result: ProcessingResult, status_key: str) -> None:
+    data = result.data or []
+    if result.skip_reason == CARRY_FORWARD_REASON:
+        _collect_carried(acc, data, status_key)
+        return
+
+    rows = data
+    if data and _data_has_parse_error(data):
+        data = _fail_parse_errors(acc, idx, result, data)
+        if not data:
+            result.status = ProcessingStatus.FAILED
+            acc.stats[status_key] -= 1
+            acc.output.extend(rows)
+            return
+
+    if data:
+        for d in data:
+            _stamp(d, RecordState.PROCESSED, acc.action_name, SUCCESS)
+        acc.output.extend(rows)
+        acc.routed.extend(data)
+        acc.echoed |= _schema_echoes(data, acc.action_name)
+    logger.debug(
+        "Collected SUCCESS result source_guid=%s count=%d",
+        result.source_guid,
+        len(data),
+    )
+    acc.collected(idx, "success")
+    _record_success(acc, result, data)
+
+
+def _collect_skipped(acc: _Collection, idx: int, result: ProcessingResult) -> None:
+    data = result.data or []
+    reason = result.skip_reason or GUARD_SKIP
+    if data:
+        for d in data:
+            _stamp(d, RecordState.GUARD_SKIPPED, acc.action_name, reason)
+        acc.output.extend(data)
+    logger.debug(
+        "Collected SKIPPED result source_guid=%s count=%d",
+        result.source_guid,
+        len(data),
+    )
+    acc.collected(idx, "skipped")
+    if acc.storage_backend and result.source_guid:
+        acc.record(result.source_guid, DISPOSITION_PASSTHROUGH, reason)
+    elif acc.storage_backend and result.source_guid is None and data:
+        acc.record_each(data, DISPOSITION_PASSTHROUGH, reason=reason)
+
+
+def _collect_exhausted(acc: _Collection, idx: int, result: ProcessingResult) -> None:
+    data = result.data or []
+    if data:
+        for d in data:
+            _stamp(
+                d,
+                RecordState.EXHAUSTED,
+                acc.action_name,
+                d.get("_tombstone_reason") or RETRY_EXHAUSTED,
+            )
+        acc.output.extend(data)
+    attempts = _get_retry_attempts(result)
+    acc.causes.append(str(result.error) if result.error else "")
+    logger.debug(
+        "Collected EXHAUSTED result source_guid=%s attempts=%s",
+        result.source_guid,
+        attempts,
+    )
+    reason = f"exhausted_after_{attempts}_attempts"
+    fire_event(
+        ExhaustedRecordEvent(
+            action_name=acc.action_name,
+            record_index=idx,
+            source_guid=result.source_guid or "",
+            reason=reason,
+        )
+    )
+    if acc.storage_backend and result.source_guid:
+        input_snapshot_str = _serialize_snapshot(result.source_snapshot or result.input_record)
+        acc.record(
+            result.source_guid, DISPOSITION_EXHAUSTED, reason, input_snapshot_str, result.error
+        )
+    elif acc.storage_backend and result.source_guid is None and data:
+        input_snapshot_str = _serialize_snapshot(result.source_snapshot or result.input_record)
+        acc.record_each(
+            data,
+            DISPOSITION_EXHAUSTED,
+            reason=reason,
+            input_snapshot=input_snapshot_str,
+            detail=result.error,
+        )
+
+
+def _collect_failed(acc: _Collection, idx: int, result: ProcessingResult) -> None:
+    action_name = acc.action_name
+    reason = result.error or "processing_error"
+    # The cause leads: `agac dispositions` truncates a reason at 60
+    # characters, and this is the line both online and batch runs get.
+    logger.error(
+        "[%s] %s (record %s)",
+        action_name,
+        result.error,
+        _short_guid(result.source_guid),
+    )
+    acc.causes.append(str(result.error) if result.error else "")
+
+    if result.data:
+        # Batch FAILED results carry their own data (error items or
+        # tombstones from build_tombstone).  Preserve them as-is and
+        # stamp lifecycle state.
+        for d in result.data:
+            _stamp(d, RecordState.FAILED, action_name, reason)
+        acc.output.extend(result.data)
+    else:
+        # Online FAILED results have data=[].  Build a tombstone so
+        # downstream actions see this record and can cascade-skip it
+        # (record-level error isolation).
+        tombstone = _build_failed_tombstone(
+            action_name, result.source_guid, result.input_record, result.error
+        )
+        acc.output.append(tombstone)
+
+    acc.collected(idx, "failed")
+    if acc.storage_backend and result.source_guid:
+        input_snapshot_str = _serialize_snapshot(result.source_snapshot or result.input_record)
+        acc.record(result.source_guid, DISPOSITION_FAILED, reason, input_snapshot_str, result.error)
+    elif acc.storage_backend and result.source_guid is None:
+        failed_items = result.data or []
+        if failed_items:
+            input_snapshot_str = _serialize_snapshot(result.source_snapshot or result.input_record)
+            acc.record_each(
+                failed_items,
+                DISPOSITION_FAILED,
+                reason=reason,
+                input_snapshot=input_snapshot_str,
+                detail=result.error,
+            )
+        else:
+            logger.warning(
+                "[%s] FAILED result has no source_guid and no data — "
+                "disposition not written (risk of reprocessing on next run)",
+                action_name,
+            )
+
+
+def _collect_filtered(
+    acc: _Collection,
+    idx: int,
+    result: ProcessingResult,
+    status_key: str,
+    config: dict[str, Any],
+) -> None:
+    logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
+    filter_reason = result.skip_reason or guard_filter_reason(config)
+    if filter_reason == SENT_ELSEWHERE:
+        acc.stats[status_key] -= 1
+        acc.stats["sent_elsewhere"] += 1
+    acc.collected(idx, "filtered")
+    if acc.storage_backend and result.source_guid:
+        acc.record(result.source_guid, DISPOSITION_FILTERED, filter_reason)
+    elif acc.storage_backend and result.source_guid is None:
+        filtered_data = result.data or []
+        if filtered_data:
+            acc.record_each(filtered_data, DISPOSITION_FILTERED, reason=filter_reason)
+        else:
+            logger.warning(
+                "[%s] FILTERED result has no source_guid and no data — "
+                "disposition not written (risk of reprocessing on next run)",
+                acc.action_name,
+            )
+
+
+def _collect_unprocessed(
+    acc: _Collection, idx: int, result: ProcessingResult, status_key: str
+) -> None:
+    data = result.data or []
+    if result.skip_reason == CARRY_FORWARD_REASON:
+        _collect_carried(acc, data, status_key)
+        return
+
+    reason = result.skip_reason or UNPROCESSED
+    if data:
+        # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
+        state = (
+            RecordState.GUARD_SKIPPED
+            if reason in GUARD_SKIP_REASONS
+            else RecordState.CASCADE_SKIPPED
+        )
+        if state == RecordState.GUARD_SKIPPED:
+            acc.guard_skipped += len(data)
+        for d in data:
+            _stamp(d, state, acc.action_name, reason)
+        acc.output.extend(data)  # Preserve in output for lineage
+    logger.debug(
+        "Collected UNPROCESSED result source_guid=%s count=%d",
+        result.source_guid,
+        len(data),
+    )
+    acc.collected(idx, "unprocessed")
+    if acc.storage_backend and result.source_guid:
+        acc.record(result.source_guid, DISPOSITION_UNPROCESSED, reason)
+    elif acc.storage_backend and result.source_guid is None and data:
+        acc.record_each(data, DISPOSITION_UNPROCESSED, reason=reason)
+
+
+def _collect_deferred(acc: _Collection, idx: int, result: ProcessingResult) -> None:
+    task_id = result.task_id or ""
+    logger.info(
+        "Collected DEFERRED result source_guid=%s task_id=%s",
+        result.source_guid,
+        task_id,
+    )
+    acc.collected(idx, "deferred")
+    if acc.storage_backend and result.source_guid:
+        acc.record(result.source_guid, DISPOSITION_DEFERRED, f"batch_queued:task_id={task_id}")
+    elif acc.storage_backend and result.source_guid is None:
+        logger.warning(
+            "[%s] DEFERRED result has no source_guid — "
+            "disposition not written (risk of reprocessing on next run)",
+            acc.action_name,
+        )
+
+
+def _write_pending(acc: _Collection, context: ProcessingContext | None) -> None:
+    """Write the queued dispositions, or hand the kept ones to *context* to write later."""
+    pending = acc.pending
+    if acc.failed_guids:
+        # Marked once the whole collection is seen: one record's rows can arrive in
+        # several results (a resumed expansion), and any failing row fails the record.
+        pending = [
+            (*row[:3], EXPECTATIONS_FAILED, *row[4:])
+            if row[2] == DISPOSITION_SUCCESS and row[3] is None and row[1] in acc.failed_guids
+            else row
+            for row in pending
+        ]
+    if context is not None and context.defer_kept_dispositions:
+        # They vouch for rows of a file not stored yet; the caller writes them once it is.
+        context.kept_dispositions.extend(
+            row
+            for row in pending
+            if row[2] in _CARRIED_FROM_THE_STORED_FILE
+            # The store records a schema echo failed as it writes the row, and a SUCCESS
+            # written after would replace that.
+            and row[1] not in acc.echoed
+        )
+        pending = [row for row in pending if row[2] not in _CARRIED_FROM_THE_STORED_FILE]
+    refused = _refusal_of(acc.storage_backend, pending, acc.action_name)
+    if refused is not None and context is not None:
+        context.dispositions_not_stored.update(row[1] for row in pending)
+        failures = sorted({row[1] for row in pending if row[2] in FAILURE_DISPOSITIONS})
+        if failures and context.failure_not_stored is None:
+            context.failure_not_stored = failures_not_stored(acc.action_name, failures, refused)
+
+
+def _report_collection(
+    acc: _Collection,
+    total_input: int,
+    config: dict[str, Any],
+    context: ProcessingContext | None,
+) -> None:
+    """Fire the completion event and log the all-filtered and tombstone summaries."""
+    action_name = acc.action_name
+    stats = acc.stats
+    guard_config = config.get("guard", {})
+    guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""
+    guard_on_false = guard_config.get("behavior", "") if isinstance(guard_config, dict) else ""
+
+    fire_event(
+        ResultCollectionCompleteEvent(
+            action_name=action_name,
+            total_success=stats["success"],
+            total_skipped=stats["skipped"],
+            total_filtered=stats["filtered"],
+            total_failed=stats["failed"],
+            total_exhausted=stats["exhausted"],
+            total_unprocessed=stats["unprocessed"],
+            total_guard_skipped=acc.guard_skipped,
+            total_deferred=stats["deferred"],
+            total_sent_elsewhere=stats["sent_elsewhere"],
+            guard_condition=guard_condition,
+            guard_on_false=guard_on_false,
+            target_relative_path=(context.target_relative_path or "") if context else "",
+        )
+    )
+
+    if stats["filtered"] > 0 and stats["filtered"] == total_input and total_input > 0:
+        logger.warning(
+            "[%s] All %d records filtered by guard (%s). None of them reaches downstream actions.",
+            action_name,
+            total_input,
+            guard_condition or "unknown condition",
+        )
+
+    tombstone_count = stats["skipped"] + stats["exhausted"] + stats["unprocessed"]
+    if tombstone_count > 0:
+        logger.info(
+            "[%s] %d/%d records are tombstones (skipped=%d, exhausted=%d, unprocessed=%d)",
+            action_name,
+            tombstone_count,
+            total_input,
+            stats["skipped"],
+            stats["exhausted"],
+            stats["unprocessed"],
+        )
+
+
 def collect_results_from_processing_results(
     results: list[ProcessingResult],
     action_name: str,
@@ -517,538 +949,39 @@ def collect_results_from_processing_results(
             else:
                 raise exhaustion
 
-    output: list[dict[str, Any]] = []
-    stats: collections.Counter[str] = collections.Counter()
-    causes: list[str] = []
-    pending_dispositions: list[DispositionRow] = []
-    echoed: set[str] = set()
-    guard_skipped_count = 0
-    # Records whose rows shipped a failing verdict, and failing rows with no record id.
-    failed_guids: set[str] = set()
-    unidentified_failed = 0
-    carried_rows = 0
-    routed: list[dict[str, Any]] = []
+    acc = _Collection(action_name=action_name, storage_backend=storage_backend)
 
     for idx, result in enumerate(results):
         status = result.status
         status_key = status.value
-        stats[status_key] += 1
+        acc.stats[status_key] += 1
 
         if status == ProcessingStatus.SUCCESS:
-            data = result.data or []
-
-            if result.skip_reason == CARRY_FORWARD_REASON:
-                if data:
-                    output.extend(data)
-                    carried_rows += len(data)
-                stats[status_key] -= 1
-                stats["carry_forward"] += 1
-                if _holds_answer(data):
-                    stats["carried_success"] += 1
-                continue
-
-            # Detect parse-error records masquerading as SUCCESS.
-            # The LLM provider returns {"_parse_error": ...} on JSON
-            # parse failure, which flows through as SUCCESS data.
-            # The repair loop has already had its chance (it runs during
-            # invocation, before result collection).
-            rows = data
-            if data and _data_has_parse_error(data):
-                # A bundled FILE result holds one row per record, so only the
-                # rows that hold the error fail; a keyed result is one record.
-                if result.source_guid is None:
-                    broken = [d for d in data if _data_has_parse_error([d])]
-                    data = [d for d in data if not _data_has_parse_error([d])]
-                else:
-                    broken, data = data, []
-                for d in broken:
-                    _stamp(d, RecordState.FAILED, action_name, PARSE_ERROR)
-                stats["failed"] += len(broken) if result.source_guid is None else 1
-                logger.warning(
-                    "[%s] SUCCESS result source_guid=%s contains _parse_error in %d row(s) "
-                    "— dispositioned as FAILED",
-                    action_name,
-                    result.source_guid,
-                    len(broken),
-                )
-                fire_event(
-                    ResultCollectedEvent(
-                        action_name=action_name,
-                        result_index=idx,
-                        status="failed",
-                    )
-                )
-                if storage_backend and result.source_guid:
-                    pending_dispositions.append(
-                        (
-                            action_name,
-                            result.source_guid,
-                            DISPOSITION_FAILED,
-                            PARSE_ERROR,
-                            None,
-                            None,
-                            None,
-                        )
-                    )
-                elif storage_backend:
-                    _per_item_dispositions(
-                        pending_dispositions,
-                        action_name,
-                        broken,
-                        DISPOSITION_FAILED,
-                        reason=PARSE_ERROR,
-                    )
-                if not data:
-                    result.status = ProcessingStatus.FAILED
-                    stats[status_key] -= 1
-                    output.extend(rows)
-                    continue
-
-            if data:
-                for d in data:
-                    _stamp(d, RecordState.PROCESSED, action_name, SUCCESS)
-                output.extend(rows)
-                routed.extend(data)
-                echoed |= _schema_echoes(data, action_name)
-            logger.debug(
-                "Collected SUCCESS result source_guid=%s count=%d",
-                result.source_guid,
-                len(data),
-            )
-            fire_event(
-                ResultCollectedEvent(
-                    action_name=action_name,
-                    result_index=idx,
-                    status="success",
-                )
-            )
-            if result.source_guid:
-                if any(failed_its_checks(d, action_name) for d in data):
-                    failed_guids.add(result.source_guid)
-                if storage_backend:
-                    pending_dispositions.append(
-                        (
-                            action_name,
-                            result.source_guid,
-                            DISPOSITION_SUCCESS,
-                            None,
-                            None,
-                            None,
-                            None,
-                        )
-                    )
-            elif result.source_guid is None and data:
-                # A bundled FILE result: each row carries its record's own source_guid.
-                for d in data:
-                    if failed_its_checks(d, action_name):
-                        if d.get("source_guid"):
-                            failed_guids.add(d["source_guid"])
-                        else:
-                            unidentified_failed += 1
-                if storage_backend:
-                    _per_item_dispositions(
-                        pending_dispositions, action_name, data, DISPOSITION_SUCCESS
-                    )
-            if storage_backend:
-                for guid in result.collapse_contributor_guids:
-                    pending_dispositions.append(
-                        (
-                            action_name,
-                            guid,
-                            DISPOSITION_SUCCESS,
-                            CONSUMED_INTO_OUTPUT,
-                            None,
-                            None,
-                            None,
-                        )
-                    )
-
+            _collect_success(acc, idx, result, status_key)
         elif status == ProcessingStatus.SKIPPED:
-            data = result.data or []
-            if data:
-                for d in data:
-                    _stamp(
-                        d,
-                        RecordState.GUARD_SKIPPED,
-                        action_name,
-                        result.skip_reason or GUARD_SKIP,
-                    )
-                output.extend(data)
-            logger.debug(
-                "Collected SKIPPED result source_guid=%s count=%d",
-                result.source_guid,
-                len(data),
-            )
-            fire_event(
-                ResultCollectedEvent(
-                    action_name=action_name,
-                    result_index=idx,
-                    status="skipped",
-                )
-            )
-            if storage_backend and result.source_guid:
-                pending_dispositions.append(
-                    (
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_PASSTHROUGH,
-                        result.skip_reason or GUARD_SKIP,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-            elif storage_backend and result.source_guid is None and data:
-                _per_item_dispositions(
-                    pending_dispositions,
-                    action_name,
-                    data,
-                    DISPOSITION_PASSTHROUGH,
-                    reason=result.skip_reason or GUARD_SKIP,
-                )
-
+            _collect_skipped(acc, idx, result)
         elif status == ProcessingStatus.EXHAUSTED:
-            data = result.data or []
-            if data:
-                for d in data:
-                    _stamp(
-                        d,
-                        RecordState.EXHAUSTED,
-                        action_name,
-                        d.get("_tombstone_reason") or RETRY_EXHAUSTED,
-                    )
-                output.extend(data)
-            attempts = _get_retry_attempts(result)
-            causes.append(str(result.error) if result.error else "")
-            logger.debug(
-                "Collected EXHAUSTED result source_guid=%s attempts=%s",
-                result.source_guid,
-                attempts,
-            )
-            fire_event(
-                ExhaustedRecordEvent(
-                    action_name=action_name,
-                    record_index=idx,
-                    source_guid=result.source_guid or "",
-                    reason=f"exhausted_after_{attempts}_attempts",
-                )
-            )
-            if storage_backend and result.source_guid:
-                input_snapshot_str = _serialize_snapshot(
-                    result.source_snapshot or result.input_record
-                )
-                pending_dispositions.append(
-                    (
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_EXHAUSTED,
-                        f"exhausted_after_{attempts}_attempts",
-                        None,
-                        input_snapshot_str,
-                        result.error,
-                    )
-                )
-            elif storage_backend and result.source_guid is None and data:
-                input_snapshot_str = _serialize_snapshot(
-                    result.source_snapshot or result.input_record
-                )
-                _per_item_dispositions(
-                    pending_dispositions,
-                    action_name,
-                    data,
-                    DISPOSITION_EXHAUSTED,
-                    reason=f"exhausted_after_{attempts}_attempts",
-                    input_snapshot=input_snapshot_str,
-                    detail=result.error,
-                )
-
+            _collect_exhausted(acc, idx, result)
         elif status == ProcessingStatus.FAILED:
-            # The cause leads: `agac dispositions` truncates a reason at 60
-            # characters, and this is the line both online and batch runs get.
-            logger.error(
-                "[%s] %s (record %s)",
-                action_name,
-                result.error,
-                _short_guid(result.source_guid),
-            )
-            causes.append(str(result.error) if result.error else "")
-
-            if result.data:
-                # Batch FAILED results carry their own data (error items or
-                # tombstones from build_tombstone).  Preserve them as-is and
-                # stamp lifecycle state.
-                for d in result.data:
-                    _stamp(d, RecordState.FAILED, action_name, result.error or "processing_error")
-                output.extend(result.data)
-            else:
-                # Online FAILED results have data=[].  Build a tombstone so
-                # downstream actions see this record and can cascade-skip it
-                # (record-level error isolation).
-                tombstone = _build_failed_tombstone(
-                    action_name, result.source_guid, result.input_record, result.error
-                )
-                output.append(tombstone)
-
-            fire_event(
-                ResultCollectedEvent(
-                    action_name=action_name,
-                    result_index=idx,
-                    status="failed",
-                )
-            )
-            if storage_backend and result.source_guid:
-                input_snapshot_str = _serialize_snapshot(
-                    result.source_snapshot or result.input_record
-                )
-                pending_dispositions.append(
-                    (
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_FAILED,
-                        result.error or "processing_error",
-                        None,
-                        input_snapshot_str,
-                        result.error,
-                    )
-                )
-            elif storage_backend and result.source_guid is None:
-                failed_items = result.data or []
-                if failed_items:
-                    input_snapshot_str = _serialize_snapshot(
-                        result.source_snapshot or result.input_record
-                    )
-                    _per_item_dispositions(
-                        pending_dispositions,
-                        action_name,
-                        failed_items,
-                        DISPOSITION_FAILED,
-                        reason=result.error or "processing_error",
-                        input_snapshot=input_snapshot_str,
-                        detail=result.error,
-                    )
-                else:
-                    logger.warning(
-                        "[%s] FAILED result has no source_guid and no data — "
-                        "disposition not written (risk of reprocessing on next run)",
-                        action_name,
-                    )
-
+            _collect_failed(acc, idx, result)
         elif status == ProcessingStatus.FILTERED:
-            logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
-            filter_reason = result.skip_reason or guard_filter_reason(effective_config)
-            if filter_reason == SENT_ELSEWHERE:
-                stats[status_key] -= 1
-                stats["sent_elsewhere"] += 1
-            fire_event(
-                ResultCollectedEvent(
-                    action_name=action_name,
-                    result_index=idx,
-                    status="filtered",
-                )
-            )
-            if storage_backend and result.source_guid:
-                pending_dispositions.append(
-                    (
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_FILTERED,
-                        filter_reason,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-            elif storage_backend and result.source_guid is None:
-                filtered_data = result.data or []
-                if filtered_data:
-                    _per_item_dispositions(
-                        pending_dispositions,
-                        action_name,
-                        filtered_data,
-                        DISPOSITION_FILTERED,
-                        reason=filter_reason,
-                    )
-                else:
-                    logger.warning(
-                        "[%s] FILTERED result has no source_guid and no data — "
-                        "disposition not written (risk of reprocessing on next run)",
-                        action_name,
-                    )
-
+            _collect_filtered(acc, idx, result, status_key, effective_config)
         elif status == ProcessingStatus.UNPROCESSED:
-            data = result.data or []
-
-            if result.skip_reason == CARRY_FORWARD_REASON:
-                if data:
-                    output.extend(data)
-                    carried_rows += len(data)
-                stats[status_key] -= 1
-                stats["carry_forward"] += 1
-                if _holds_answer(data):
-                    stats["carried_success"] += 1
-                continue
-
-            if data:
-                reason = result.skip_reason or UNPROCESSED
-                # FILE prefilter uses UNPROCESSED for ordering (FM13) but is a guard decision
-                state = (
-                    RecordState.GUARD_SKIPPED
-                    if reason in GUARD_SKIP_REASONS
-                    else RecordState.CASCADE_SKIPPED
-                )
-                if state == RecordState.GUARD_SKIPPED:
-                    guard_skipped_count += len(data)
-                for d in data:
-                    _stamp(d, state, action_name, reason)
-                output.extend(data)  # Preserve in output for lineage
-            logger.debug(
-                "Collected UNPROCESSED result source_guid=%s count=%d",
-                result.source_guid,
-                len(data),
-            )
-            fire_event(
-                ResultCollectedEvent(
-                    action_name=action_name,
-                    result_index=idx,
-                    status="unprocessed",
-                )
-            )
-            if storage_backend and result.source_guid:
-                pending_dispositions.append(
-                    (
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_UNPROCESSED,
-                        result.skip_reason or UNPROCESSED,
-                        None,
-                        None,
-                        None,
-                    )
-                )
-            elif storage_backend and result.source_guid is None and data:
-                _per_item_dispositions(
-                    pending_dispositions,
-                    action_name,
-                    data,
-                    DISPOSITION_UNPROCESSED,
-                    reason=result.skip_reason or UNPROCESSED,
-                )
-
+            _collect_unprocessed(acc, idx, result, status_key)
         elif status == ProcessingStatus.DEFERRED:
-            task_id = result.task_id or ""
-            logger.info(
-                "Collected DEFERRED result source_guid=%s task_id=%s",
-                result.source_guid,
-                task_id,
-            )
-            fire_event(
-                ResultCollectedEvent(
-                    action_name=action_name,
-                    result_index=idx,
-                    status="deferred",
-                )
-            )
-            if storage_backend and result.source_guid:
-                pending_dispositions.append(
-                    (
-                        action_name,
-                        result.source_guid,
-                        DISPOSITION_DEFERRED,
-                        f"batch_queued:task_id={task_id}",
-                        None,
-                        None,
-                        None,
-                    )
-                )
-            elif storage_backend and result.source_guid is None:
-                logger.warning(
-                    "[%s] DEFERRED result has no source_guid — "
-                    "disposition not written (risk of reprocessing on next run)",
-                    action_name,
-                )
-
+            _collect_deferred(acc, idx, result)
         else:
             logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
 
-    if failed_guids:
-        # Marked once the whole collection is seen: one record's rows can arrive in
-        # several results (a resumed expansion), and any failing row fails the record.
-        pending_dispositions = [
-            (*row[:3], EXPECTATIONS_FAILED, *row[4:])
-            if row[2] == DISPOSITION_SUCCESS and row[3] is None and row[1] in failed_guids
-            else row
-            for row in pending_dispositions
-        ]
-    if context is not None and context.defer_kept_dispositions:
-        # They vouch for rows of a file not stored yet; the caller writes them once it is.
-        context.kept_dispositions.extend(
-            row
-            for row in pending_dispositions
-            if row[2] in _CARRIED_FROM_THE_STORED_FILE
-            # The store records a schema echo failed as it writes the row, and a SUCCESS
-            # written after would replace that.
-            and row[1] not in echoed
-        )
-        pending_dispositions = [
-            row for row in pending_dispositions if row[2] not in _CARRIED_FROM_THE_STORED_FILE
-        ]
-    refused = _refusal_of(storage_backend, pending_dispositions, action_name)
-    if refused is not None and context is not None:
-        context.dispositions_not_stored.update(row[1] for row in pending_dispositions)
-        failures = sorted(
-            {row[1] for row in pending_dispositions if row[2] in FAILURE_DISPOSITIONS}
-        )
-        if failures and context.failure_not_stored is None:
-            context.failure_not_stored = failures_not_stored(action_name, failures, refused)
-
-    guard_config = effective_config.get("guard", {})
-    guard_condition = guard_config.get("clause", "") if isinstance(guard_config, dict) else ""
-    guard_on_false = guard_config.get("behavior", "") if isinstance(guard_config, dict) else ""
-
-    fire_event(
-        ResultCollectionCompleteEvent(
-            action_name=action_name,
-            total_success=stats["success"],
-            total_skipped=stats["skipped"],
-            total_filtered=stats["filtered"],
-            total_failed=stats["failed"],
-            total_exhausted=stats["exhausted"],
-            total_unprocessed=stats["unprocessed"],
-            total_guard_skipped=guard_skipped_count,
-            total_deferred=stats["deferred"],
-            total_sent_elsewhere=stats["sent_elsewhere"],
-            guard_condition=guard_condition,
-            guard_on_false=guard_on_false,
-            target_relative_path=(context.target_relative_path or "") if context else "",
-        )
-    )
-
-    total_input = len(results)
-    if stats["filtered"] > 0 and stats["filtered"] == total_input and total_input > 0:
-        logger.warning(
-            "[%s] All %d records filtered by guard (%s). None of them reaches downstream actions.",
-            action_name,
-            total_input,
-            guard_condition or "unknown condition",
-        )
-
-    tombstone_count = stats["skipped"] + stats["exhausted"] + stats["unprocessed"]
-    if tombstone_count > 0:
-        logger.info(
-            "[%s] %d/%d records are tombstones (skipped=%d, exhausted=%d, unprocessed=%d)",
-            action_name,
-            tombstone_count,
-            len(results),
-            stats["skipped"],
-            stats["exhausted"],
-            stats["unprocessed"],
-        )
+    _write_pending(acc, context)
+    _report_collection(acc, len(results), effective_config, context)
 
     if storage_backend is not None:
-        storage_backend.credit_rows_collected(action_name, len(output) - carried_rows)
+        storage_backend.credit_rows_collected(action_name, len(acc.output) - acc.carried_rows)
 
+    stats = acc.stats
     collection = CollectionStats(
-        causes=tuple(causes),
+        causes=tuple(acc.causes),
         success=stats["success"],
         failed=stats["failed"],
         skipped=stats["skipped"],
@@ -1059,12 +992,12 @@ def collect_results_from_processing_results(
         carry_forward=stats["carry_forward"],
         carried_success=stats["carried_success"],
         sent_elsewhere=stats["sent_elsewhere"],
-        cases=route_case_counts(effective_config, action_name, routed),
-        guard_skipped=guard_skipped_count,
-        checks_failed=len(failed_guids) + unidentified_failed,
+        cases=route_case_counts(effective_config, action_name, acc.routed),
+        guard_skipped=acc.guard_skipped,
+        checks_failed=len(acc.failed_guids) + acc.unidentified_failed,
     )
     add_collection(collection)
-    return output, collection
+    return acc.output, collection
 
 
 class ResultCollector:

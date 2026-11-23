@@ -190,7 +190,7 @@ class OpenAICompatibleResponseMixin:
         """Extract content from OpenAI-compatible response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})
-        if "choices" in response_body and response_body["choices"]:
+        if response_body.get("choices"):
             choice = response_body["choices"][0]
             if "message" in choice and "content" in choice["message"]:
                 return choice["message"]["content"]

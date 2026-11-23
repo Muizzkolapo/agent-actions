@@ -1,0 +1,48 @@
+{
+  "metadata": {
+    "generated_at": "2026-01-02T03:04:05",
+    "total_workflows": 0,
+    "generator_version": "1.1.0",
+    "project_name": null
+  },
+  "workflows": {},
+  "actions": {},
+  "prompts": {},
+  "schemas": {},
+  "tool_functions": {},
+  "runs": {},
+  "logs": {
+    "runtime_warnings": [],
+    "runtime_errors": [],
+    "events": []
+  },
+  "vendors": {},
+  "error_types": {},
+  "event_types": {},
+  "examples": {},
+  "data_loaders": {},
+  "processing_states": {},
+  "workflow_data": {},
+  "stats": {
+    "total_workflows": 0,
+    "total_actions": 0,
+    "llm_actions": 0,
+    "tool_actions": 0,
+    "total_prompts": 0,
+    "total_schemas": 0,
+    "total_tool_functions": 0,
+    "total_runs": 0,
+    "validation_errors": 0,
+    "validation_warnings": 0,
+    "runtime_warnings": 0,
+    "runtime_errors": 0,
+    "total_vendors": 0,
+    "total_error_types": 0,
+    "total_event_types": 0,
+    "total_examples": 0,
+    "total_data_loaders": 0,
+    "total_processing_states": 0,
+    "total_data_nodes": 0,
+    "event_levels": {}
+  }
+}

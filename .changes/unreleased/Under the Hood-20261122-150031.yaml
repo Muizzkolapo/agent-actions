@@ -1,0 +1,8 @@
+kind: Under the Hood
+body: >-
+  An online run spends less time per record outside the model call: a prompt's referenced
+  action names are parsed once per template instead of once per record, and the run log no
+  longer re-serializes its buffered rows on every debug event. On the review_analyzer example
+  with the mock provider over 576 records, `agac run` went from about 79 s to about 68 s.
+  Outputs are unchanged.
+time: 2026-11-22T15:00:31.000000+00:00

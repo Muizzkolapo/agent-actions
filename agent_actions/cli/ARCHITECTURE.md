@@ -47,7 +47,7 @@ main_entrypoint()                           ← entry point (pyproject.toml cons
        │
        ├─ fire_event(CLIInitStartEvent)     ← structured event
        ├─ _create_click_group()             ← @click.group with --debug/--verbose/--quiet
-       ├─ _register_commands()              ← add_command() for all 17 commands
+       ├─ _register_commands()              ← add_lazy_command() for each entry of _COMMANDS
        ├─ _register_signal_handlers()       ← SIGINT, SIGTERM, SIGBREAK
        └─ fire_event(CLIInitCompleteEvent)
        │
@@ -524,6 +524,8 @@ Renders schema summary tables and data flow panels for the `schema` command. Imp
 7. **Logging is initialized 3-4 times.** See "Logging Initialization Order" above. Each call to `LoggerFactory.initialize(force=True)` replaces the previous configuration. Events fired before Phase 2 use a bare logger. The Phase 4 init (run command only) adds a file handler after the workflow is loaded, so early log messages are not written to the run log file.
 
 8. **`_LazyCLI` proxy.** `main.py` exports a module-level `cli` object that defers `CLI()` instantiation until first access. This exists so that tools importing the module (e.g., for testing or documentation) don't trigger the full bootstrap (signal handlers, event firing) on import.
+
+8a. **Commands are imported on first use.** The top-level group is a `_LazyGroup`: `_COMMANDS` maps each command name to its `module:attribute` and a one-line summary, and `get_command` imports the module only when the command is looked up (to run it, show its `--help`, or complete it). `agac --help` lists the commands not yet imported by their summary, shortened as Click shortens a command's help, so it imports none of them; `test_commands_are_imported_on_first_use.py` holds each summary equal to the command's own short help. `click_group.commands` holds only the commands imported so far; walk the tree with `list_commands`/`get_command`. A new top-level command is added to `_COMMANDS`, not with `add_command`.
 
 9. **Inspection loads config through `WorkflowInspector`, not `load_workflow()`.** `BaseInspectCommand._load_inspector()` constructs a `WorkflowInspector`, which calls the shared `load_workflow_configs` with `use_tools=False` and `fire_events=False`, and passes no `output_dir` -- a read-only pass with no storage or runtime init and no `verify_keys`. There is no duplicated loader: an earlier `_load_workflow()` on the base class did keep its own copy, and this entry described that copy for some time after it was removed (#1201).
 

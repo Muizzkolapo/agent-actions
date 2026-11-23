@@ -352,6 +352,9 @@ record that is still failed upstream stays quarantined, as in a run.
 
 If the tool writes a row again exactly as it was, the row is the same row. The row keeps the
 identifiers that it was stored under. What the downstream actions hold for the row stays.
+Only the values that a run makes again can be different: the identifiers of the row, its
+lineage, its `lineage_sources` (the node ids of the rows that it was made from) and its state
+history.
 
 Each downstream action of the tool answers a file that the tool rewrote, as a run answers
 it. The downstream action answers each record whose row changed, whether the retry named
@@ -375,7 +378,14 @@ A downstream FILE tool is the exception. Each of its rows may depend on all reco
 file. Thus the downstream FILE tool keeps its data only if the file was written again as the
 rows that it held, all unchanged. In all other cases, the downstream FILE
 tool gets the file again. The plain `agac run` that finishes a retry that stopped part-way
-through does the same.
+through does the same. The downstream FILE tool then keeps each row that it writes again
+with no change, as the first tool does. Thus its own downstream actions answer again only
+the records whose row changed. The actions between the two tools keep their answers for
+the records whose row did not change.
+
+A guard does not answer the records that it skips, so each run puts these records to the
+guard again. In an online action, if the new skip row holds the same content as the stored
+row, the stored row stays. Thus a downstream FILE tool makes its rows from the same rows as before.
 
 The plan tells you this before the retry clears anything. For each FILE tool that the retry
 reaches, the plan prints this note after the listed records:

@@ -1,0 +1,7 @@
+kind: Bug Fix
+body: >-
+  The docs catalog now attaches the implementing function (signature, docstring, source file)
+  to each tool action, so the docs site shows it on the action page. The generator looked for
+  `kind: tool` on parsed actions, but the parser records that as `type: tool`, so no action
+  ever got one.
+time: 2026-11-22T10:00:13Z

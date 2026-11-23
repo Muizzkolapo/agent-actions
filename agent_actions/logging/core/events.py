@@ -32,6 +32,12 @@ class EventLevel(Enum):
         return [cls.DEBUG, cls.INFO, cls.WARN, cls.ERROR]
 
 
+# Rank per level, built once: handlers compare it on every event.
+LEVEL_SEVERITY: dict[EventLevel, int] = {
+    level: rank for rank, level in enumerate(EventLevel.ordered())
+}
+
+
 @dataclass
 class EventMeta:
     """Standard correlation and tracing metadata attached to all events."""

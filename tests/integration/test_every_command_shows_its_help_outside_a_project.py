@@ -15,7 +15,9 @@ from tests._support.agac_cli import run_agac
 
 def _command_paths(group: click.Group, prefix: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
     paths: list[tuple[str, ...]] = []
-    for name, command in sorted(group.commands.items()):
+    ctx = click.Context(group)
+    for name in group.list_commands(ctx):
+        command = group.get_command(ctx, name)
         path = (*prefix, name)
         paths.append(path)
         if isinstance(command, click.Group):

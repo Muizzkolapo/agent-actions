@@ -249,7 +249,7 @@ class LoadRender:
 
         # Jinja leaves an environment's globals out of a template's undeclared names, so
         # names are read with one that has none, and the load's filters and tests.
-        self._names_env = Environment(extensions=PROMPT_EXTENSIONS)
+        self._names_env = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
         self._names_env.globals.clear()
         # A cache point stays a tag: it marks a place in the text a record renders.
         self.env = DictKeyFirstEnvironment(

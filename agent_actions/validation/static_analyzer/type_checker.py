@@ -406,9 +406,11 @@ class StaticTypeChecker:
         similar = []
         for avail in available:
             avail_lower = avail.lower()
-            if field_lower in avail_lower or avail_lower in field_lower:
-                similar.append(avail)
-            elif field_lower[:3] == avail_lower[:3]:  # Same prefix
+            if (
+                field_lower in avail_lower
+                or avail_lower in field_lower
+                or field_lower[:3] == avail_lower[:3]
+            ):
                 similar.append(avail)
 
         if similar:

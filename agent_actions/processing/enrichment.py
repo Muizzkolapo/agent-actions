@@ -160,23 +160,22 @@ class LineageEnricher(Enricher):
                 elif source_idx is None:
                     # Synthetic record — no parent, gets fresh lineage
                     parent_item = None
+                # One-to-one: single input record
+                elif is_input_position(source_idx, source_data_len):
+                    parent_item = self._with_parent_fallback(
+                        context.source_data[source_idx], parent_candidates
+                    )
                 else:
-                    # One-to-one: single input record
-                    if is_input_position(source_idx, source_data_len):
-                        parent_item = self._with_parent_fallback(
-                            context.source_data[source_idx], parent_candidates
-                        )
-                    else:
-                        logger.warning(
-                            "source_mapping[%d] -> %r is not an input position "
-                            "(source_data has %d items, action=%s)",
-                            i,
-                            source_idx,
-                            source_data_len,
-                            context.action_name,
-                            extra=DIAGNOSTIC,
-                        )
-                        parent_item = None
+                    logger.warning(
+                        "source_mapping[%d] -> %r is not an input position "
+                        "(source_data has %d items, action=%s)",
+                        i,
+                        source_idx,
+                        source_data_len,
+                        context.action_name,
+                        extra=DIAGNOSTIC,
+                    )
+                    parent_item = None
             elif use_per_item_parent_lookup:
                 item_source_guid = item.get("source_guid")
                 parent_item = self._get_parent_item(

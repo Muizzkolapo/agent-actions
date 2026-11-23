@@ -20,7 +20,7 @@ _NON_ACTION_ROOTS = frozenset(
     {"loop", "range", "dict", "lipsum", "cycler", "joiner", "namespace", "true", "false", "none"}
 )
 
-_ENV = Environment(extensions=PROMPT_EXTENSIONS)
+_ENV = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
 
 
 def _chain_root_and_field(node: nodes.Node) -> tuple[str, str] | None:

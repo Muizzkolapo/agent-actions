@@ -232,11 +232,13 @@ _render_prompt_template(raw_prompt, prompt_context)
   |
   1. If prompt_context is empty --> return raw_prompt unchanged
   |
-  2. Create Environment(undefined=StrictUndefined,
-  |                     finalize=lambda x: "" if x is None else x)
-  |
-  3. escape_jinja_in_inline_code(raw_prompt)
+  2. escape_jinja_in_inline_code(raw_prompt)
   |     Escapes {{ }} inside code fences so they are not interpreted
+  |
+  3. _compile_prompt(escaped) -- compiled once per distinct text (LRU), against
+  |     one shared DictKeyFirstEnvironment(undefined=StrictUndefined, finalize
+  |     blanks a null namespace); the render's context and template reach its
+  |     place_of through a ContextVar set around the render
   |
   4. template.render(**prompt_context)
   |     |
@@ -392,7 +394,7 @@ MessageBuilder.build(provider, prompt, context, schema, json_mode, ...)
 
 ## Seed Data Loading
 
-`StaticDataLoader` loads reference data for injection into prompts via the `seed` namespace, from an ordered list of folders: the workflow's `seed_data/`, the project's, then each folder of `seed_data_paths` (`config.path_config.seed_search_folders`).
+`StaticDataLoader` loads reference data for injection into prompts via the `seed` namespace, from an ordered list of folders: the workflow's `seed_data/`, the project's, then each folder of `seed_data_paths` (`config.path_config.seed_search_folders`; a run's records use `record_seed_search_folders`, which re-reads `agent_actions.yml` only when its stat changes).
 
 ```
 context_scope:
@@ -480,7 +482,6 @@ render_pipeline_with_templates(yaml_path, templates_folder)
 | `render_workflow.py` | `render_pipeline_with_templates()` -- compiles workflow YAML (Jinja2 macros, prompt resolution, schema inlining, version expansion). |
 | `renderer.py` | `JinjaTemplateRenderer` + `ConfigRenderingService` -- CLI/validation entry points for config rendering and loading. |
 | `prompt_utils.py` | `PromptUtils` -- `dispatch_task()` resolution, field reference parsing and replacement. |
-| `data_generator.py` | `DataGenerator` -- composes prompt preparation with `OnlineLLMStrategy` for the generate CLI command. |
 
 ---
 

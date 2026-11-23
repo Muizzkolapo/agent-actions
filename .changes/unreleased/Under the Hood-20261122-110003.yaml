@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  Added behavior tests for the editor's LSP requests, text chunking and `dispatch_task` UDF
+  calls, `agac skills`, and the `agac schema` views, with strict xfails for four bugs they
+  found. No production change.
+time: 2026-11-22T11:00:03Z

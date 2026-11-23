@@ -374,7 +374,7 @@ class BatchResultStrategy:
                         self._build_error_result(
                             ctx,
                             custom_id,
-                            f"Processing error: {str(e)}",
+                            f"Processing error: {e!s}",
                             batch_result.metadata,
                             batch_result.content,
                             recovery_metadata=batch_result.recovery_metadata,

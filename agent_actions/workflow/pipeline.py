@@ -22,6 +22,7 @@ from agent_actions.llm.config.vendor import runs_in_batch
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import target_relative_path
 from agent_actions.processing.disposition_gate import (
+    guard_skips_as_stored,
     note_answered_by_repair,
     note_replaced_above,
     positions_named_by_repair,
@@ -42,6 +43,7 @@ from agent_actions.processing.strategies.online_llm import OnlineLLMStrategy
 from agent_actions.processing.types import ProcessingContext, ProcessingResult
 from agent_actions.processing.unified import ProcessingStrategy, UnifiedProcessor, refused_failure
 from agent_actions.prompt.context.scope_application import apply_context_scope_for_records
+from agent_actions.record.state import RecordState
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.limits import record_indices_to_process
 from agent_actions.utils.safe_format import safe_format_error
@@ -152,6 +154,18 @@ def _whole_file_readers(below: list[str], action_configs: dict[str, Any] | None)
     )
 
 
+def _file_tools_run_again(
+    below: list[str], action_configs: dict[str, Any] | None
+) -> frozenset[str]:
+    """Those of *below* that are FILE tools of the config held, which write a file again."""
+    configs = action_configs or {}
+    return frozenset(
+        action
+        for action in below
+        if action in configs and replaces_its_file_whole(cast(dict[str, Any], configs[action]))
+    )
+
+
 def _vouch_under_the_identity_put_back(
     context: ProcessingContext, produced: list[dict[str, Any]], written: list[dict[str, Any]]
 ) -> None:
@@ -177,6 +191,7 @@ def _forget_answers_below(
     unchanged: frozenset[str] = frozenset(),
     whole_file_readers: frozenset[str] = frozenset(),
     replacement: list[dict[str, Any]] | None = None,
+    file_tools_run_again: frozenset[str] = frozenset(),
 ) -> None:
     """Clear what each action in *below* holds a disposition for in *relative_path*.
 
@@ -184,7 +199,10 @@ def _forget_answers_below(
     names, or the file's inputs where it names none, never an ancestor above the file.
     Otherwise it is gone under every identity it names. A row of a FILE tool below may
     stand on the whole file, so it stands only where *replacement* holds the stored rows
-    alone, all unchanged. Cleared before the replacement is written, so a run stopped
+    alone, all unchanged. Such a tool in *file_tools_run_again* writes its file again and
+    puts back each row it writes unchanged, and then decides in the same way what the
+    actions below it hold: what its rows name is cleared at it alone, and nothing is
+    cleared here below it. Cleared before the replacement is written, so a run stopped
     between finds them unanswered.
     """
     held = _identities_named(replaced_rows) | _identities_named(inputs)
@@ -193,22 +211,31 @@ def _forget_answers_below(
     file_as_it_was = (
         bool(file_rows) and file_rows <= unchanged and _own_identities(replacement) == file_rows
     )
+    decided_below_a_file_tool = {
+        action for tool in file_tools_run_again for action in actions_below(storage_backend, tool)
+    }
+    below = [action for action in below if action not in decided_below_a_file_tool]
     stale = held - unchanged
+    stale_at: dict[str, set[str]] = {}
     for action in below:
         for row in _stored_rows(storage_backend, action, relative_path):
             named = _identities_named([row])
             if action in whole_file_readers:
-                if not file_as_it_was:
+                if file_as_it_was:
+                    continue
+                if action in file_tools_run_again:
+                    stale_at.setdefault(action, set()).update(named)
+                else:
                     stale |= named
                 continue
             built_on = (named & file_rows) or (named & rows_held)
             if built_on and built_on <= unchanged:
                 continue
             stale |= named
-    if not stale:
-        return
     for action in below:
-        storage_backend.clear_dispositions_batch(action, sorted(stale))
+        gone = stale | stale_at.get(action, set())
+        if gone:
+            storage_backend.clear_dispositions_batch(action, sorted(gone))
 
 
 @dataclass
@@ -853,6 +880,18 @@ class ProcessingPipeline:
             output, stats = self._unified_processor.process(
                 data, context, strategy, repair_inputs=offered_to_repair
             )
+            if any(
+                isinstance(row, dict) and row.get("_state") == RecordState.GUARD_SKIPPED.value
+                for row in output
+            ):
+                output = guard_skips_as_stored(
+                    output,
+                    _stored_rows(
+                        self.config.storage_backend,
+                        self.config.action_name,
+                        target_relative_path(output_file_path, output_directory),
+                    ),
+                )
 
         failure = stats.terminal_failure(
             self.config.action_name, data, output, self.config.storage_backend
@@ -888,6 +927,7 @@ class ProcessingPipeline:
                     unchanged,
                     whole_file_readers=_whole_file_readers(below, self.config.action_configs),
                     replacement=output,
+                    file_tools_run_again=_file_tools_run_again(below, self.config.action_configs),
                 )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
