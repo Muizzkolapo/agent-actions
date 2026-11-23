@@ -4,7 +4,7 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Iterator
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
@@ -477,7 +477,7 @@ class StorageBackend(ABC):
             return set()
 
         identities: set[str] = set()
-        for records in self._read_target_raw_batch(upstream_actions, relative_path).values():
+        for _act, records in self._each_upstream_raw(upstream_actions, relative_path):
             for record in records:
                 if isinstance(record, dict):
                     guid = record.get("source_guid")
@@ -487,7 +487,20 @@ class StorageBackend(ABC):
                     # would call a row joinable that rejoins an empty namespace.
                     if guid and isinstance(content, dict) and content:
                         identities.add(guid)
+            del records
         return identities
+
+    def _each_upstream_raw(
+        self, action_names: list[str], relative_path: str
+    ) -> Iterator[tuple[str, list[dict[str, Any]]]]:
+        """Each action's stored rows of the file, decoded one action at a time.
+
+        Not all at once: a delta row keeps its whole envelope, so every upstream's
+        decoded rows together weigh several times the file they rebuild. The caller
+        keeps what it needs of one action's rows and lets them go before the next.
+        """
+        for name in action_names:
+            yield from self._read_target_raw_batch([name], relative_path).items()
 
     def _extract_delta(
         self,
@@ -551,15 +564,13 @@ class StorageBackend(ABC):
         if not upstream_actions:
             return [{k: v for k, v in r.items() if k != "_delta_mode"} for r in delta_records]
 
-        upstream_data = self._read_target_raw_batch(upstream_actions, relative_path)
-
         # A guid's "full" record is self-contained above the action that stored it,
         # so it bounds that guid's merge — the shallowest such action, because a
         # position in this list is not proof of being an ancestor.
         upstream: dict[str, dict[str, dict[str, Any]]] = {}
         full_boundary_guids: dict[str, str] = {}  # guid → action that has full record
         position = {act: i for i, act in enumerate(upstream_actions)}
-        for act, records in upstream_data.items():
+        for act, records in self._each_upstream_raw(upstream_actions, relative_path):
             guid_map: dict[str, dict[str, Any]] = {}
             for rec in records:
                 guid = rec.get("source_guid")
@@ -577,6 +588,7 @@ class StorageBackend(ABC):
                         if held is None or position.get(act, 0) < position.get(held, 0):
                             full_boundary_guids[guid] = act
             upstream[act] = guid_map
+            del records
 
         # For each current record, determine how far back to reconstruct: a guid
         # whose boundary is upstream skips that boundary's own upstream, which the
