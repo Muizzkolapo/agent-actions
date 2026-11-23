@@ -363,10 +363,9 @@ The payload is the difference between this option and `retry`. An authored promp
 
 This section migrates a `reprompt:` block. To move a hand-built chain of actions onto `expect:`, see [Migrate a Check Chain to `expect:`](../../guides/expectations-migration.md). In such a chain, one action checks an output, a tool collects the verdicts and a third action rewrites the failures. That guide also lists the checks that must stay hand-built.
 
-`reprompt:` was removed. Agent Actions refuses a configuration that has it at load. The error names the `expect:` block that
-replaces it. The full migration is below. All four blocks that can contain `reprompt:`
-refuse it: an action, `defaults:`, a top-level `agents:` entry, and the `default_agent_config:` block
-of `agent_actions.yml`. Thus if you move it up a level, the workflow still gets the error.
+`reprompt:` was removed. An action, a `defaults:` block and the `default_agent_config:` block of
+`agent_actions.yml` refuse it at load with the error that any unknown key gets. The `expect:` block replaces it.
+The full migration is below.
 
 **A block that only checked the schema** (the common case) becomes an `expect:` with no rules. Set it
 one time for the workflow:
@@ -402,7 +401,7 @@ A check that is really specific to the project becomes an [`@expectation_check`]
 It returns `(passed, detail)`, not only a boolean. Thus the failure goes into the repair
 prompt, not only into the log.
 
-**`on_schema_mismatch:` was also removed.** `expect: {repair: auto}` does what `reprompt` mode did.
+**`on_schema_mismatch:` was also removed.** It also fails as an unknown key. `expect: {repair: auto}` does what `reprompt` mode did.
 `reject` (halt, and do not generate again) becomes `max_iterations: 1` with `on_exhausted: raise`.
 
 **A run deferred during a reprompt** cannot resume. Its stored state names a recovery phase that this
