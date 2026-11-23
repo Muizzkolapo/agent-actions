@@ -599,6 +599,31 @@ Use the tiers in this order of preference:
 3. `llm_judge` (semantic, natural language).
 4. A custom check. This is Python code that you then own and test.
 
+## Testing rules with the mock provider
+
+On `model_vendor: agac-provider`, the mock reads the rules of the action as well as its schema. It reads the same rules as the run: the inline `expectations:` list, the rules of the schema file and a named `suite:`. Thus a workflow that you switch to the mock passes its rules, and a repair loop ends on the first generation. The mock does this online and in a batch in the same way.
+
+For each top-level field that a rule names, the mock makes a value that meets the schema and the rules of that field:
+
+| Rule or keyword | What the mock makes |
+|-----------------|---------------------|
+| `enum` and `accepted_values` | A value that all of them allow |
+| `pattern` and `matches_regex` | A string that the regular expression matches |
+| `matches_regex` with `negate: true` | A value that the expression does not match. A field-name value that matches is replaced by plain words |
+| `word_count_between` | A sentence with a word count in the range |
+| `item_count` | A list with a length in the range, inside `minItems` and `maxItems` |
+| `not_null`, `no_null_fields` | A value that is not null and not empty |
+| A rule on `field[*]` | Each element meets the rule |
+| `expression`, a custom check and each other type | A generated value. The real check tests it |
+
+Then the real runner checks the full record. If a rule fails, the mock makes the record again, up to 20 times. An `llm_judge` rule is not part of this check. The judge call gets a verdict as [Testing a judge offline](#testing-a-judge-offline) tells.
+
+The regular expression support is a subset: literals and escaped characters, `.`, `\d`, `\w`, `\s` and their negations, `[...]` with ranges and negation, `?`, `*`, `+`, `{m}`, `{m,}`, `{m,n}`, groups, `|`, `^` and `$`. An unbounded repeat (`*`, `+`, `{m,}`) adds a maximum of three repeats. A pattern outside the subset, for example a lookahead, a backreference or an inline flag, gets a generated value that the check tests.
+
+**Upstream values.** If a reference in `context_scope.observe` names a field, and an output field has the same name, the mock copies the input value. A wildcard reference (`action.*`) does not copy a value. A loop writer observes `prior.*`, and that holds the field that the writer must write again. The value must meet the schema and the rules of the output field. Thus an id stays the same through the actions of the workflow. The mock reads the context that the request sends. Under `context_block: auto`, a field that the prompt prints as `{{ action.field }}` is not in that context. To copy such a field, set `context_block: all` on the action.
+
+**Constraints that no value meets.** If the mock cannot meet a rule after 20 tries, it logs a warning once for each action and field in the run. The warning names the action, the field, the constraints on the field and the rules that still fail. For example, `maxLength: 5` and `word_count_between: {min: 10}` on one field make this warning. The mock still returns its best record, and the run continues.
+
 ## When not to use an expectation
 
 An expectation judges the output of one record against a written rule. Use this test: can a careful reader decide the rule from this one record and the rule text? If yes, use an expectation. If no, use a tool or a chain of actions:
