@@ -100,9 +100,9 @@ def test_only_the_rows_added_or_changed_since_the_snapshot_are_answered_again(pr
     _agac(project, "run")
     _sql(project, "INSERT INTO topics VALUES (4, 'volcanoes', 1)")
     _sql(project, "UPDATE topics SET bar = 1 WHERE id = 2")
-    shutil.rmtree(project / IO / "_remote_cache")
 
-    output = _agac(project, "run")
+    assert "already complete" in _agac(project, "run")
+    output = _agac(project, "run", "--refresh-input")
 
     assert "✓ spec 2 records" in output, output
     assert _published(project) == [
@@ -121,3 +121,27 @@ def test_an_export_of_one_action_writes_only_its_table(project):
 
     assert "Wrote 2 rows to published" in output and "flagged" not in output, output
     assert _sql(project, "SELECT count(*) FROM flagged") == [(0,)]
+
+
+def test_a_row_that_leaves_the_query_takes_no_other_row_back_to_the_model(project):
+    _agac(project, "run")
+    _sql(project, "DELETE FROM topics WHERE id = 1")
+
+    output = _agac(project, "run", "--refresh-input")
+
+    assert "✓ spec 0 records" in output, output
+    assert "will reprocess" not in output, output
+
+
+def test_a_write_that_fails_says_the_results_are_stored_and_how_to_write_them(project):
+    _sql(project, "CREATE TABLE published (unrelated TEXT)")
+
+    result = run_agac(project, "run", "-a", WORKFLOW)
+    output = " ".join((result.stdout + result.stderr).split())
+
+    assert result.returncode != 0
+    assert "Every action finished, but writing the outputs failed" in output, output
+    assert f"agac export -w {WORKFLOW}" in output, output
+
+    _sql(project, "DROP TABLE published")
+    assert "Wrote 2 rows to published" in _agac(project, "export")

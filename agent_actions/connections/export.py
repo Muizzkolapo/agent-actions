@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterable, Iterator
+from collections.abc import Collection, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 from agent_actions.config.schema import OUTPUT_IDENTITY_COLUMN as IDENTITY_COLUMN
 from agent_actions.config.schema import OutputConfig
-from agent_actions.connections import Connector, WriteMode, open_connection
+from agent_actions.connections import ColumnType, Connector, WriteMode, open_connection
 from agent_actions.errors import ConfigurationError
 from agent_actions.record.state import CASCADE_BLOCKING_STATES, RecordState
 from agent_actions.storage.backend import StorageBackend
@@ -42,8 +42,8 @@ def output_table(
         clash = sorted(set(answer) & set(columns[: len(carry) + 1]))
         if clash:
             raise ConfigurationError(
-                f"Action '{action}' has a field named like a carried column: "
-                f"{', '.join(clash)}; drop it from 'carry'",
+                f"Action '{action}' has a field named like a column written beside "
+                f"its own: {', '.join(clash)}; drop it from 'carry' or rename the field",
                 context={"action": action, "fields": clash},
             )
         source = content.get("source")
@@ -54,6 +54,22 @@ def output_table(
         columns.extend(name for name in answer if name not in columns)
         flat.append(row)
     return columns, [tuple(_cell(row.get(name)) for name in columns) for row in flat]
+
+
+def column_types(columns: list[str], rows: list[tuple[Any, ...]]) -> dict[str, ColumnType]:
+    """The type each column's values share; text when they share none or are all null."""
+    types: dict[str, ColumnType] = {}
+    for position, name in enumerate(columns):
+        kinds = {type(row[position]) for row in rows} - {type(None)}
+        if kinds == {bool}:
+            types[name] = ColumnType.BOOLEAN
+        elif kinds == {int}:
+            types[name] = ColumnType.INTEGER
+        elif kinds and kinds <= {int, float}:
+            types[name] = ColumnType.REAL
+        else:
+            types[name] = ColumnType.TEXT
+    return types
 
 
 def _cell(value: Any) -> Any:
@@ -76,7 +92,14 @@ def write_output(backend: StorageBackend, output: OutputConfig, connector: Conne
         rows = _last_row_per_key(columns, rows, output.key, output.table)
     if not rows and output.mode is not WriteMode.REPLACE:
         return 0
-    return connector.write(output.table, columns, rows, mode=output.mode, key=output.key)
+    return connector.write(
+        output.table,
+        columns,
+        rows,
+        mode=output.mode,
+        key=output.key,
+        types=column_types(columns, rows),
+    )
 
 
 def _last_row_per_key(
@@ -99,12 +122,28 @@ def write_outputs(
     backend: StorageBackend,
     declared: Any,
     project_root: Path,
+    *,
+    actions: Collection[str],
     only_action: str | None = None,
 ) -> dict[str, int]:
-    """Write every output a workflow declares; rows written, keyed by table."""
+    """Write every output a workflow declares; rows written, keyed by table.
+
+    *actions* are the workflow's own: an output naming any other is refused
+    before a table is touched.
+    """
+    outputs = [
+        entry if isinstance(entry, OutputConfig) else OutputConfig(**entry)
+        for entry in declared or []
+    ]
+    unknown = sorted({output.action for output in outputs} - set(actions))
+    if unknown:
+        raise ConfigurationError(
+            f"outputs name {', '.join(unknown)}, which this workflow does not run "
+            f"(it runs {', '.join(actions)})",
+            context={"unknown": unknown},
+        )
     written: dict[str, int] = {}
-    for entry in declared or []:
-        output = entry if isinstance(entry, OutputConfig) else OutputConfig(**entry)
+    for output in outputs:
         if only_action and output.action != only_action:
             continue
         with open_connection(output.connection, project_root) as connector:

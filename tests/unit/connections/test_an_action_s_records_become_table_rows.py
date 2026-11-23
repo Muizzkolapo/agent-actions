@@ -3,8 +3,13 @@
 import pytest
 
 from agent_actions.config.schema import OutputConfig
-from agent_actions.connections import WriteMode
-from agent_actions.connections.export import output_table, write_output
+from agent_actions.connections import ColumnType, WriteMode
+from agent_actions.connections.export import (
+    column_types,
+    output_table,
+    write_output,
+    write_outputs,
+)
 from agent_actions.connections.sqlite import SqliteConnector
 from agent_actions.errors import ConfigurationError
 
@@ -65,7 +70,7 @@ def test_a_record_the_action_did_not_answer_makes_no_row(state):
 def test_an_answered_field_named_like_a_carried_column_is_refused():
     records = [_record("g1", {"id": "theirs"}, source={"id": 7})]
 
-    with pytest.raises(ConfigurationError, match="named like a carried column: id"):
+    with pytest.raises(ConfigurationError, match="named like a column written beside its own: id"):
         output_table(records, "grade", ["id"])
 
 
@@ -121,3 +126,50 @@ def test_no_records_leaves_an_appended_table_untouched_and_empties_a_replaced_on
 
     assert write_output(_Stored([]), _output(mode=WriteMode.REPLACE), connector) == 0
     assert _held(connector) == []
+
+
+def test_a_column_takes_the_type_its_values_share():
+    columns = ["whole", "mixed", "flag", "words", "empty", "odd"]
+    rows = [(1, 1, True, "a", None, 1), (None, 2.5, False, "b", None, "x")]
+
+    assert column_types(columns, rows) == {
+        "whole": ColumnType.INTEGER,
+        "mixed": ColumnType.REAL,
+        "flag": ColumnType.BOOLEAN,
+        "words": ColumnType.TEXT,
+        "empty": ColumnType.TEXT,
+        "odd": ColumnType.TEXT,
+    }
+
+
+def test_the_table_an_output_creates_is_typed_by_its_values(connector):
+    store = _Stored([_record("g1", {"score": 4, "ratio": 0.5, "passed": True})])
+
+    write_output(store, _output(), connector)
+
+    declared = {
+        row["name"]: row["type"]
+        for row in connector.read("SELECT name, type FROM pragma_table_info('grades')")
+    }
+    assert declared == {
+        "source_guid": "TEXT",
+        "score": "INTEGER",
+        "ratio": "REAL",
+        "passed": "BOOLEAN",
+    }
+
+
+def test_an_output_naming_an_action_the_workflow_does_not_run_is_refused(tmp_path):
+    declared = [{"action": "grad", "connection": "warehouse", "table": "grades"}]
+
+    with pytest.raises(ConfigurationError, match="outputs name grad, which .* runs grade"):
+        write_outputs(_Stored([]), declared, tmp_path, actions=["grade"])
+
+
+@pytest.mark.parametrize(
+    ("carry", "problem"),
+    [(["id", "id"], "names id more than once"), (["source_guid"], "is the record's identity")],
+)
+def test_a_carried_column_that_would_be_written_twice_is_refused(carry, problem):
+    with pytest.raises(ValueError, match=problem):
+        _output(carry=carry)

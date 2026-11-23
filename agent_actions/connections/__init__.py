@@ -6,11 +6,19 @@ import importlib
 from pathlib import Path
 from typing import Any
 
-from agent_actions.connections.base import Connector, Row, WriteMode, json_safe, quoted_identifier
+from agent_actions.connections.base import (
+    ColumnType,
+    Connector,
+    Row,
+    WriteMode,
+    json_safe,
+    quoted_identifier,
+)
 from agent_actions.errors import ConfigurationError
 
 __all__ = [
     "CONNECTORS",
+    "ColumnType",
     "Connector",
     "Row",
     "WriteMode",

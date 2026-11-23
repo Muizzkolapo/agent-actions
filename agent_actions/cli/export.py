@@ -34,6 +34,12 @@ def export(agent: str, action: str | None, project_root: Path | None = None) -> 
     if not declared:
         raise click.ClickException(f"Workflow '{name}' declares no outputs")
     root = project_root or find_project_root(str(paths.current_dir)) or paths.current_dir
-    written = write_outputs(loaded.storage_backend, declared, root, only_action=action)
+    written = write_outputs(
+        loaded.storage_backend,
+        declared,
+        root,
+        actions=list(loaded.execution_order),
+        only_action=action,
+    )
     for table, count in written.items():
         click.echo(f"Wrote {count} rows to {table}")

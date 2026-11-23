@@ -31,6 +31,7 @@ EVERY_COMMAND = [
     "docs",
     "example",
     "expect",
+    "export",
     "init",
     "inspect",
     "list-udfs",

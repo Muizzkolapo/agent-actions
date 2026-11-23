@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from itertools import chain
 from pathlib import Path
 from typing import Any
 
-from agent_actions.connections.base import Connector, Row, WriteMode, quoted_identifier
+from agent_actions.connections.base import (
+    ColumnType,
+    Connector,
+    Row,
+    WriteMode,
+    quoted_identifier,
+)
 from agent_actions.errors import ConfigurationError
 
 _INSERT_BATCH = 500
@@ -68,6 +74,7 @@ class SqliteConnector(Connector):
         *,
         mode: WriteMode,
         key: Sequence[str] = (),
+        types: Mapping[str, ColumnType] | None = None,
     ) -> int:
         if mode is WriteMode.MERGE and not key:
             raise ConfigurationError(
@@ -75,6 +82,12 @@ class SqliteConnector(Connector):
             )
         target = quoted_identifier(table)
         names = [quoted_identifier(column) for column in columns]
+        kinds = types or {}
+        # A column given no type is declared with none, so it holds a value as written.
+        declared = [
+            f"{name} {kinds[column].value.upper()}" if column in kinds else name
+            for name, column in zip(names, columns, strict=True)
+        ]
         key_positions = [columns.index(column) for column in key]
         key_match = " AND ".join(f"{quoted_identifier(column)} IS ?" for column in key)
         # A name cannot be bound as a value is; quoted_identifier lets only plain names by.
@@ -91,7 +104,7 @@ class SqliteConnector(Connector):
             if first is None and not self._held_columns(connection, table):
                 connection.execute("ROLLBACK")
                 return 0
-            connection.execute(f"CREATE TABLE IF NOT EXISTS {target} ({', '.join(names)})")
+            connection.execute(f"CREATE TABLE IF NOT EXISTS {target} ({', '.join(declared)})")
             if first is not None:
                 self._refuse_missing_columns(connection, table, columns)
             if mode is WriteMode.REPLACE:
@@ -121,8 +134,10 @@ class SqliteConnector(Connector):
     @staticmethod
     def _held_columns(connection: sqlite3.Connection, table: str) -> set[str]:
         """The columns *table* has; none when there is no such table."""
-        bare = table.rsplit(".", 1)[-1]
-        found = connection.execute("SELECT name FROM pragma_table_info(?)", (bare,))
+        schema, _, bare = table.rpartition(".")
+        found = connection.execute(
+            "SELECT name FROM pragma_table_info(?, ?)", (bare, schema or "main")
+        )
         return {row["name"] for row in found}
 
     def _refuse_missing_columns(
