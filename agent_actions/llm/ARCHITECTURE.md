@@ -289,7 +289,8 @@ All state is persisted to StorageBackend metadata between runs:
                                   what was submitted: names the parts
                                   ({name}#{generation}:{index}, ~4 MB each) the
                                   context map is stored in; a map an earlier
-                                  version saved whole sits at {name} itself
+                                  version saved whole sits at {name} itself,
+                                  and wins over the parts when both exist
   batch_inputs:{action}:{name}    what the action took as input, above every
                                   narrowing — read by carry-forward to tell a
                                   record the run left out from one that is gone

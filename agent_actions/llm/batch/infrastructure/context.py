@@ -29,13 +29,17 @@ def batch_output_name(file_name: str) -> str:
 
 
 def checked_batch_file_name(name: str) -> str:
-    """*name*, refused if it would leave the action's input root.
+    """*name*, refused if it would leave the action's input root, or if it holds ``#``.
 
     A `..` inside a part is part of a name (`v1..2/page.json`), as the store reads it.
+    A context map's part keys are its key, then ``#``; a name with ``#`` could spell
+    another file's. The store refuses such a name too, so no run stores one.
     """
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts:
         raise ValueError(f"Invalid batch file name, outside the input root: {name}")
+    if "#" in name:
+        raise ValueError(f"Invalid batch file name, it holds '#': {name}")
     return name
 
 
@@ -306,10 +310,11 @@ class BatchContextManager:
     ) -> None:
         """Store the map in parts, then name them under the map's parts key.
 
-        The parts are written before the parts key names them, and what the key named
-        before (or the map an earlier version saved whole) is deleted after, so a
-        reader finds the earlier map or this one, whole. A save that fails leaves the
-        earlier map as it stood.
+        The parts are written first. One transaction then writes the parts key and
+        deletes a map an earlier version saved whole. The parts the key named before
+        are deleted last. A save that fails leaves the earlier map as it stood. A save
+        that stops after the transaction leaves earlier parts that nothing reads;
+        ``clear_batch_state`` (and ``--fresh``) removes them.
         """
         key = BatchContextManager._metadata_key(action_name, batch_name)
         generation = uuid.uuid4().hex[:12]
@@ -321,7 +326,9 @@ class BatchContextManager:
                 backend.save_metadata(part_key, part)
                 written.append(part_key)
             header = {"generation": generation, "parts": len(written)}
-            backend.save_metadata(_parts_key(key), json.dumps(header))
+            # One transaction, so the parts key and a map saved whole exist together
+            # only when an earlier version saved that map after this one saved parts.
+            backend.save_and_delete_metadata({_parts_key(key): json.dumps(header)}, [key])
         except Exception as e:
             for part_key in written:
                 try:
@@ -333,7 +340,6 @@ class BatchContextManager:
                 cause=e,
                 context={"action_name": action_name, "batch_name": batch_name},
             ) from e
-        backend.delete_metadata(key)
         for part_key in earlier:
             backend.delete_metadata(part_key)
         logger.debug(
@@ -348,20 +354,25 @@ class BatchContextManager:
     def load_batch_context_map(
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> dict[str, Any]:
-        """The map as saved: in parts, or as one string by an earlier version."""
+        """The map as saved: as one string by an earlier version, or in parts.
+
+        A map saved whole wins over parts: a save deletes it in the transaction that
+        names its parts, so both exist only when an earlier version saved it later.
+        """
         try:
             key = BatchContextManager._metadata_key(action_name, batch_name)
-            part_keys = _part_keys(backend, key)
-            if part_keys is not None:
-                context_map = _joined_parts(backend, part_keys)
+            raw = backend.load_metadata(key)
+            context_map: dict[str, Any]
+            if raw is not None:
+                context_map = deep_json.loads(raw)
             else:
-                raw = backend.load_metadata(key)
-                if raw is None:
+                loaded = _loaded_parts(backend, key)
+                if loaded is None:
                     raise ProcessingError(
                         f"Context map not found for {action_name}/{batch_name}",
                         context={"action_name": action_name, "batch_name": batch_name},
                     )
-                context_map = deep_json.loads(raw)
+                context_map = loaded
             logger.debug(
                 "Loaded context map for %s/%s (%d entries)",
                 action_name,
@@ -421,7 +432,8 @@ def _encoded_parts(context_map: dict[str, Any]) -> Iterator[str]:
         yield "{" + ", ".join(members) + "}"
 
 
-# Neither "#" nor ":" can appear in a stored file's name, so no file's key is one of these.
+# checked_batch_file_name refuses a name with "#", so a file's key holds no "#" and no
+# file's key is another file's part key or parts key.
 def _parts_key(key: str) -> str:
     return f"{key}#parts"
 
@@ -431,7 +443,7 @@ def _part_key(key: str, generation: str, index: int) -> str:
 
 
 def _part_keys(backend: "StorageBackend", key: str) -> list[str] | None:
-    """The keys of the parts the map is stored in; None for a map saved whole, or none saved."""
+    """The keys of the parts the parts key names; None when no parts key is saved."""
     raw = backend.load_metadata(_parts_key(key))
     if raw is None:
         return None
@@ -448,13 +460,40 @@ def _part_keys(backend: "StorageBackend", key: str) -> list[str] | None:
     return [_part_key(key, header["generation"], index) for index in range(header["parts"])]
 
 
-def _joined_parts(backend: "StorageBackend", part_keys: list[str]) -> dict[str, Any]:
+# A save that overtakes a load deletes the parts the load reads; the load starts again
+# from the parts key this many times before it gives up.
+_LOAD_TRIES = 3
+
+
+def _loaded_parts(backend: "StorageBackend", key: str) -> dict[str, Any] | None:
+    """The map the parts key names; None when no parts key is saved."""
+    part_keys = _part_keys(backend, key)
+    for _ in range(_LOAD_TRIES):
+        if part_keys is None:
+            return None
+        context_map, missing = _joined_parts(backend, part_keys)
+        if missing is None:
+            return context_map
+        named_now = _part_keys(backend, key)
+        if named_now == part_keys:
+            raise ProcessingError(
+                f"Context map part {missing} is missing", context={"part": missing}
+            )
+        part_keys = named_now
+    raise ProcessingError(
+        f"Context map {key} was saved again during each of {_LOAD_TRIES} loads",
+        context={"key": key},
+    )
+
+
+def _joined_parts(
+    backend: "StorageBackend", part_keys: list[str]
+) -> tuple[dict[str, Any], str | None]:
+    """The map the parts hold, and the first part that is gone (None if all are there)."""
     context_map: dict[str, Any] = {}
     for part_key in part_keys:
         part = backend.load_metadata(part_key)
         if part is None:
-            raise ProcessingError(
-                f"Context map part {part_key} is missing", context={"part": part_key}
-            )
+            return {}, part_key
         context_map.update(deep_json.loads(part))
-    return context_map
+    return context_map, None
