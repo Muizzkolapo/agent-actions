@@ -82,12 +82,12 @@ def _refuse_unknown(kind: str, value: str, known: type[Enum]) -> None:
     # Not a ValueError: the loaders skip those, and a skipped entry makes its
     # parent batch look unsubmitted, so the next run pays for it again.
     if value not in {member.value for member in known}:
-        # Its remedy, --fresh, is the action's, not one file's.
+        # Its remedy, --fresh, is the whole workflow's, not one file's.
         raise mark_action_fatal(
             UnknownRecoveryState(
-                f"The stored recovery {kind} '{value}' is not one this version knows. "
-                f"Its stored state cannot be resumed. Re-run the action with --fresh to "
-                f"start it again; the records it had already completed are in the store."
+                f"The stored recovery {kind} '{value}' is not one this version knows, "
+                f"so its batch cannot be resumed. Run the workflow with `agac run --fresh` "
+                f"to start it over; that removes the workflow's stored results."
             )
         )
 
