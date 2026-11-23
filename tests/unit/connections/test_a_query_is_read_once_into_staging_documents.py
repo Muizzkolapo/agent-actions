@@ -10,7 +10,7 @@ import pytest
 from agent_actions.connections.sqlite import SqliteConnector
 from agent_actions.errors import ConfigurationError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
-from agent_actions.input.loaders.database_source import snapshot_query
+from agent_actions.input.loaders.database_source import drop_database_snapshots, snapshot_query
 
 SOURCE = {"type": "database", "connection": "warehouse", "sql": "SELECT id, topic FROM topics"}
 
@@ -40,35 +40,59 @@ def _resolve(project: Path, **changes) -> Path:
     return directory
 
 
+def _staged(directory: Path) -> list[dict]:
+    rows = [row for document in _documents(directory).values() for row in document]
+    return sorted(rows, key=lambda row: row["id"])
+
+
+def _file_of(directory: Path) -> dict[int, str]:
+    return {row["id"]: name for name, rows in _documents(directory).items() for row in rows}
+
+
 def test_the_rows_are_staged_as_documents_of_records(project):
-    documents = _documents(_resolve(project))
-
-    assert documents == {"part-00000.json": [{"id": n, "topic": f"topic {n}"} for n in range(5)]}
+    assert _staged(_resolve(project)) == [{"id": n, "topic": f"topic {n}"} for n in range(5)]
 
 
-def test_the_rows_are_split_into_files_of_chunk_rows(project):
-    documents = _documents(_resolve(project, chunk_rows=2))
-
-    assert [len(rows) for rows in documents.values()] == [2, 2, 1]
-    assert list(documents) == ["part-00000.json", "part-00001.json", "part-00002.json"]
+def test_the_rows_are_spread_over_no_more_files_than_asked(project):
+    assert len(_documents(_resolve(project, files=2))) <= 2
+    assert list(_documents(_resolve(project, sql="SELECT id FROM topics", files=1))) == [
+        "part-00000.json"
+    ]
 
 
 def test_a_second_resolution_reads_the_snapshot_not_the_database(project):
-    first = _resolve(project)
+    first = _staged(_resolve(project))
     (project / "warehouse.db").unlink()
 
-    assert _documents(_resolve(project)) == _documents(first)
+    assert _staged(_resolve(project)) == first
 
 
 def test_a_dropped_snapshot_is_read_again_with_the_rows_added_since(project):
-    snapshot = _resolve(project)
+    _resolve(project)
     with sqlite3.connect(project / "warehouse.db") as raw:
         raw.execute("INSERT INTO topics VALUES (5, 'topic 5')")
-    for document in snapshot.iterdir():
-        document.unlink()
-    snapshot.rmdir()
+    drop_database_snapshots(project / "agent_io")
 
-    assert len(_documents(_resolve(project))["part-00000.json"]) == 6
+    assert len(_staged(_resolve(project))) == 6
+
+
+def test_a_row_stays_in_its_file_when_the_rows_around_it_come_and_go(project):
+    before = _file_of(_resolve(project, files=3))
+    with sqlite3.connect(project / "warehouse.db") as raw:
+        raw.execute("DELETE FROM topics WHERE id = 0")
+        raw.execute("INSERT INTO topics VALUES (9, 'topic 9')")
+    drop_database_snapshots(project / "agent_io")
+
+    after = _file_of(_resolve(project, files=3))
+
+    assert {n: after[n] for n in (1, 2, 3, 4)} == {n: before[n] for n in (1, 2, 3, 4)}
+
+
+def test_a_row_s_file_does_not_depend_on_the_order_of_its_columns(project):
+    by_id = _file_of(_resolve(project, files=3))
+    swapped = _file_of(_resolve(project, sql="SELECT topic, id FROM topics", files=3))
+
+    assert swapped == by_id
 
 
 def test_another_query_keeps_a_snapshot_of_its_own(project):
@@ -89,7 +113,7 @@ def test_a_read_that_stops_partway_leaves_no_snapshot_behind(tmp_path: Path):
             raise ConfigurationError("the connection dropped")
 
     with pytest.raises(ConfigurationError, match="dropped"):
-        snapshot_query(Stops(tmp_path / "w.db"), "SELECT 1", tmp_path / "data", chunk_rows=1)
+        snapshot_query(Stops(tmp_path / "w.db"), "SELECT 1", tmp_path / "data")
 
     assert not (tmp_path / "data").exists()
 
@@ -101,7 +125,7 @@ def test_a_value_json_cannot_hold_is_staged_in_its_json_form(tmp_path: Path):
 
     snapshot_query(Dated(tmp_path / "w.db"), "SELECT 1", tmp_path / "data")
 
-    assert _documents(tmp_path / "data") == {"part-00000.json": [{"id": 1, "at": "2026-11-23"}]}
+    assert _staged(tmp_path / "data") == [{"id": 1, "at": "2026-11-23"}]
 
 
 @pytest.mark.parametrize("missing", ["connection", "sql"])

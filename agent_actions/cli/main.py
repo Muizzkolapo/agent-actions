@@ -70,7 +70,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "example": ("agent_actions.cli.example:example", "Browse and install example projects."),
     "export": (
         "agent_actions.cli.export:export",
-        "Write a workflow's declared outputs to their database tables.",
+        "Write the outputs a workflow declares to their database tables.",
     ),
     "expect": ("agent_actions.cli.expect:expect", "Inspect expectation rules and verdicts."),
     "skills": (

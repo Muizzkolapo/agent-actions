@@ -16,7 +16,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
 from agent_actions.input.loaders.database_source import (
-    DEFAULT_CHUNK_ROWS,
+    DEFAULT_SNAPSHOT_FILES,
+    REMOTE_CACHE_DIR,
     snapshot_fingerprint,
     snapshot_query,
 )
@@ -53,8 +54,11 @@ class DataSourceConfig(BaseModel):
     connection: str | None = Field(
         default=None, description="Name of a project connection (for type=database)"
     )
-    chunk_rows: int = Field(
-        default=DEFAULT_CHUNK_ROWS, ge=1, description="Rows per snapshot file (for type=database)"
+    files: int = Field(
+        default=DEFAULT_SNAPSHOT_FILES,
+        ge=1,
+        le=1024,
+        description="Files the rows are spread over (for type=database)",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -65,7 +69,7 @@ logger = logging.getLogger(__name__)
 # Safety limits for API fetches
 _MAX_RESPONSE_BYTES = ApiDefaults.MAX_RESPONSE_BYTES
 _REQUEST_TIMEOUT_SECONDS = ApiDefaults.REQUEST_TIMEOUT_SECONDS
-_REMOTE_CACHE_DIR = "_remote_cache"
+_REMOTE_CACHE_DIR = REMOTE_CACHE_DIR
 
 # Type names that require dict config — used to catch bare-string typos early
 _KNOWN_TYPES = {t.value for t in DataSourceType}
@@ -334,8 +338,8 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourceResolutionResult:
     """Resolve a database data source -- read the query once and keep its rows on disk.
 
-    A snapshot is kept per (connection, sql). Delete ``_remote_cache/database/``
-    inside agent_io to read the query again.
+    A snapshot is kept per (connection, sql). ``agac run --refresh-input`` drops
+    it, so the query is read again.
     """
     if not config.connection or not config.sql or not config.sql.strip():
         raise ConfigurationError(
@@ -356,7 +360,7 @@ def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourc
 
     project_root = find_project_root(str(agent_folder)) or agent_folder.resolve().parent
     with open_connection(config.connection, project_root) as connector:
-        snapshot_query(connector, config.sql, snapshot_dir, config.chunk_rows)
+        snapshot_query(connector, config.sql, snapshot_dir, config.files)
     return DataSourceResolutionResult(directories=[snapshot_dir])
 
 

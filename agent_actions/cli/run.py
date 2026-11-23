@@ -29,7 +29,7 @@ from agent_actions.cli.exit_codes import (
 )
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
-from agent_actions.errors import ProviderQuotaStop
+from agent_actions.errors import AgentActionsError, ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.storage.run_lock import hold_run_lock
@@ -121,6 +121,12 @@ class RunCommand:
         try:
             with hold_run_lock(paths.io_dir, self.agent_name):
                 started = time.monotonic()
+                if self.args.refresh_input:
+                    from agent_actions.input.loaders.database_source import (
+                        drop_database_snapshots,
+                    )
+
+                    drop_database_snapshots(paths.io_dir)
                 outcome = self._run_holding_the_lock(paths, project_root)
                 if self.args.wait:
                     outcome = self._wait_for_batches(outcome, paths, project_root, started)
@@ -248,7 +254,18 @@ class RunCommand:
         from agent_actions.utils.project_root import find_project_root
 
         root = project_root or find_project_root(str(Path.cwd())) or Path.cwd()
-        for table, count in write_outputs(workflow.storage_backend, declared, root).items():
+        try:
+            written = write_outputs(
+                workflow.storage_backend, declared, root, actions=list(workflow.execution_order)
+            )
+        except AgentActionsError:
+            click.echo(
+                "Every action finished, but writing the outputs failed. The results are "
+                f"stored: write them again with agac export -w {self.args.agent}",
+                err=True,
+            )
+            raise
+        for table, count in written.items():
             click.echo(f"Wrote {count} rows to {table}")
 
     def _report(self, outcome: RunOutcome, workflow: AgentWorkflow) -> None:
@@ -341,6 +358,15 @@ class RunCommand:
     help="Clear stored results and status before execution (useful after failed runs)",
 )
 @click.option(
+    "--refresh-input",
+    is_flag=True,
+    default=False,
+    help=(
+        "Read a database data source again instead of its stored snapshot. Rows "
+        "added or changed since are answered; the rest keep their answers."
+    ),
+)
+@click.option(
     "--rerun",
     metavar="ACTION",
     multiple=True,
@@ -396,6 +422,7 @@ def run(
     record_limit: int | None = None,
     file_limit: int | None = None,
     fresh: bool = False,
+    refresh_input: bool = False,
     rerun: tuple[str, ...] = (),
     verify_keys: bool = False,
     wait: bool = False,
@@ -415,6 +442,7 @@ def run(
         agac run -a my_agent
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
+        agac run -a my_agent --refresh-input
         agac run -a my_agent --rerun classify
         agac run -a my_agent --rerun classify --rerun summarize
         agac run -a my_agent --record-limit 2 --file-limit 1
@@ -433,6 +461,7 @@ def run(
         record_limit=record_limit,
         file_limit=file_limit,
         fresh=fresh,
+        refresh_input=refresh_input,
         rerun=rerun,
         verify_keys=verify_keys,
         wait=wait,

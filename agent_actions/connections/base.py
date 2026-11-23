@@ -8,7 +8,7 @@ import decimal
 import re
 import uuid
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,15 @@ class WriteMode(str, Enum):
     APPEND = "append"
     REPLACE = "replace"
     MERGE = "merge"
+
+
+class ColumnType(str, Enum):
+    """What a column holds, for the table a write creates."""
+
+    TEXT = "text"
+    INTEGER = "integer"
+    REAL = "real"
+    BOOLEAN = "boolean"
 
 
 class Connector(ABC):
@@ -53,12 +62,15 @@ class Connector(ABC):
         *,
         mode: WriteMode,
         key: Sequence[str] = (),
+        types: Mapping[str, ColumnType] | None = None,
     ) -> int:
         """Write *rows* to *table* in one transaction and return how many were written.
 
-        The table is created when it does not exist. ``MERGE`` replaces the rows
-        sharing a *key* with an incoming row, so writing the same rows twice
-        leaves the table as writing them once did.
+        The table is created when it does not exist and there are rows to write,
+        each column of the type *types* gives it.
+        ``MERGE`` replaces the rows sharing a *key* with an incoming row, so
+        writing the same rows twice leaves the table as writing them once did;
+        it removes no other row.
         """
 
     @abstractmethod

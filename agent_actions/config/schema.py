@@ -1009,6 +1009,19 @@ class OutputConfig(BaseModel):
         default_factory=list, description="Source fields written beside the action's own"
     )
 
+    @field_validator("carry")
+    @classmethod
+    def _carried_columns_are_distinct(cls, carry: list[str]) -> list[str]:
+        repeated = sorted({name for name in carry if carry.count(name) > 1})
+        if repeated:
+            raise ValueError(f"'carry' names {', '.join(repeated)} more than once")
+        if OUTPUT_IDENTITY_COLUMN in carry:
+            raise ValueError(
+                f"'{OUTPUT_IDENTITY_COLUMN}' is the record's identity and is always "
+                "written; alias the source column in the query to carry it"
+            )
+        return carry
+
 
 class WorkflowConfig(BaseModel):
     """Pydantic schema for user-facing workflow YAML files.

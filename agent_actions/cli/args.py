@@ -109,6 +109,9 @@ class RunCommandArgs(BaseModel):
         ge=1,
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
+    refresh_input: bool = Field(
+        False, description="Read a database data source again instead of its stored snapshot"
+    )
     rerun: tuple[str, ...] = Field(
         (), description="Answer every record of these actions and what reads them again"
     )
