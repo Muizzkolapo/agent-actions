@@ -224,8 +224,7 @@ share one dictionary under an empty `action_name`. A write compresses inside its
 transaction, so a rolled-back write leaves no dictionary a reader could load.
 `delete_target(action)`, `clear_source_data()`, and `clear_checkpoint_records` or
 `clear_disposition` called for a whole action drop the dictionary with the last row
-it served; `clear_prompt_traces` drops only trace dictionaries (`prompt_trace.*`, and
-the bare column names a store written before the keys were qualified holds). The DDL column
+it served; `clear_prompt_traces` drops only trace dictionaries (`prompt_trace.*`). The DDL column
 type stays `TEXT`: SQLite stores the blob as given. Unlike a trace, these columns are read on the resume
 and retry paths, where empty data would pass for an answer, so every reader goes
 through `decode_payload`, which raises `SerializationError` naming the table, action

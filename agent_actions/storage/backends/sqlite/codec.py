@@ -23,12 +23,7 @@ class SQLitePayloadCodecMixin(SQLiteHost):
     _SNAPSHOT = "record_disposition.input_snapshot"
     _SOURCE_SCOPE = ""
     _DICTIONARY_SIZE = 32768
-    # A trace dictionary: keyed prompt_trace.<column>, or by the bare column name in a
-    # store written before the keys were qualified.
-    _TRACE_DICTIONARY_SQL = (
-        "(column_name LIKE 'prompt_trace.%'"
-        " OR column_name IN ('compiled_prompt', 'llm_context', 'response_text'))"
-    )
+    _TRACE_DICTIONARY_SQL = "column_name LIKE 'prompt_trace.%'"
 
     def _compress(self, cursor: sqlite3.Cursor, scope: str, key: str, text: str) -> bytes:
         """Compress against the dictionary for (*scope*, *key*), made from its first value.
