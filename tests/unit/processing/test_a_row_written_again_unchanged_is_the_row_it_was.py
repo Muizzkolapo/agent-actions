@@ -5,11 +5,15 @@ actions below hold for it still answers, so their dispositions for it are kept.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 
-from agent_actions.processing.disposition_gate import rows_written_again_unchanged
+from agent_actions.processing.disposition_gate import (
+    guard_skips_as_stored,
+    rows_written_again_unchanged,
+)
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.workflow.pipeline import (
     _forget_answers_below,
@@ -64,6 +68,26 @@ class TestWhichRowsAreTheRowsTheyWere:
         _, unchanged = rows_written_again_unchanged(produced, stored)
 
         assert unchanged == {"b"}
+
+    def test_the_node_ids_of_the_rows_it_was_made_from_are_not_what_it_holds(self):
+        """`lineage_sources` names upstream rows by node id, which a run mints again for
+        a row an action keeps (1876): like `lineage`, it never decides a put-back."""
+        stored = [_row("b", "beta", run=1, lineage_sources=["judge_1", "catalogue_1_0"])]
+        produced = [_row("b", "beta", run=2, lineage_sources=["judge_2", "catalogue_2_5"])]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == {"b"}
+        assert out[0]["lineage_sources"] == ["judge_1", "catalogue_1_0"]
+
+    def test_a_row_holding_something_else_is_new_whatever_its_lineage_sources(self):
+        stored = [_row("b", "beta", run=1, lineage_sources=["judge_1"])]
+        produced = [_row("b", "beta (2 of 2)", run=2, lineage_sources=["judge_1"])]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == frozenset()
+        assert out[0] is produced[0]
 
     @pytest.mark.parametrize(
         "differs",
@@ -238,6 +262,17 @@ class TestARowMintedAnIdentityIsMatchedByWhatItHolds:
         assert unchanged == {"r1"}
         assert out[0]["target_id"] == "target-alpha + beta-1"
 
+    def test_a_roll_up_made_from_rows_minted_again_is_put_back(self):
+        stored = [_row("r1", "a + b", producer_source_guids=["a", "b"], lineage_sources=["x_1"])]
+        produced = [
+            _row("r2", "a + b", run=2, producer_source_guids=["a", "b"], lineage_sources=["x_2"])
+        ]
+
+        out, unchanged = rows_written_again_unchanged(produced, stored)
+
+        assert unchanged == {"r1"}
+        assert out[0] is stored[0]
+
     def test_a_roll_up_over_records_it_did_not_hold_is_new(self):
         stored = [_row("r1", "beta", producer_source_guids=["b"])]
         produced = [_row("r2", "beta", run=2, producer_source_guids=["a", "b"])]
@@ -245,6 +280,65 @@ class TestARowMintedAnIdentityIsMatchedByWhatItHolds:
         _, unchanged = rows_written_again_unchanged(produced, stored)
 
         assert unchanged == frozenset()
+
+
+def _skip(guid: str, page: str, run: int = 1, **extra: Any) -> dict[str, Any]:
+    """A guard skip: the input's content passed through, the action's own left out."""
+    return _row(
+        guid,
+        page,
+        run=run,
+        _state="guard_skipped",
+        _tombstone=True,
+        node_id=f"judge_{page}_{run}",
+        lineage=[f"catalogue_{page}", f"judge_{page}_{run}"],
+        **extra,
+    )
+
+
+class TestAGuardSkipHoldingWhatItHeldIsTheRowItWas:
+    """A skip answers nothing, so each run puts the record to the guard again and mints
+    its row anew. One holding what the stored row holds is put back (1876), so the rows
+    a FILE tool below makes from it are made from the row they were made from before."""
+
+    def test_a_skip_holding_what_it_held_is_put_back_as_stored(self):
+        stored = [_skip("b", "beta", run=1)]
+        produced = [_skip("b", "beta", run=2)]
+
+        assert guard_skips_as_stored(produced, stored) == [stored[0]]
+
+    def test_a_skip_holding_something_else_is_the_new_row(self):
+        stored = [_skip("b", "beta", run=1)]
+        produced = [_skip("b", "beta changed", run=2)]
+
+        assert guard_skips_as_stored(produced, stored) == produced
+
+    def test_a_record_skipped_now_but_answered_before_is_the_new_row(self):
+        stored = [_row("b", "beta", run=1)]
+        produced = [_skip("b", "beta", run=2)]
+
+        assert guard_skips_as_stored(produced, stored) == produced
+
+    def test_an_answer_is_never_put_back(self):
+        stored = [_row("b", "beta", run=1)]
+        produced = [_row("b", "beta", run=2)]
+
+        assert guard_skips_as_stored(produced, stored) == produced
+
+    def test_the_rows_keep_their_order_and_number(self):
+        stored = [_skip("a", "alpha"), _skip("b", "beta")]
+        produced = [_row("c", "gamma", run=2), _skip("b", "beta", run=2), _skip("a", "a2", run=2)]
+
+        out = guard_skips_as_stored(produced, stored)
+
+        assert out == [produced[0], stored[1], produced[2]]
+
+    @pytest.mark.parametrize("twice", ["stored", "produced"])
+    def test_an_identity_held_by_several_rows_is_never_put_back(self, twice):
+        stored = [_skip("b", "beta")] * (2 if twice == "stored" else 1)
+        produced = [_skip("b", "beta", run=2)] * (2 if twice == "produced" else 1)
+
+        assert guard_skips_as_stored(produced, stored) == produced
 
 
 class TestWhatThisRunVouchesForARowPutBack:
@@ -282,9 +376,15 @@ class TestWhatThisRunVouchesForARowPutBack:
 class _Backend:
     """Holds one file per action below, and records what is cleared."""
 
-    def __init__(self, below: dict[str, list[dict[str, Any]]]) -> None:
+    def __init__(
+        self, below: dict[str, list[dict[str, Any]]], graph: dict[str, list[str]] | None = None
+    ) -> None:
         self._below = below
+        self._graph = graph
         self.cleared: dict[str, list[str]] = {}
+
+    def load_metadata(self, key: str) -> str | None:
+        return json.dumps(self._graph) if key == "dependency_graph" and self._graph else None
 
     def read_target_for_rewrite(self, action_name: str, relative_path: str) -> list[dict]:
         try:
@@ -507,3 +607,51 @@ class TestWhatIsForgottenBelow:
         )
 
         assert backend.cleared == {}
+
+    def test_a_file_tool_below_that_writes_its_file_again_is_cleared_alone(self):
+        """`route` reads `judge` and is handed the file again; what it puts back unchanged
+        decides what `answer` below it holds. Beta's answer at `judge` is built on beta's
+        row alone, which is unchanged, so it stands whatever `route` names (1876)."""
+        backend = _Backend(
+            {
+                "judge": [_below("a"), _below("b")],
+                "route": [_below("P", producer_source_guids=["a", "b"])],
+                "answer": [_below("P")],
+            },
+            graph={
+                "judge": ["tool"],
+                "route": ["tool", "judge"],
+                "answer": ["tool", "judge", "route"],
+            },
+        )
+
+        _forget_answers_below(
+            backend,
+            ["judge", "route", "answer"],
+            "p.json",
+            self.REPLACED,
+            self.INPUTS,
+            frozenset({"b"}),
+            whole_file_readers=frozenset({"route"}),
+            file_tools_run_again=frozenset({"route"}),
+        )
+
+        assert backend.cleared == {"judge": ["a"], "route": ["P", "a", "b"]}
+
+    def test_a_file_tool_below_with_no_config_held_still_clears_every_action_below(self):
+        """Not run again, it decides nothing below it, so what its rows name goes there."""
+        backend = _Backend(
+            {"judge": [_below("b")], "route": [_below("P", producer_source_guids=["a", "b"])]}
+        )
+
+        _forget_answers_below(
+            backend,
+            ["judge", "route"],
+            "p.json",
+            self.REPLACED,
+            self.INPUTS,
+            frozenset({"b"}),
+            whole_file_readers=frozenset({"route"}),
+        )
+
+        assert backend.cleared == {"judge": ["P", "a", "b"], "route": ["P", "a", "b"]}
