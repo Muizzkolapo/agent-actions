@@ -440,7 +440,7 @@ StaticDataLoader(seed_search_folders(workflow_config_path))   # one Path is a li
 render_pipeline_with_templates(yaml_path, templates_folder)
   |
   Step 1: Jinja2 template rendering (workflow-level macros and includes)
-  Step 2: Parse YAML
+  Step 2: Parse YAML; refuse a file in the `agents:` format
   Step 3: Resolve prompt references ($file.block --> inline text)
   Step 4: Expand versioned actions (versions: {param: i, range: [1,3]})
   Step 5: Compile schemas (schema_name: "foo" --> inline schema from file;

@@ -1,0 +1,3 @@
+kind: Breaking Change
+body: 'agac reads a workflow file only in the actions format: a `name:` and an `actions:` list. A workflow file in the `agents:` format (a top-level `agents:` key, or a top-level key that holds agent entries) stops the load before anything runs, and the error names the file and tells you to write `actions:`.'
+time: 2026-11-23T19:00:00+00:00

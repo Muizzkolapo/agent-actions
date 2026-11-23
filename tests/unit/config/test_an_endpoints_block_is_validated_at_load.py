@@ -503,7 +503,7 @@ def test_the_refusal_reaches_the_user_through_agac_inspect_and_not_the_boot_line
     assert "endpoints." not in helped.stdout + helped.stderr
 
 
-def _manager(root: Path, user_config: dict, agent_name: str | None = None):
+def _manager(root: Path, user_config: dict):
     from agent_actions.config.manager import ConfigManager
 
     manager = ConfigManager(
@@ -512,30 +512,7 @@ def _manager(root: Path, user_config: dict, agent_name: str | None = None):
         project_root=root,
     )
     manager.user_config = user_config
-    manager.agent_name = agent_name
     return manager
-
-
-LEGACY = {"legacy": {"agents": [{"agent_type": "flatten", "model_vendor": "tool"}]}}
-
-
-def test_a_workflow_in_the_legacy_shape_is_held_to_the_block_too(tmp_path, endpoints):
-    root = _project(tmp_path, BAD_BLOCK)
-
-    with pytest.raises(ConfigValidationError) as info:
-        _manager(root, LEGACY, "legacy").get_user_agents()
-
-    assert info.value.context["reason"] == "endpoints.lab-vllm: unknown key 'format'"
-    assert endpoints.project_endpoints() == {}
-
-
-def test_a_workflow_in_the_legacy_shape_registers_a_valid_block(tmp_path, endpoints):
-    root = _project(tmp_path, VALID)
-
-    agents = _manager(root, LEGACY, "legacy").get_user_agents()
-
-    assert agents == [{**LEGACY["legacy"]["agents"][0], "kind": "tool"}]
-    assert set(endpoints.project_endpoints()) == {"lab-vllm", "azure-gpt", "vertex-gemini"}
 
 
 def test_a_project_refused_before_its_block_is_read_leaves_no_stale_registry(

@@ -50,13 +50,6 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
                         f"{desc}: vendor '{model_vendor}' does not support run_mode: batch. "
                         "Set run_mode: online."
                     )
-
-            batch_provider = normalized_entry.get("batch_provider")
-            if batch_provider and not model_vendor:
-                warnings.append(
-                    f"{desc} 'batch_provider' is deprecated. Use 'model_vendor' instead. "
-                    f"Found: batch_provider='{batch_provider}'"
-                )
         if errors or warnings:
             return ActionEntryValidationResult(errors=errors, warnings=warnings)
 

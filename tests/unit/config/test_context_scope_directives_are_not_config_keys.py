@@ -121,35 +121,6 @@ def test_a_directive_spelling_the_framework_does_not_read_is_refused_under_conte
     assert "drop, observe, passthrough, seed" in message
 
 
-@pytest.mark.parametrize("directive", DIRECTIVES)
-def test_the_legacy_agents_block_refuses_every_directive_too(directive):
-    """`agents:` configs validate against a model that allows extras, so no key
-    is refused there by being absent from the model. All four spellings get the
-    same refusal they get on an action — refusing a subset leaves the rest
-    accepted and read by nothing, which is the bug itself."""
-    manager = ConfigManager.__new__(ConfigManager)
-    manager.default_config = {}
-    manager.tool_path = None
-    manager.agent_configs = {}
-
-    with pytest.raises(ConfigurationError) as exc:
-        manager.merge_agent_configs(
-            [
-                {
-                    "agent_type": "a1",
-                    "model_vendor": "openai",
-                    "model_name": "gpt-4",
-                    "chunk_config": {},
-                    directive: ["src.f"],
-                }
-            ]
-        )
-
-    message = str(exc.value)
-    assert f"'{directive}' is a context_scope directive, not an agent key" in message
-    assert f"    {CANONICAL[directive]}:" in message
-
-
 def test_the_refusal_names_the_action_it_came_from():
     """pydantic locates the error as `actions.0`; a workflow of thirty actions
     needs the name."""
