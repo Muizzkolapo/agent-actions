@@ -61,7 +61,8 @@ def postgres_server() -> Iterator[dict[str, Any] | None]:
     try:
         subprocess.run(
             _as(
-                "postgres", [str(binaries / "initdb"), "-D", str(data), "-U", "agac", "-A", "trust"]
+                "postgres",
+                [str(binaries / "initdb"), "-D", str(data), "-U", "agac_tests", "-A", "trust"],
             ),
             check=True,
             capture_output=True,
@@ -91,7 +92,7 @@ def postgres_server() -> Iterator[dict[str, Any] | None]:
             "host": str(directory),
             "port": port,
             "dbname": "postgres",
-            "user": "agac",
+            "user": "agac_tests",
         }
     finally:
         subprocess.run(
@@ -142,7 +143,7 @@ def mysql_server() -> Iterator[dict[str, Any] | None]:
         import pymysql
 
         with pymysql.connect(unix_socket=str(socket), user="root") as connection:
-            connection.cursor().execute("CREATE DATABASE agac")
+            connection.cursor().execute("CREATE DATABASE agac_tests")
     except (OSError, subprocess.SubprocessError, TimeoutError):
         if process is not None:
             process.kill()
@@ -150,7 +151,7 @@ def mysql_server() -> Iterator[dict[str, Any] | None]:
         yield None
         return
     try:
-        yield {"type": "mysql", "unix_socket": str(socket), "database": "agac", "user": user}
+        yield {"type": "mysql", "unix_socket": str(socket), "database": "agac_tests", "user": user}
     finally:
         process.terminate()
         try:
