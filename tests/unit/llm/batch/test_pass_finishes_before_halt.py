@@ -10,8 +10,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agent_actions.errors import mark_action_fatal
 from agent_actions.errors.base import exhaustion_halt
-from agent_actions.expectations.service import ExpectationConfigurationError
+from agent_actions.expectations.service import (
+    ExpectationConfigurationError,
+    create_expectation_service_from_config,
+)
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.services.processing import BatchProcessingService
@@ -19,6 +23,15 @@ from agent_actions.llm.batch.services.processing import BatchProcessingService
 
 def _halt(name: str) -> RuntimeError:
     return exhaustion_halt(f"Retry exhausted for {name} (on_exhausted=raise)")
+
+
+def _unresolvable_expect_block() -> ExpectationConfigurationError:
+    """The error a bare `expect:` block with no schema raises, from where it is raised."""
+    try:
+        create_expectation_service_from_config({}, action_name="act", agent_config={})
+    except ExpectationConfigurationError as error:
+        return error
+    raise AssertionError("a bare expect: block with no schema resolved")
 
 
 def _entry(name: str) -> BatchJobEntry:
@@ -94,13 +107,16 @@ class TestThePassFinishesBeforeTheHalt:
 
 
 class TestOtherFatalErrorsStillStopTheirPass:
-    def test_an_ordinary_runtime_error_is_raised_at_once(self):
+    def test_an_error_declared_fatal_to_the_action_is_raised_at_once(self):
         service, visited = _service(
             ["a.json", "b.json"],
-            {"a.json": RuntimeError("provider lost the batch"), "b.json": "/out/b.json"},
+            {
+                "a.json": mark_action_fatal(RuntimeError("the registry could not be loaded")),
+                "b.json": "/out/b.json",
+            },
         )
 
-        with pytest.raises(RuntimeError, match="provider lost the batch"):
+        with pytest.raises(RuntimeError, match="the registry could not be loaded"):
             service.process_all_batch_results("/out", {}, "act")
 
         assert visited == ["a.json"]
@@ -108,7 +124,7 @@ class TestOtherFatalErrorsStillStopTheirPass:
     def test_an_unresolvable_expect_block_still_stops_at_once(self):
         service, visited = _service(
             ["a.json", "b.json"],
-            {"a.json": ExpectationConfigurationError("bad expect"), "b.json": "/out/b.json"},
+            {"a.json": _unresolvable_expect_block(), "b.json": "/out/b.json"},
         )
 
         with pytest.raises(ExpectationConfigurationError):

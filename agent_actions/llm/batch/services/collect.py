@@ -43,9 +43,9 @@ def halt_survives_failure(context: Any) -> Iterator[None]:
 
     Every early return past a park is guarded, but the exception exit is not a
     return: anything raised between the park and the finaliser unwinds past all
-    of them. The outer loop answers a non-RuntimeError by logging it, failing
-    that file's records and moving to the next file, so `on_exhausted: raise`
-    would finish the run reporting success.
+    of them. The outer loop answers an error not declared fatal to the action by
+    logging it, failing that file's records and moving to the next file, so
+    `on_exhausted: raise` would finish the run reporting success.
 
     The deliberate halt wins over the incidental failure, which is chained onto
     it rather than dropped. A clean pass leaves the halt parked for the finaliser.
@@ -57,9 +57,9 @@ def halt_survives_failure(context: Any) -> Iterator[None]:
     try:
         yield
     except ExpectationConfigurationError:
-        # The one error kind that is already run-fatal: process_all_batch_results
-        # re-raises it, because every remaining file carries the same broken
-        # action config. Substituting the halt would only change its
+        # Every raise of it is declared fatal to the action, so
+        # process_all_batch_results re-raises it: every remaining file carries the
+        # same broken action config. Substituting the halt would only change its
         # classification — raised_by_exhaustion_policy would answer True, and the
         # workflow layer would then refuse to re-run the action and keep it out
         # of reset_retryable, so the operator fixes the YAML and stays stuck.

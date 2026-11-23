@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any  # noqa: F401
 
 from agent_actions.config.defaults import StorageDefaults
+from agent_actions.errors.classification import mark_action_fatal
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.errors.processing import SerializationError  # noqa: F401
 from agent_actions.errors.validation import DataValidationError  # noqa: F401
@@ -339,7 +340,10 @@ class SQLiteBackend(
         """Get the database connection. Raises if not initialized."""
         with self._lock:
             if self._connection is None:
-                raise RuntimeError("Backend not initialized. Call initialize() first.")
+                # The store serves every file, so no one file failed.
+                raise mark_action_fatal(
+                    RuntimeError("Backend not initialized. Call initialize() first.")
+                )
             return self._connection
 
     def initialize(self) -> None:

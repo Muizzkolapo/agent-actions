@@ -2,6 +2,8 @@
 
 from enum import Enum
 
+from agent_actions.errors.classification import mark_action_fatal
+
 
 class BatchStatus(str, Enum):
     """Batch job status values (inherits str for JSON serialization)."""
@@ -84,10 +86,13 @@ _RETIRED_NAMES = frozenset({"reprompt"})
 
 def _refuse_if_retired(value: str) -> None:
     if value in _RETIRED_NAMES:
-        raise RetiredRecoveryState(
-            f"This run was deferred mid-{value}, a recovery phase this version does not "
-            f"run. Its stored state cannot be resumed. Re-run the action with --fresh to "
-            f"start it again; the records it had already completed are in the store."
+        # Its remedy, --fresh, is the action's, not one file's.
+        raise mark_action_fatal(
+            RetiredRecoveryState(
+                f"This run was deferred mid-{value}, a recovery phase this version does not "
+                f"run. Its stored state cannot be resumed. Re-run the action with --fresh to "
+                f"start it again; the records it had already completed are in the store."
+            )
         )
 
 

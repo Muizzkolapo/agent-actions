@@ -12,11 +12,11 @@ if TYPE_CHECKING:
 from agent_actions.errors import (
     ProcessingError,
     is_action_fatal,
+    mark_action_fatal,
     raised_by_exhaustion_policy,
     raised_by_terminal_failure,
 )
 from agent_actions.errors.processing import EmptyOutputError
-from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
     RecoveryPhase,
@@ -174,6 +174,26 @@ def _is_a_halt(error: Exception) -> bool:
         or raised_by_terminal_failure(error)
         or any(isinstance(link, EmptyOutputError) for link in get_error_chain(error))
     )
+
+
+def _records_left_deferred(failures: list[tuple[str, Exception]]) -> ProcessingError:
+    """The error that fails an action whose failed files' records could not be marked failed.
+
+    Raised once the pass is done, so the other files are collected first. Unmarked, the
+    records keep the `deferred` their submission stamped, and the action would complete
+    over them.
+    """
+    named = "; ".join(f"{file_name} ({str(error)[:200]})" for file_name, error in failures)
+    error = ProcessingError(
+        f"Reading {len(failures)} batch file(s) failed, and their records could not be "
+        f"marked failed because the context map of each could not be read: {named}. "
+        "The records would stay deferred, so the action is failed; the next run reads "
+        "those files again.",
+        context={"file_names": [file_name for file_name, _ in failures]},
+        cause=failures[0][1],
+    )
+    mark_action_fatal(error)
+    return error
 
 
 class BatchProcessingService:
@@ -344,8 +364,9 @@ class BatchProcessingService:
             The output file paths written, and the files left unread
 
         Raises:
-            ProcessingError: If no registry found, or no files processed while none
-                was skipped as collected or left unread and no recovery is pending
+            ProcessingError: If no registry found, if no files processed while none
+                was skipped as collected or left unread and no recovery is pending, or
+                if a file failed and its records could not be marked failed
         """
         effective_action_name = self._resolve_action_name(action_name)
         manager = self._registry_manager_factory(effective_action_name)
@@ -367,6 +388,7 @@ class BatchProcessingService:
         superseded = _superseded_entries(all_jobs)
         collected_before = False
         parked = _ParkedHalt()
+        left_deferred: list[tuple[str, Exception]] = []
         # A hard failure anywhere in the pass, not only in a file, must not drop a
         # halt parked earlier: the halting file is written and collected, so a rerun
         # would skip it.
@@ -466,14 +488,11 @@ class BatchProcessingService:
                         # owed, by `retry`.
                         park_halt(parked, e)
                         continue
-                    if isinstance(e, (RuntimeError, ExpectationConfigurationError)):
-                        # An unresolvable `expect:` block fails every remaining file the same
-                        # way, so continuing would report success with each missing. A plain
-                        # ConfigurationError is per record and stays below.
-                        raise
-                    # Declared where it was raised, such as a store that failed to write the
-                    # file: taken as this file's failure, the action would complete over what
-                    # the file held before.
+                    # Declared where it was raised, never read from the type: an `expect:`
+                    # block that cannot be resolved fails every file the same way, and a
+                    # store that failed to write the file would leave the action complete
+                    # over what the file held before. Anything else, a provider's error
+                    # for this file included, fails this file's records alone.
                     if is_action_fatal(e):
                         raise
                     logger.exception(
@@ -490,12 +509,17 @@ class BatchProcessingService:
                             "registry_size": len(all_jobs),
                         },
                     )
-                    self._fail_abandoned_records(
-                        file_name=file_name,
-                        output_directory=output_directory,
-                        action_name=effective_action_name,
-                        error=e,
-                    )
+                    if (
+                        not self._fail_abandoned_records(
+                            # A recovery round is sent from its parent's context map.
+                            file_name=entry.parent_file_name or file_name,
+                            output_directory=output_directory,
+                            action_name=effective_action_name,
+                            error=e,
+                        )
+                        and self._storage_backend is not None
+                    ):
+                        left_deferred.append((file_name, e))
                     continue
 
             # A recovery dropped in this pass hands back the parent it superseded, which
@@ -511,6 +535,8 @@ class BatchProcessingService:
                     unread.append(name)
 
         _raise_pending_exhaustion_impl(parked)
+        if left_deferred:
+            raise _records_left_deferred(left_deferred)
 
         # A file already collected counts as one this pass did not fail, as a replay of
         # it that succeeded did. One left unread is waited for, not failed.

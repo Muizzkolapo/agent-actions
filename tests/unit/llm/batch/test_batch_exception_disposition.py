@@ -1,7 +1,7 @@
 """Tests for F4: batch exception writes FAILED dispositions for abandoned records.
 
-When _process_single_batch_file raises a non-RuntimeError exception,
-process_all_batch_results must write DISPOSITION_FAILED for every INCLUDED
+When _process_single_batch_file raises an exception that is neither a halt nor
+declared fatal to the action, process_all_batch_results must write DISPOSITION_FAILED for every INCLUDED
 record in the failed batch file's context_map, clearing any stale DEFERRED
 dispositions. Records in other files must be unaffected.
 """
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.errors import ProcessingError
+from agent_actions.errors import ProcessingError, is_action_fatal, mark_action_fatal
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
@@ -192,27 +192,52 @@ class TestBatchExceptionDisposition:
 
         svc._context_manager.load_batch_context_map.assert_not_called()
 
-    def test_context_map_load_failure_does_not_crash(self):
-        """If loading the context_map itself fails, we log and continue."""
+    def test_context_map_load_failure_fails_the_action(self):
+        """If loading the context_map itself fails, the records would stay deferred."""
         backend = MagicMock()
         svc = _build_service(storage_backend=backend)
         svc._context_manager.load_batch_context_map.side_effect = OSError("disk error")
         _setup_single_file_failure(svc)
-        _run_with_failure(svc, ValueError("processing failed"))
-
-        backend.set_disposition.assert_not_called()
-
-    def test_runtime_error_still_propagates(self):
-        """RuntimeError must propagate (not be caught by the exception handler)."""
-        svc = _build_service(storage_backend=MagicMock())
-        _setup_single_file_failure(svc)
 
         with (
             patch.object(svc, "_provider_status", return_value=BatchStatus.COMPLETED),
-            patch.object(svc, "_process_single_batch_file", side_effect=RuntimeError("fatal")),
+            patch.object(
+                svc, "_process_single_batch_file", side_effect=ValueError("processing failed")
+            ),
+            pytest.raises(ProcessingError, match="could not be marked failed") as raised,
+        ):
+            svc.process_all_batch_results("/output")
+
+        assert is_action_fatal(raised.value)
+        backend.set_disposition.assert_not_called()
+
+    def test_an_error_declared_fatal_still_propagates(self):
+        """It is not caught by the exception handler, and no record is marked."""
+        backend = MagicMock()
+        svc = _build_service(storage_backend=backend)
+        _setup_single_file_failure(svc)
+        fatal = mark_action_fatal(RuntimeError("fatal"))
+
+        with (
+            patch.object(svc, "_provider_status", return_value=BatchStatus.COMPLETED),
+            patch.object(svc, "_process_single_batch_file", side_effect=fatal),
         ):
             with pytest.raises(RuntimeError, match="fatal"):
                 svc.process_all_batch_results("/output")
+
+        backend.set_disposition.assert_not_called()
+
+    def test_a_bare_runtime_error_writes_failed_dispositions(self):
+        """A RuntimeError declares nothing: one a provider's SDK raises is this file's."""
+        backend = MagicMock()
+        svc = _build_service(storage_backend=backend)
+        svc._context_manager.load_batch_context_map.return_value = _make_context_map(
+            ("t1", "sg-1", FilterStatus.INCLUDED)
+        )
+        _setup_single_file_failure(svc)
+        _run_with_failure(svc, RuntimeError("the client has been closed"))
+
+        assert _failed_disposition_record_ids(backend) == {"sg-1"}
 
     def test_records_without_source_guid_skipped(self):
         """Records missing source_guid don't get dispositions (no crash)."""

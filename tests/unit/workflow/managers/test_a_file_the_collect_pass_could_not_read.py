@@ -20,6 +20,7 @@ import httpx
 import openai
 import pytest
 
+from agent_actions.errors import ProcessingError
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
     ContextMetaKeys,
@@ -268,9 +269,35 @@ def test_a_file_whose_reading_failed_does_not_hold_the_action(tmp_path):
     """Its records are marked failed, which is what `agac retry` finds. Waited for, a file
     that fails the same way every time would hold the action for good."""
     action = _Action(tmp_path)
+    action.send("page2.json", "page2-a", "page2-b")
     action.broken = {"page2.json"}
 
     assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page3.json"]
+    assert action.dispositions() == {"page2-a": DISPOSITION_FAILED, "page2-b": DISPOSITION_FAILED}
+
+
+def test_a_recovery_round_whose_reading_failed_fails_the_records_of_its_file(tmp_path):
+    """A round is sent from its file's context map; under its own name there is none, and
+    a file whose records cannot be marked failed fails the action."""
+    action = _Action(tmp_path)
+    action.send("page3.json", "page3-a", "page3-b")
+    action.register(_retry_of("page3.json"))
+    action.broken = {"page3.json_retry_1"}
+
+    assert action.check() == (action.out, "completed")
+    assert action.finalized == ["page1.json", "page2.json"]
+    assert action.dispositions() == {"page3-a": DISPOSITION_FAILED, "page3-b": DISPOSITION_FAILED}
+
+
+def test_a_file_whose_records_cannot_be_marked_failed_fails_the_action(tmp_path):
+    """Nothing records what it was sent, so its records would stay deferred under an action
+    read as complete. The other files are read first."""
+    action = _Action(tmp_path)
+    action.broken = {"page2.json"}
+
+    with pytest.raises(ProcessingError, match="page2.json"):
+        action.check()
     assert action.finalized == ["page1.json", "page3.json"]
 
 
