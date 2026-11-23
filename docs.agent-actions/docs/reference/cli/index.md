@@ -70,7 +70,7 @@ agac traces -w my_workflow -A classify_issue
 agac dispositions -w my_workflow -A classify_issue
 ```
 
-[`traces`](./traces), [`records`](./records) and [`preview`](./preview) are the exception for `-a`. In these three commands, `-a` still names the action. In these three commands, `--agent` names the workflow. In a later release, `-a` will name the workflow in these commands too.
+[`traces`](./traces), [`records`](./records) and [`preview`](./preview) are the exception for `-a`. In these three commands, `-a` names the action. In these three commands, `--agent` names the workflow. In a later release, `-a` will name the workflow in these commands too.
 
 When you type `-a` in one of these three commands, the command prints a warning on stderr. The warning tells you to type `-A` for the action and `-w` for the workflow. This is the warning for `traces`:
 

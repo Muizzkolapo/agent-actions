@@ -15,6 +15,5 @@ These guides give practical help for common tasks and workflows.
 | [Non-JSON Mode](./non-json-mode.md) | Use local models, and build the output one field at a time without JSON |
 | [Custom Tools](./custom-tools.md) | Add Python tools to your workflows |
 | [Human-in-the-Loop](./human-in-the-loop.md) | Add gates for manual review and approval to workflows |
-| [Migrate a Check Chain to `expect:`](./expectations-migration.md) | Replace a verify, collect and rewrite chain with an `expect:` block, and know when to keep the chain |
 | [Editor Setup](./editor-setup.md) | LSP support for VS Code, Neovim and other editors |
 | [Troubleshooting](./troubleshooting.md) | Common problems and their solutions |
