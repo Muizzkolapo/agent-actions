@@ -1107,9 +1107,10 @@ def process_from_storage_backend(
     merged_versions = params.correlated_input
     if merged_versions is not None:
         # A version merge's versions are handed over, not read: its own target holds
-        # its answers, which a run carries records from. Its other dependencies are
-        # read and paired with them below as a fan-in's branches are, in the files
-        # the versions hold.
+        # its answers, which a run carries records from. Each entry's merged input is
+        # correlated when it is looked up and held only while it is processed. Its
+        # other dependencies are read and paired with it below as a fan-in's branches
+        # are, in the files the versions hold.
         listed = {path: [] for path in merged_versions}
         upstream_to_read = [
             d for d in params.upstream_data_dirs if Path(d).name != params.action_name

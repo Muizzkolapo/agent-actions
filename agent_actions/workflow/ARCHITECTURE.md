@@ -323,7 +323,11 @@ FILE tool folded it into another row (`folded_sources`, read by `merge.rows_fold
 version's own folds only, since the field also lists the folds made above every version) is
 merged `cascade_skipped` through `merge.consumed_into_another`, and the merge leaves it
 `unprocessed` with reason `consumed_into_another_record`. Its input is never stored:
-its own target holds its answers, which a re-run carries records from. The correlator
+its own target holds its answers, which a re-run carries records from. Nor is it held:
+correlation pairs rows within one file, so the correlator reads and correlates each file
+once before the walk, to fail the merge before any file is processed, and hands the walk
+a `CorrelatedInput` that correlates a file again when the walk looks it up; each version
+file is dropped from the store's cache after each read. The correlator
 also deletes, before the walk, each stored file of the merge that no version source
 lists, under a file limit and a repair too: it lists every file its version sources hold,
 so it can tell an input that is gone from one it never opened. Correlation runs inside

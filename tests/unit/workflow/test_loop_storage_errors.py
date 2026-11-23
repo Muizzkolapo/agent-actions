@@ -1,9 +1,9 @@
-"""Tests for storage error propagation in _load_from_storage_backend.
+"""Storage errors met while a version merge reads its versions.
 
 Verifies that:
-- DB errors from list_target_files propagate (not return empty)
+- DB errors from list_target_files or read_target fail the merge (not return empty)
 - Per-file FileNotFoundError is caught and file skipped
-- DB errors from read_target propagate (not silently skipped)
+- A DB error when the walk reads a file again fails the merge too
 """
 
 import json
@@ -13,18 +13,31 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
+from agent_actions.workflow.managers.output import AllVersionsFilteredError
+
+
+def _row(guid: str) -> dict:
+    return {
+        "source_guid": guid,
+        "version_correlation_id": f"vc-{guid}",
+        "content": {"version_agent_1": {"data": "ok"}},
+    }
 
 
 @pytest.fixture
 def loop_manager():
-    mgr = VersionOutputCorrelator.__new__(VersionOutputCorrelator)
-    mgr.storage_backend = MagicMock()
-    mgr.agent_folder = Path("/tmp/agent_io")
+    mgr = VersionOutputCorrelator(Path("/tmp/agent_io"), storage_backend=MagicMock())
+    mgr._forget_files_no_version_holds = lambda *args: None  # type: ignore[method-assign]
     return mgr
 
 
-class TestLoadFromStorageBackendErrors:
+def _correlate(mgr: VersionOutputCorrelator):
+    return mgr.prepare_correlated_input("consumer", ["version_agent_1"], 0)
+
+
+class TestStorageErrorsWhileCorrelating:
     @pytest.mark.parametrize(
         ("method", "error", "match"),
         [
@@ -43,37 +56,45 @@ class TestLoadFromStorageBackendErrors:
             pytest.param(
                 "read_target",
                 json.JSONDecodeError("Expecting value", "", 0),
-                None,
+                "Expecting value",
                 id="read_bad_json",
             ),
         ],
     )
-    def test_a_storage_error_propagates(self, loop_manager, method, error, match):
+    def test_a_storage_error_fails_the_merge(self, loop_manager, method, error, match):
         loop_manager.storage_backend.list_target_files.return_value = ["file_a.json"]
         getattr(loop_manager.storage_backend, method).side_effect = error
-        with pytest.raises(type(error), match=match):
-            loop_manager._load_from_storage_backend("version_agent_1")
+        with pytest.raises(ConfigurationError, match=match) as raised:
+            _correlate(loop_manager)
+        assert raised.value.__cause__ is error
 
     def test_file_not_found_for_single_file_skips_and_continues(self, loop_manager):
         loop_manager.storage_backend.list_target_files.return_value = ["file_a.json", "file_b.json"]
-        loop_manager.storage_backend.read_target.side_effect = [
-            FileNotFoundError("file_a.json not found"),
-            [{"id": "rec1", "data": "ok"}],
-        ]
-        outputs, filenames = loop_manager._load_from_storage_backend("version_agent_1")
-        assert len(outputs) == 1
-        assert outputs[0]["id"] == "rec1"
-        assert "file_b.json" in filenames
-        assert "file_a.json" not in filenames
 
-    def test_no_storage_backend_returns_empty(self, loop_manager):
+        def read_target(_version, relative_path):
+            if relative_path == "file_a.json":
+                raise FileNotFoundError("file_a.json not found")
+            return [_row("rec1")]
+
+        loop_manager.storage_backend.read_target.side_effect = read_target
+        correlated = _correlate(loop_manager)
+        assert list(correlated) == ["file_b.json"]
+        assert [row["source_guid"] for row in correlated["file_b.json"]] == ["rec1"]
+
+    def test_no_storage_backend_has_nothing_to_merge(self, loop_manager):
         loop_manager.storage_backend = None
-        outputs, filenames = loop_manager._load_from_storage_backend("version_agent_1")
-        assert outputs == []
-        assert filenames == set()
+        with pytest.raises(AllVersionsFilteredError):
+            _correlate(loop_manager)
 
-    def test_empty_target_files_returns_empty(self, loop_manager):
+    def test_empty_target_files_has_nothing_to_merge(self, loop_manager):
         loop_manager.storage_backend.list_target_files.return_value = []
-        outputs, filenames = loop_manager._load_from_storage_backend("version_agent_1")
-        assert outputs == []
-        assert filenames == set()
+        with pytest.raises(AllVersionsFilteredError):
+            _correlate(loop_manager)
+
+    def test_a_storage_error_when_the_walk_reads_a_file_again_fails_the_merge(self, loop_manager):
+        loop_manager.storage_backend.list_target_files.return_value = ["file_a.json"]
+        locked = sqlite3.OperationalError("database is locked")
+        loop_manager.storage_backend.read_target.side_effect = [[_row("rec1")], locked]
+        correlated = _correlate(loop_manager)
+        with pytest.raises(ConfigurationError, match="database is locked"):
+            correlated["file_a.json"]
