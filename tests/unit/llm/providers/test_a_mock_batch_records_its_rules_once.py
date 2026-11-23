@@ -8,6 +8,7 @@ them; a record whose tasks carry no rules is answered by the plain generator.
 from __future__ import annotations
 
 import json
+import logging
 import re
 
 import pytest
@@ -46,9 +47,11 @@ def project(tmp_path):
     path_utils.set_path_manager(PathManager(project_root=root))
     AgacBatchClient._batches.clear()
     AgacBatchClient._tasks_by_batch.clear()
+    AgacBatchClient._contracts_by_batch.clear()
     yield root
     AgacBatchClient._batches.clear()
     AgacBatchClient._tasks_by_batch.clear()
+    AgacBatchClient._contracts_by_batch.clear()
     path_utils._global_path_manager = previous
 
 
@@ -56,6 +59,7 @@ def _collected(client: AgacBatchClient, batch_id: str) -> list[dict]:
     """The answers a later run collects, from the record alone."""
     AgacBatchClient._batches.clear()
     AgacBatchClient._tasks_by_batch.clear()
+    AgacBatchClient._contracts_by_batch.clear()
     lines = client._fetch_raw_results(batch_id).decode("utf-8").splitlines()
     return [
         json.loads(json.loads(line)["response"]["body"]["choices"][0]["message"]["content"])
@@ -87,3 +91,15 @@ def test_a_record_whose_tasks_carry_no_rules_is_answered_from_the_schema(project
     [answer] = _collected(AgacBatchClient(), "old")
 
     assert set(answer) == set(SCHEMA["properties"])
+
+
+def test_a_task_naming_rules_the_record_does_not_hold_is_logged(project, caplog):
+    client = AgacBatchClient()
+    client._tasks_by_batch["b1"] = [{"custom_id": "c1", "contract": "0123456789abcdef"}]
+    client._contracts_by_batch["b1"] = {}
+    client._batches["b1"] = {"status": "completed"}
+
+    with caplog.at_level(logging.WARNING):
+        client._fetch_raw_results("b1")
+
+    assert "0123456789abcdef" in caplog.text

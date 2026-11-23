@@ -356,7 +356,15 @@ class AgacBatchClient(BaseBatchClient):
             # A submitted task names its batch's rules by key; a prepared one holds them.
             spec = task.get("contract")
             if isinstance(spec, str):
-                spec = contracts.get(spec)
+                key, spec = spec, contracts.get(spec)
+                if spec is None:
+                    logger.warning(
+                        "Mock batch %s: task %s names rules %s that the batch record does "
+                        "not hold; answering from the schema only",
+                        batch_id,
+                        custom_id,
+                        key,
+                    )
             # Straight off the task this client wrote, which holds both.
             openai_response = FakeDataGenerator.generate_openai_response(
                 custom_id,

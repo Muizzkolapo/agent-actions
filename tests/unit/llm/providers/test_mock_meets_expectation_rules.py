@@ -484,3 +484,14 @@ def test_a_field_value_the_schema_refuses_ranks_below_one_that_fails_rules(monke
     value = contract._value("code", schema, _FieldPlan(rules=contract.rules), 1, {})
 
     assert value == "abc"
+
+
+def test_a_batch_task_carries_the_run_session_id():
+    from agent_actions.llm.providers.agac.contract import Contract
+
+    contract = Contract.from_task(
+        {"action": "a", "rules": [], "observe": [], "workflow_session_id": "s1"}, {}
+    )
+
+    assert contract is not None
+    assert contract.to_task()["workflow_session_id"] == "s1"
