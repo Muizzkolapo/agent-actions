@@ -601,14 +601,14 @@ Use the tiers in this order of preference:
 
 ## Testing rules with the mock provider
 
-On `model_vendor: agac-provider`, the mock reads the rules of the action as well as its schema. It reads the same rules as the run: the inline `expectations:` list, the rules of the schema file and a named `suite:`. Thus a workflow that you switch to the mock passes its rules, and a repair loop ends on the first generation. The mock does this online and in a batch in the same way.
+On `model_vendor: agac-provider`, the mock reads the rules of the action as well as its schema. It reads the same rules as the run: the inline `expectations:` list, the rules of the schema file and a named `suite:`. Thus a workflow that you switch to the mock usually passes its rules, and a repair loop usually ends on the first generation. Some rules can still fail: an `expression` rule, a custom check, a pattern outside the subset below, and constraints that contradict. The mock does this online and in a batch in the same way.
 
 For each top-level field that a rule names, the mock makes a value that meets the schema and the rules of that field:
 
 | Rule or keyword | What the mock makes |
 |-----------------|---------------------|
 | `enum` and `accepted_values` | A value that all of them allow |
-| `pattern` and `matches_regex` | A string that the regular expression matches |
+| `pattern` and `matches_regex` | A string that the regular expression matches. On a field of type `integer` or `number`, `matches_regex` gets a number of that type. The check reads the number as text |
 | `matches_regex` with `negate: true` | A value that the expression does not match. A field-name value that matches is replaced by plain words |
 | `word_count_between` | A sentence with a word count in the range |
 | `item_count` | A list with a length in the range, inside `minItems` and `maxItems` |
@@ -618,11 +618,11 @@ For each top-level field that a rule names, the mock makes a value that meets th
 
 Then the real runner checks the full record. If a rule fails, the mock makes the record again, up to 20 times. An `llm_judge` rule is not part of this check. The judge call gets a verdict as [Testing a judge offline](#testing-a-judge-offline) tells.
 
-The regular expression support is a subset: literals and escaped characters, `.`, `\d`, `\w`, `\s` and their negations, `[...]` with ranges and negation, `?`, `*`, `+`, `{m}`, `{m,}`, `{m,n}`, groups, `|`, `^` and `$`. An unbounded repeat (`*`, `+`, `{m,}`) adds a maximum of three repeats. A pattern outside the subset, for example a lookahead, a backreference or an inline flag, gets a generated value that the check tests.
+The regular expression support is a subset: literals and escaped characters, `.`, `\d`, `\w`, `\s` and their negations, `[...]` with ranges and negation, `?`, `*`, `+`, `{m}`, `{m,}`, `{m,n}`, `{,n}`, groups, `|`, `^` and `$`. An unbounded repeat (`*`, `+`, `{m,}`) adds a maximum of three repeats. A repeat count can be a maximum of 1000. A pattern outside the subset gets a generated value that the check tests. Examples are a lookahead, a backreference, an inline flag, a larger repeat count and a pattern that Python refuses.
 
-**Upstream values.** If a reference in `context_scope.observe` names a field, and an output field has the same name, the mock copies the input value. A wildcard reference (`action.*`) does not copy a value. A loop writer observes `prior.*`, and that holds the field that the writer must write again. The value must meet the schema and the rules of the output field. Thus an id stays the same through the actions of the workflow. The mock reads the context that the request sends. Under `context_block: auto`, a field that the prompt prints as `{{ action.field }}` is not in that context. To copy such a field, set `context_block: all` on the action.
+**Upstream values.** If a reference in `context_scope.observe` names a field, and an output field has the same name, the mock copies the input value. A wildcard reference (`action.*`) does not copy a value. A reference to the `feedback` input of a loop does not copy a value either, for example `prior.question`. That input holds the previous iteration, and a copy would keep each iteration on one value. The value must meet the schema and the rules of the output field. Thus an id stays the same through the actions of the workflow. The mock reads the context that the request sends. Under `context_block: auto`, a field that the prompt prints as `{{ action.field }}` is not in that context. To copy such a field, set `context_block: all` on the action.
 
-**Constraints that no value meets.** If the mock cannot meet a rule after 20 tries, it logs a warning once for each action and field in the run. The warning names the action, the field, the constraints on the field and the rules that still fail. For example, `maxLength: 5` and `word_count_between: {min: 10}` on one field make this warning. The mock still returns its best record, and the run continues.
+**Constraints that no value meets.** If the mock cannot meet a rule after 20 tries, it logs a warning once for each action and field in the run. The warning names the action, the field, the constraints on the field and the rules that still fail. For example, `maxLength: 5` and `word_count_between: {min: 10}` on one field make this warning. The mock adds no field that the schema does not declare, so a rule on such a field (for example `nested.x`) also makes this warning. The mock still returns its best record, and the run continues. The best record is one that the schema accepts, if the mock found one.
 
 ## When not to use an expectation
 

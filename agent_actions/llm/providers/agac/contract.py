@@ -3,8 +3,8 @@
 The rules are the suite the run resolves for the action, so the mock reads them as the
 runner does. Each top-level field a rule names gets a value built to meet that field's
 schema and rules. The real runner then checks the whole record; while a rule fails, the
-record is built again, up to ``TRIES`` times. What still fails is logged once per action
-and field, and the best attempt is returned.
+record is built again, up to ``TRIES`` times. What still fails is logged once per run,
+action and field, and the best attempt is returned.
 """
 
 from __future__ import annotations

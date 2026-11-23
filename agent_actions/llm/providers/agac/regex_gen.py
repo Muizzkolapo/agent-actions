@@ -3,7 +3,8 @@
 The subset: literals and escaped characters, ``.``, ``\\d \\w \\s`` and their negations,
 ``[...]`` with ranges and negation, the quantifiers ``? * + {m} {m,} {m,n} {,n}``,
 groups ``( )``, ``(?: )`` and ``(?P<name> )``, alternation ``|`` and the anchors ``^ $``.
-A pattern outside it raises :class:`UnsupportedPattern`. The caller checks each result
+A pattern outside it raises :class:`UnsupportedPattern`, as does one that Python refuses,
+one nested too deep, or a repeat count above ``MAX_REPEAT``. The caller checks each result
 with :mod:`re`, because a pattern inside the subset can still match nothing.
 """
 
