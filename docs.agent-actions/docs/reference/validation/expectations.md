@@ -241,6 +241,8 @@ Preflight also rejects a constant condition that refers to no record fields, bec
 | `model` (string) | the `model_name` of the action | The model that judges the value, in place of the default |
 | `context` (list) | none | A list of `action.field` references. Agent Actions resolves them with the *same* `context_scope` mechanism as prompts. It sends them to the judge as grounding text. A reference does not take the optional mark `?` (see [Optional Fields](../context/context-scope.md#limits)) |
 
+A `context:` reference names an upstream action and a field of its declared output. It cannot name `source`. Preflight refuses a reference such as `source.ticket_text` with `context reference 'source.ticket_text' names unknown action 'source'`. To give the judge a staged field, let an upstream action, for example a tool, write the field to its output. Then reference that action. An upstream action that already holds the field also works.
+
 ### Testing a judge offline
 
 On `model_vendor: agac-provider`, the judge receives a verdict object. Thus you can test a judged rule with no network and no key. The mock selects `passed: true` or `passed: false` with its seeded generator. It writes a generated sentence as the `reason`. The same rule and value give the same verdict on each run. Different values get the two verdicts, so the pass path and the fail path both run. The verdict does not judge the value. It tests the connections, not the rule. Under `run_mode: batch`, the mock batch provider answers each judge request of a [judge batch](#judging-in-batch) in the same way. Its seed is not the seed of the online mock, so one value can get a different verdict in the two run modes.
@@ -358,55 +360,6 @@ The payload is the difference between this option and `retry`. An authored promp
 :::note[See exhaustion happen]
 `tests/integration/fixtures/runtime_probes/repair_exhaustion` is a rule that the mock provider can never satisfy, with `on_exhausted: return_last`. `tests/integration/test_runtime_probes.py` runs it through the real CLI. The test asserts that the record continues to exist with its last failed verdict attached. This is the concrete shape of the `return_last` row above. The `partial_file_rejection` workflow of the same fixture project shows the other side. If the first stage refuses a staging file, the run stops before it processes any file. Thus a run that exits 0 did stage each file.
 :::
-
-### Migrating from `reprompt:`
-
-This section migrates a `reprompt:` block. To move a hand-built chain of actions onto `expect:`, see [Migrate a Check Chain to `expect:`](../../guides/expectations-migration.md). In such a chain, one action checks an output, a tool collects the verdicts and a third action rewrites the failures. That guide also lists the checks that must stay hand-built.
-
-`reprompt:` was removed. An action, a `defaults:` block and the `default_agent_config:` block of
-`agent_actions.yml` refuse it at load with the error that any unknown key gets. The `expect:` block replaces it.
-The full migration is below.
-
-**A block that only checked the schema** (the common case) becomes an `expect:` with no rules. Set it
-one time for the workflow:
-
-```yaml
-# before                                  # after
-defaults:                                 defaults:
-  reprompt:                                 expect:
-    on_schema_mismatch: reprompt              repair: auto
-    max_attempts: 3                           max_iterations: 3
-    use_self_reflection: true                 structural: auto
-    on_exhausted: return_last                 on_exhausted: return_last
-```
-
-`structural: auto` keeps the schema feedback that the `reprompt:` block sent. If you do not set it, a schema failure
-sends the original prompt again. This is usually what you want, because a response that the schema
-rejected has no partial result to keep.
-
-`use_self_reflection` has no replacement and does not need one. It added one fixed question.
-`repair: auto` sends the actual failure with the `detail` and `hint` of each rule.
-
-**A block that names a `validation:` tool** becomes a rule. Most of these tools are the same as a built-in type:
-
-| The tool checked | The rule |
-|---|---|
-| no field came back null | `no_null_fields` |
-| a field matches a pattern | `matches_regex` |
-| the length of a field | `word_count_between`, `item_count` |
-| a field is one of a set | `accepted_values` |
-| the response parsed | nothing. The structural gate does this check |
-
-A check that is really specific to the project becomes an [`@expectation_check`](#extending-with-your-own-checks).
-It returns `(passed, detail)`, not only a boolean. Thus the failure goes into the repair
-prompt, not only into the log.
-
-**`on_schema_mismatch:` was also removed.** It also fails as an unknown key. `expect: {repair: auto}` does what `reprompt` mode did.
-`reject` (halt, and do not generate again) becomes `max_iterations: 1` with `on_exhausted: raise`.
-
-**A run deferred during a reprompt** cannot resume. Its stored state names a recovery phase that this
-version does not run. Agent Actions refuses the run and does not read it in a different way. Run the action again with `--fresh`. The
-records that the run completed before are in the store.
 
 ## Setting it once for a workflow
 
@@ -645,6 +598,23 @@ Use the tiers in this order of preference:
 2. An `expression` condition (declarative, across fields).
 3. `llm_judge` (semantic, natural language).
 4. A custom check. This is Python code that you then own and test.
+
+## When not to use an expectation
+
+An expectation judges the output of one record against a written rule. Use this test: can a careful reader decide the rule from this one record and the rule text? If yes, use an expectation. If no, use a tool or a chain of actions:
+
+- **A comparison of two groups.** No field of one record holds the difference between a control group and a test group. Use the actions that run each group and a tool that compares them.
+- **A rule across records.** Duplicates, uniqueness in a file and coverage of a set are properties of a set of records. A rule sees one record only. Use a tool at `granularity: file`. See [File-Level Tools](../../guides/custom-tools.md#file-level-tools).
+- **A judge that must not see part of the record.** The judge sees each field that the selector and `context:` give it. If the judge must not see a reference value, or ids that show the reference value, build the hidden view in a tool. Then check it in an action after the tool. The bundled `agac-blind-verification` skill describes this pattern (see [`agac skills`](../cli/skills.md)).
+- **A check that a tool already does well.** Keep a deterministic tool that gives the correct verdict. To move its logic into a rule, write an [`@expectation_check`](#extending-with-your-own-checks).
+- **A payload that several actions compile.** A rule reads a field selector from the output of its own action. A `context:` reference reads one field of one upstream action. Neither of them builds a payload from several actions. Also, a repair generates only the action that holds the `expect:` block. It cannot correct a defect in the output of a different action. Use a tool that compiles the payload, and a check action after it.
+- **Cascading repairs.** A correction to one field can make other fields stale, so that other actions must run again. A repair generates one action again. It does not enter the DAG again. Use a [loop](../configuration/loops.md#loop-or-repair). A loop runs a branch of several actions again, and the next attempt reads what the checks found.
+
+## Before a judge rule blocks
+
+1. **Calibrate the rule in `warn` mode.** Collect 5 to 20 outputs that people accept. Add 3 to 10 outputs that are bad for the reason that the rule targets. Run the rule with `severity: warn` and `repair: none` on these records. `repair: none` makes no repair round, so the calibration costs only the judge votes. Do not set `max_iterations` or `on_exhausted` with `repair: none`. Agent Actions refuses them. Read the results with [`agac expect report`](../cli/expect.md#expect-report). The `detail` of each outcome gives the vote count, for example `3/5 judge votes passed`. Change the rule to `error` only when the known-good outputs pass by a clear majority. If a known-good output fails, the rule is wrong. Change the rule text, not the outputs. The bundled `agac-expectations` skill has the full procedure in its `references/calibration.md` file.
+2. **Add `not_null` beside an `llm_judge` on the same field.** Every rule runs, whatever its place in the list. Thus `not_null` does not keep a value away from the judge. It gives the record a clear failure reason, for example `value is an empty str`, and the repair round gets that reason as feedback. Without it, the only failure is the FAIL of the judge, which does not say that the field is empty. With a list selector, put a `not_null` rule on each field in the list. `not_null` accepts a string of only spaces. To refuse it, add `matches_regex` with `pattern: '\S'`.
+3. **Size `judge_budget` in judged values.** The budget counts one unit for each value that the judge checks, whatever `votes` is. Set it to about records × judge rules × `max_iterations`, plus a margin. Each judge rule can make `votes` × `max_iterations` model calls for one record, but a value that does not change between rounds reuses its verdict. Do not set the budget too low. When the budget is used up, a skipped rule with `error` severity fails the record (see [Caching and budget](#caching-and-budget)). To lower the cost, give the judge a less expensive model with the `model` parameter.
 
 ## Current limitations
 

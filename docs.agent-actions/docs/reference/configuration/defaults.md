@@ -366,7 +366,7 @@ Neither limit restricts [`agac retry`](../cli/retry). That command selects recor
 
 If the limit that applies changes between runs, the actions run again. They are not skipped. This occurs if the limit changed in the config, on the command line or in the environment. The reason is that a completed action stores the limit that actually applied, not the limit that the config asked for.
 
-A raised `record_limit` is the exception. If the last run of an action processed everything that was available, a larger limit cannot reduce that result. So the action stays complete. Some runs cannot say what they processed. Examples are a run that completed before these counts existed, and a run that lost an input file to an error. Such a run keeps the simpler rule. `file_limit` also keeps the simpler rule, because nothing counts the files that a walk did not open.
+A raised `record_limit` is the exception. If the last run of an action processed everything that was available, a larger limit cannot reduce that result. So the action stays complete. Some runs cannot say what they processed. An example is a run that lost an input file to an error. Such a run keeps the simpler rule. `file_limit` also keeps the simpler rule, because nothing counts the files that a walk did not open.
 
 ### 7. Environment-Specific Defaults
 
