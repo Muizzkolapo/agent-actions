@@ -1023,6 +1023,17 @@ class WorkflowConfig(BaseModel):
     storage: StorageConfig | None = Field(
         default=None, description="Storage maintenance settings for this workflow"
     )
+    # Strict because the coordinator reads the raw dict, where a coerced "2" stays a string.
+    batch_preparation_concurrency: int | None = Field(
+        default=None,
+        ge=1,
+        le=50,
+        strict=True,
+        description=(
+            "The most batch actions of one step that prepare at the same time; online "
+            "actions beside them are not counted. Unset: only --concurrency-limit applies"
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_workflow_invariants(self):

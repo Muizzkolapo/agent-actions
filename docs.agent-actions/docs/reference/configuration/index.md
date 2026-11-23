@@ -110,9 +110,28 @@ The top level accepts only these keys, and refuses all other keys. Without this 
 | `defaults` | The settings that each action inherits |
 | `actions` | The actions (required) |
 | `tool_path` | The location of the tools of this workflow. It has priority over the default config and over `tool_path` in `agent_actions.yml` |
+| `batch_preparation_concurrency` | Optional. The maximum number of batch actions of one step that prepare at the same time (1-50). If you omit it, only `--concurrency-limit` applies. See [Batch preparation concurrency](#batch-preparation-concurrency) |
 | `storage` | Maintenance settings: `prompt_trace_retention_runs` and `source_data_ttl_days`. The unit of the first setting is **calendar days**, not runs, although its name says runs. `0` means never prune. If you omit a key, the framework default applies. For traces, the framework default is 10 days, and it does prune |
 
 Model settings, for example `model_vendor`, go under `defaults:`, not at the top level.
+
+### Batch preparation concurrency
+
+`batch_preparation_concurrency` sets the maximum number of batch actions of one step that prepare their requests at the same time. Each batch action holds the records of one input file while it prepares. Thus two batch actions of one step hold two files. Use this key when the records of a step are large and the memory of the machine is small:
+
+```yaml
+name: my_workflow
+description: "Extract and validate facts"
+batch_preparation_concurrency: 1   # one batch action of a step prepares at a time
+```
+
+- The value is a whole number from 1 to 50. The load refuses other values, for example `0` or `"1"`.
+- It limits only the batch actions that prepare and send their requests. An online, tool or hitl action of the step continues to run beside them. A batch action that collects its results is not limited.
+- `--concurrency-limit` continues to limit all of the actions of the run. A batch action that waits for its turn does not use one of those places.
+- `--concurrency-limit 1` and `--execution-mode sequential` also run one batch action at a time. But they also make an online action wait, or make the batch actions wait for the online action.
+- It does not change any answer.
+
+See [Memory while a batch step prepares](../execution/run-modes.md#batch-preparation-memory).
 
 See [Defaults](./defaults.md) for the complete inheritance system.
 
