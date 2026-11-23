@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import builtins
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -408,71 +407,37 @@ class TestRunEventsMetricsEnrichment:
 # ---------------------------------------------------------------------------
 
 
-def _create_test_db(db_path: Path, *, with_traces: bool = False) -> None:
-    """Create a minimal SQLite DB with source/target data and optionally prompt_trace."""
-    conn = sqlite3.connect(str(db_path))
-    conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
-    conn.execute(
-        "CREATE TABLE target_data "
-        "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
-    )
-    # Insert one target record with known source_guid and target_id
-    record = json.dumps(
-        [{"source_guid": "guid-001", "target_id": "tid-001", "issue_type": "bug", "lineage": []}]
-    )
-    conn.execute(
-        "INSERT INTO target_data VALUES (?, ?, ?, ?)",
-        ("classify", "issues.json", record, 1),
-    )
-    # Insert a source row for count
-    conn.execute(
-        "INSERT INTO source_data VALUES (?, ?, ?)",
-        ("guid-001", "issues.json", "{}"),
-    )
+_TRACE = {
+    "action_name": "classify",
+    "record_id": "tid-001",
+    "source_guid": "guid-001",
+    "attempt": 0,
+    "compiled_prompt": "You are a classifier...",
+    "response_text": '[{"issue_type":"bug"}]',
+    "model_name": "llama3.2:latest",
+    "model_vendor": "ollama_local",
+    "run_mode": "batch",
+}
+_ISSUE = {"source_guid": "guid-001", "target_id": "tid-001", "issue_type": "bug", "lineage": []}
 
-    if with_traces:
-        conn.execute(
-            "CREATE TABLE prompt_trace ("
-            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "  action_name TEXT NOT NULL,"
-            "  record_id TEXT NOT NULL,"
-            "  source_guid TEXT,"
-            "  run_id TEXT,"
-            "  attempt INTEGER NOT NULL DEFAULT 0,"
-            "  compiled_prompt TEXT NOT NULL,"
-            "  llm_context TEXT,"
-            "  response_text TEXT,"
-            "  model_name TEXT,"
-            "  model_vendor TEXT,"
-            "  run_mode TEXT,"
-            "  prompt_length INTEGER,"
-            "  context_length INTEGER,"
-            "  response_length INTEGER,"
-            "  created_at TEXT DEFAULT CURRENT_TIMESTAMP,"
-            "  UNIQUE(action_name, record_id, attempt)"
-            ")"
-        )
-        conn.execute(
-            "INSERT INTO prompt_trace "
-            "(action_name, record_id, source_guid, attempt, compiled_prompt, response_text, "
-            " model_name, model_vendor, run_mode, prompt_length, response_length) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                "classify",
-                "tid-001",
-                "guid-001",
-                0,
-                "You are a classifier...",
-                '[{"issue_type":"bug"}]',
-                "llama3.2:latest",
-                "ollama_local",
-                "batch",
-                200,
-                25,
-            ),
-        )
-    conn.commit()
-    conn.close()
+
+def _create_test_db(
+    db_path: Path,
+    records: list[dict] | None = None,
+    *,
+    action: str = "classify",
+    traces: tuple[dict, ...] = (),
+) -> None:
+    """Store one target file and its source row, and any traces, through the backend."""
+    backend = SQLiteBackend(str(db_path), "test")
+    backend.initialize()
+    try:
+        backend._write_target_raw(action, "data.json", records or [_ISSUE])
+        backend.write_source("data.json", [{"source_guid": "guid-001"}])
+        for trace in traces:
+            backend.write_prompt_trace(**trace)
+    finally:
+        backend.close()
 
 
 def _scan_readonly(db_path: Path) -> dict | None:
@@ -487,9 +452,9 @@ def _scan_readonly(db_path: Path) -> dict | None:
 class TestScanSqliteReadonlyTraceAttachment:
     """Verify scan_data joins prompt_trace to preview records."""
 
-    def test_trace_attached_when_table_exists(self, tmp_path):
+    def test_trace_attached_when_one_was_written(self, tmp_path):
         db_path = tmp_path / "test.db"
-        _create_test_db(db_path, with_traces=True)
+        _create_test_db(db_path, traces=(_TRACE,))
 
         result = _scan_readonly(db_path)
         assert result is not None
@@ -504,10 +469,9 @@ class TestScanSqliteReadonlyTraceAttachment:
         assert trace["run_mode"] == "batch"
         assert trace["attempt"] == 0
 
-    def test_no_trace_when_table_missing(self, tmp_path):
-        """Old DBs without prompt_trace table should not crash."""
+    def test_no_trace_when_none_was_written(self, tmp_path):
         db_path = tmp_path / "test.db"
-        _create_test_db(db_path, with_traces=False)
+        _create_test_db(db_path)
 
         result = _scan_readonly(db_path)
         assert result is not None
@@ -518,31 +482,7 @@ class TestScanSqliteReadonlyTraceAttachment:
     def test_no_trace_when_record_has_no_identity(self, tmp_path):
         """Records with neither target_id nor parent_target_id get no trace."""
         db_path = tmp_path / "test.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
-        conn.execute(
-            "CREATE TABLE target_data "
-            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
-        )
-        # Record without source_guid
-        record = json.dumps([{"value": "hello"}])
-        conn.execute(
-            "INSERT INTO target_data VALUES (?, ?, ?, ?)",
-            ("act", "f.json", record, 1),
-        )
-        conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("x", "f.json", "{}"))
-        conn.execute(
-            "CREATE TABLE prompt_trace ("
-            "  id INTEGER PRIMARY KEY, action_name TEXT, record_id TEXT,"
-            "  source_guid TEXT, run_id TEXT,"
-            "  attempt INTEGER DEFAULT 0, compiled_prompt TEXT,"
-            "  llm_context TEXT, response_text TEXT, model_name TEXT,"
-            "  model_vendor TEXT, run_mode TEXT, prompt_length INTEGER,"
-            "  context_length INTEGER, response_length INTEGER,"
-            "  created_at TEXT, UNIQUE(action_name, record_id, attempt))"
-        )
-        conn.commit()
-        conn.close()
+        _create_test_db(db_path, [{"value": "hello"}], action="act")
 
         result = _scan_readonly(db_path)
         assert result is not None
@@ -553,30 +493,13 @@ class TestScanSqliteReadonlyTraceAttachment:
     def test_latest_attempt_wins(self, tmp_path):
         """When multiple attempts exist, only the latest is attached."""
         db_path = tmp_path / "test.db"
-        _create_test_db(db_path, with_traces=True)
-
-        # Add a second attempt with different response
-        conn = sqlite3.connect(str(db_path))
-        conn.execute(
-            "INSERT INTO prompt_trace "
-            "(action_name, record_id, source_guid, attempt, compiled_prompt, response_text, "
-            " model_name, run_mode, prompt_length, response_length) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                "classify",
-                "tid-001",
-                "guid-001",
-                1,
-                "You are a classifier (retry)...",
-                '[{"issue_type":"feature_request"}]',
-                "llama3.2:latest",
-                "batch",
-                250,
-                35,
-            ),
-        )
-        conn.commit()
-        conn.close()
+        retry = {
+            **_TRACE,
+            "attempt": 1,
+            "compiled_prompt": "You are a classifier (retry)...",
+            "response_text": '[{"issue_type":"feature_request"}]',
+        }
+        _create_test_db(db_path, traces=(_TRACE, retry))
 
         result = _scan_readonly(db_path)
         records = result["nodes"]["classify"]["preview"]
@@ -591,12 +514,6 @@ class TestScanSqliteNamespaceUnwrap:
     def test_preview_records_show_action_fields(self, tmp_path):
         """Preview records should have unwrapped content for the action."""
         db_path = tmp_path / "test.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
-        conn.execute(
-            "CREATE TABLE target_data "
-            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
-        )
         namespaced_record = {
             "source_guid": "g1",
             "content": {
@@ -604,13 +521,7 @@ class TestScanSqliteNamespaceUnwrap:
                 "classify": {"genre": "fiction"},
             },
         }
-        conn.execute(
-            "INSERT INTO target_data VALUES (?, ?, ?, ?)",
-            ("extract", "data.json", json.dumps([namespaced_record]), 1),
-        )
-        conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("g1", "data.json", "{}"))
-        conn.commit()
-        conn.close()
+        _create_test_db(db_path, [namespaced_record], action="extract")
 
         result = _scan_readonly(db_path)
         records = result["nodes"]["extract"]["preview"]
@@ -622,23 +533,11 @@ class TestScanSqliteNamespaceUnwrap:
     def test_flat_content_records_unchanged(self, tmp_path):
         """Records without namespaced content pass through unchanged."""
         db_path = tmp_path / "test.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("CREATE TABLE source_data (source_guid TEXT, relative_path TEXT, data TEXT)")
-        conn.execute(
-            "CREATE TABLE target_data "
-            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
-        )
         flat_record = {
             "source_guid": "g1",
             "content": {"genre": "fiction", "confidence": 0.9},
         }
-        conn.execute(
-            "INSERT INTO target_data VALUES (?, ?, ?, ?)",
-            ("classify", "data.json", json.dumps([flat_record]), 1),
-        )
-        conn.execute("INSERT INTO source_data VALUES (?, ?, ?)", ("g1", "data.json", "{}"))
-        conn.commit()
-        conn.close()
+        _create_test_db(db_path, [flat_record])
 
         result = _scan_readonly(db_path)
         records = result["nodes"]["classify"]["preview"]

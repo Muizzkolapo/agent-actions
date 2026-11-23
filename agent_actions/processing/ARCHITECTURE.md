@@ -358,9 +358,7 @@ and the checkpoint is saved before it. `build_carry_forward` (with nothing store
 `checkpointed_answers` (beside a stored file) leave that record out rather than carry its
 rows, and the run answers it again. Carried,
 they would keep that one identity, of which the carry keeps a single row. A record
-answered with one row is carried as before. A record an earlier version checkpointed is
-answered again as well: that version kept one row per `source_guid`, the last, and the
-row cannot say whether the record had others (`checkpointed_without_row_count`).
+answered with one row is carried as before.
 
 ### Checkpoint storage
 
@@ -427,8 +425,8 @@ On resume, `build_carry_forward()` reads prior output for carried records:
 answered_since_stored(action_name, path)        ← checkpointed after the file
     → stored row never carried                     was stored (online path)
     checkpointed_answers(...) → finished with the run's own; a record
-                                checkpointed with several rows, or by
-                                an earlier version, is answered again
+                                checkpointed with several rows is
+                                answered again
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action

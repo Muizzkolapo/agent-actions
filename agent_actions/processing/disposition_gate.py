@@ -695,15 +695,14 @@ def checkpointed_answers(
     caller finishes it as the answer it was. A record with none is to be answered again,
     as is one ``build_carry_forward`` would not carry from its checkpoint either: one
     checkpointed with several rows (an expansion's, sharing their input's identity until
-    enrichment), or by an earlier version, which kept only the last of its rows.
+    enrichment).
     """
     wanted = frozenset(record_ids)
     if not wanted:
         return []
     rows = storage_backend.read_checkpoint_records(action_name, relative_path)
     rows_per_record = Counter(row.get("source_guid") for row in rows)
-    left_out: set[str] = {guid for guid, count in rows_per_record.items() if guid and count > 1}
-    left_out.update(storage_backend.checkpointed_without_row_count(action_name, relative_path))
+    left_out = {guid for guid, count in rows_per_record.items() if guid and count > 1}
     answerable = wanted - left_out
     return [row for row in rows if row.get("source_guid") in answerable]
 
@@ -730,7 +729,7 @@ def build_carry_forward(
     A record checkpointed with several rows is reported *missing* too: an expansion's rows
     share their input's identity until enrichment mints one for each, and a checkpoint row
     is saved before that. Carried, they would keep that one identity, of which the carry
-    keeps a single row. So is a record an earlier version checkpointed: it kept the last row.
+    keeps a single row.
     """
     answered_again: set[str] = set()
     try:
@@ -749,9 +748,6 @@ def build_carry_forward(
             return [], carry_ids
         rows_per_record = Counter(row.get("source_guid") for row in prior_output)
         answered_again = {guid for guid, count in rows_per_record.items() if guid and count > 1}
-        answered_again.update(
-            storage_backend.checkpointed_without_row_count(action_name, relative_path)
-        )
         prior_output = [row for row in prior_output if row.get("source_guid") not in answered_again]
         logger.info(
             "Action '%s': using %d checkpointed records for carry-forward",
@@ -760,8 +756,8 @@ def build_carry_forward(
         )
         if asked := answered_again & carry_ids:
             logger.info(
-                "Action '%s': %d checkpointed record(s) will be answered again: answered with "
-                "several rows, or checkpointed by an earlier version that kept only the last",
+                "Action '%s': %d checkpointed record(s) answered with several rows "
+                "will be answered again",
                 action_name,
                 len(asked),
             )

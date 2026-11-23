@@ -215,9 +215,8 @@ class ExpectReportCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.agent_name, auto_create=False, project_root=project_root
         )
-        # Reading must not write: initializing a backend creates the database and
-        # migrates its schema, so a question about a workflow that never ran would
-        # leave a store behind.
+        # Reading must not write: initializing a backend creates the database, so a
+        # question about a workflow that never ran would leave a store behind.
         store = paths.io_dir / "store" / f"{self.agent_name}.db"
         tallies: list[ActionTally] = []
         produced: dict[str, int] = {}

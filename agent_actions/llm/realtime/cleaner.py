@@ -12,6 +12,7 @@ from agent_actions.errors import (
 from agent_actions.errors import (
     FileSystemError as AgentFileSystemError,
 )
+from agent_actions.errors.configuration import StoreFormatError
 from agent_actions.llm.realtime.handlers import AgentManager
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,17 @@ class Cleaner:
                         released = release_local_batch_record(batch_id) and released
             finally:
                 backend.close()
+        except StoreFormatError as e:
+            # This version cannot read the store, so nothing can name its batches.
+            logger.debug("Removing a store of another storage format: %s", e)
+            click.echo(
+                click.style(
+                    f"⚠️  The store for '{self.agent}' uses another storage format, so the "
+                    f"batches it names cannot be reclaimed. Removing it.",
+                    fg="yellow",
+                )
+            )
+            return True
         except Exception as e:
             logger.warning("Could not reclaim local batch records before cleaning: %s", e)
             click.echo(

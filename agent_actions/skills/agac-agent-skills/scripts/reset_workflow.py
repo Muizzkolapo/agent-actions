@@ -120,6 +120,7 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
     released = True
     try:
         from agent_actions.config.paths import PathManager
+        from agent_actions.errors.configuration import StoreFormatError
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
         from agent_actions.llm.providers.local_batch_records import (
             discard_partial_batch_records,
@@ -157,6 +158,14 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
                     released = release_local_batch_record(batch_id) and released
         finally:
             backend.close()
+    except StoreFormatError:
+        # This version cannot read the store, so nothing can name its batches.
+        print(
+            f"warning: the store for {workflow} uses another storage format, so the "
+            f"batches it names cannot be reclaimed. Removing it.",
+            file=sys.stderr,
+        )
+        return True
     except Exception as e:  # noqa: BLE001 - reported, and the store then stays
         print(
             f"warning: could not reclaim what a provider recorded locally ({e}).",

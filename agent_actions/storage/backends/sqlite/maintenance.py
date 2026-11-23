@@ -341,57 +341,48 @@ class SQLiteMaintenanceMixin(SQLitePayloadCodecMixin):
                 # Keyed on the prepare-time id: a durable guid would also match
                 # rows from earlier runs and show a stale prompt as if current.
                 # An expansion child's own id postdates its prompt.
-                try:
-                    candidates: set[str] = set()
-                    for rec in records:
-                        for tid in (rec.get("target_id"), rec.get("parent_target_id")):
-                            if tid:
-                                candidates.add(tid)
-                    if candidates:
-                        placeholders = ",".join("?" for _ in candidates)
-                        cursor.execute(
-                            f"SELECT record_id, compiled_prompt, llm_context, "  # nosec B608  # only ? placeholders are interpolated
-                            f"response_text, model_name, model_vendor, run_mode, "
-                            f"prompt_length, response_length, attempt "
-                            f"FROM prompt_trace "
-                            f"WHERE action_name = ? AND record_id IN ({placeholders})"
-                            f" ORDER BY attempt DESC, id DESC",
-                            [action_name, *candidates],
-                        )
-                        newest: dict[str, dict[str, Any]] = {}
-                        for trace_row in cursor:
-                            newest.setdefault(
-                                trace_row["record_id"],
-                                {
-                                    "compiled_prompt": self.decompress_trace_text(
-                                        trace_row["compiled_prompt"]
-                                    ),
-                                    "llm_context": self.decompress_trace_text(
-                                        trace_row["llm_context"]
-                                    ),
-                                    "response_text": self.decompress_trace_text(
-                                        trace_row["response_text"]
-                                    ),
-                                    "model_name": trace_row["model_name"],
-                                    "model_vendor": trace_row["model_vendor"],
-                                    "run_mode": trace_row["run_mode"],
-                                    "prompt_length": trace_row["prompt_length"],
-                                    "response_length": trace_row["response_length"],
-                                    "attempt": trace_row["attempt"],
-                                },
-                            )
-                        for rec in records:
-                            trace_data = newest.get(rec.get("target_id") or "") or newest.get(
-                                rec.get("parent_target_id") or ""
-                            )
-                            if trace_data:
-                                rec["_trace"] = trace_data
-                except sqlite3.OperationalError:
-                    # Missing table, or a pre-migration store opened read-only
-                    # (no ALTER pass ran, so identity columns are absent).
-                    logger.debug(
-                        "No joinable prompt_trace for %s — skipping trace attachment", action_name
+                candidates: set[str] = set()
+                for rec in records:
+                    for tid in (rec.get("target_id"), rec.get("parent_target_id")):
+                        if tid:
+                            candidates.add(tid)
+                if candidates:
+                    placeholders = ",".join("?" for _ in candidates)
+                    cursor.execute(
+                        f"SELECT record_id, compiled_prompt, llm_context, "  # nosec B608  # only ? placeholders are interpolated
+                        f"response_text, model_name, model_vendor, run_mode, "
+                        f"prompt_length, response_length, attempt "
+                        f"FROM prompt_trace "
+                        f"WHERE action_name = ? AND record_id IN ({placeholders})"
+                        f" ORDER BY attempt DESC, id DESC",
+                        [action_name, *candidates],
                     )
+                    newest: dict[str, dict[str, Any]] = {}
+                    for trace_row in cursor:
+                        newest.setdefault(
+                            trace_row["record_id"],
+                            {
+                                "compiled_prompt": self.decompress_trace_text(
+                                    trace_row["compiled_prompt"]
+                                ),
+                                "llm_context": self.decompress_trace_text(trace_row["llm_context"]),
+                                "response_text": self.decompress_trace_text(
+                                    trace_row["response_text"]
+                                ),
+                                "model_name": trace_row["model_name"],
+                                "model_vendor": trace_row["model_vendor"],
+                                "run_mode": trace_row["run_mode"],
+                                "prompt_length": trace_row["prompt_length"],
+                                "response_length": trace_row["response_length"],
+                                "attempt": trace_row["attempt"],
+                            },
+                        )
+                    for rec in records:
+                        trace_data = newest.get(rec.get("target_id") or "") or newest.get(
+                            rec.get("parent_target_id") or ""
+                        )
+                        if trace_data:
+                            rec["_trace"] = trace_data
 
                 nodes[action_name] = {
                     "record_count": record_count,

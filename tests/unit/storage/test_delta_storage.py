@@ -439,9 +439,6 @@ class TestBackwardCompatibility:
 
     def test_legacy_records_returned_as_is(self, backend):
         """Records without _delta_mode are returned without reconstruction."""
-        import sqlite3
-
-        # Insert a legacy full record directly (no _delta_mode)
         legacy_data = [
             {
                 "_state": "active",
@@ -452,14 +449,7 @@ class TestBackwardCompatibility:
                 },
             }
         ]
-        conn = sqlite3.connect(str(backend.db_path))
-        conn.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, ?)",
-            ("action_1", "file.json", json.dumps(legacy_data), 1),
-        )
-        conn.commit()
-        conn.close()
+        backend._write_target_raw("action_1", "file.json", legacy_data)
 
         result = backend.read_target("action_1", "file.json")
         assert result[0]["content"]["source"]["title"] == "SQL"
@@ -506,47 +496,6 @@ class TestMetadata:
         backend.save_metadata("dependency_graph", json.dumps({"merge": ["branch_a", "branch_b"]}))
 
         assert backend._get_upstream_actions("merge") == ["branch_a", "branch_b"]
-
-
-class TestFormatVersionCheck:
-    """Format version prevents silent corruption on downgrade."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        b = _make_backend(tmp_path)
-        _set_execution_order(b, ["a1"])
-        yield b
-        b.close()
-
-    def test_format_version_stored_on_first_write(self, backend):
-        """First write_target stores format version in metadata."""
-        backend.write_target(
-            "a1",
-            "f.json",
-            [{"_state": "active", "content": {"a1": {"x": 1}}}],
-            is_first_action=True,
-        )
-        ver = backend.load_metadata("storage_format_version")
-        assert ver == "3"
-
-    def test_old_code_rejects_delta_db(self, backend, tmp_path):
-        """Code with lower version raises ConfigurationError on delta DB."""
-        from agent_actions.errors.configuration import ConfigValidationError
-
-        # Simulate a future version
-        backend.save_metadata("storage_format_version", "99")
-
-        with pytest.raises(ConfigValidationError, match="storage format version 99"):
-            backend.read_target("a1", "f.json")
-
-    def test_corrupt_version_raises(self, backend):
-        """Non-integer version raises ConfigurationError."""
-        from agent_actions.errors.configuration import ConfigValidationError
-
-        backend.save_metadata("storage_format_version", "not_a_number")
-
-        with pytest.raises(ConfigValidationError, match="Corrupt"):
-            backend.read_target("a1", "f.json")
 
 
 class TestPreviewReconstruction:

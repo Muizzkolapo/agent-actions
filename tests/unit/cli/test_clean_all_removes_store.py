@@ -6,6 +6,7 @@ The cleaner delegates to ``StorageBackend.paths_to_wipe`` so future backends
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -285,3 +286,21 @@ def test_all_keeps_whatever_the_backend_calls_its_store(tmp_path, monkeypatch):
     cleaner.run()
 
     assert "vault" not in _cleaned_names(agent_manager)
+
+
+def test_all_removes_a_store_of_another_format(tmp_path, capsys):
+    """The format refusal tells the user to run this command, so it must not refuse too."""
+    cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
+    db_path = tmp_path / "agent_io" / "store" / "wf.db"
+    store = SQLiteBackend(str(db_path), "wf")
+    store.initialize()
+    store.close()
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE workflow_metadata SET value = '3' WHERE key = 'storage_format_version'")
+    conn.commit()
+    conn.close()
+
+    cleaner.run()
+
+    assert _cleaned_names(agent_manager) == {"target", "staging", "store"}
+    assert "another storage format" in capsys.readouterr().out

@@ -11,6 +11,7 @@ from typing import Any, NamedTuple
 
 from agent_actions.config.defaults import DocsDefaults
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
+from agent_actions.errors.configuration import StoreFormatError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.file_handler import find_project_dirs
@@ -130,7 +131,7 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
                         workflow_data[workflow_name] = data
                 finally:
                     backend.close()
-            except (OSError, sqlite3.Error) as e:
+            except (OSError, sqlite3.Error, StoreFormatError) as e:
                 logger.warning("Failed to scan workflow DB %s: %s", db_file, e, exc_info=True)
 
     return workflow_data

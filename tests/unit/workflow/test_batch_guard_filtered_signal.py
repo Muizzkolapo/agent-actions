@@ -137,17 +137,6 @@ class TestTheRealBatchSignalReachesTheUser:
         assert result.status == ActionStatus.COMPLETED
         assert [e for e in events if isinstance(e, ActionSkipEvent)] == []
 
-    def test_rows_stored_before_their_count_was_kept_still_complete_it(self, resume, backend):
-        """A store older than record_count leaves it NULL on rows that hold records,
-        so a summed count reads them as none."""
-        backend.write_target(ACTION, "older.json", [{"id": 1}])
-        backend.connection.execute("UPDATE target_data SET record_count = NULL")
-        backend.connection.commit()
-        _batch_filtered_every_record(backend)
-        ex = _executor(backend)
-        result, _ = _drive(ex, ex.deps, resume)
-        assert result.status == ActionStatus.COMPLETED
-
 
 class TestTheDiscriminatorIsWhetherTheActionHoldsARow:
     """M-2: prove write_target([]) really is what leaves the action holding no row."""
