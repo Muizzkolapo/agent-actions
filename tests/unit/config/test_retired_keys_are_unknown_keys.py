@@ -82,6 +82,13 @@ def test_a_retired_key_is_refused_as_an_unknown_key(surface, key):
         assert "no longer read" not in message
 
 
+@pytest.mark.parametrize("surface", ["defaults", "default_agent_config"])
+def test_overlap_suggests_chunk_overlap(surface):
+    message = "; ".join(e["msg"] for e in _refusal(surface, "overlap"))
+
+    assert "did you mean 'chunk_overlap'?" in message
+
+
 def test_a_mode_in_a_versions_block_is_refused_as_an_unknown_key():
     errors = _refusal("versions", "mode")
 
