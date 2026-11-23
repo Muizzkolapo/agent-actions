@@ -76,6 +76,7 @@ action holds no record, and otherwise clears it.
 | `ActionExecutor.reopen_with_readers()` | `.agac/batch_state/` | Deletes | — |
 | `ActionExecutor.reopen_with_readers()` | `agent_io/store/{workflow_name}.db` | Deletes | — |
 | `AgentWorkflow._run_storage_maintenance()` | `agent_config/{workflow}.yml` | Reads | `storage.prompt_trace_retention_runs`, `storage.source_data_ttl_days` (off the raw config dict, not the validated model) |
+| `AgentWorkflow.async_run()` | `agent_config/{workflow}.yml` | Reads | `batch_preparation_concurrency` (off the raw config dict, through `_workflow_setting`), handed to each level |
 | `AgentWorkflow.async_run()` | `agent_io/target/{action}/` | Writes | — |
 | `load_workflow_configs()` | `agent_config/{workflow}.yml` | Reads | `name`, `actions[]`, `defaults` |
 | `discover_workflow_udfs()` | `tools/{workflow}/*.py` | Reads | — |

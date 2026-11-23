@@ -86,7 +86,7 @@ The example above uses observe mode. Observe mode runs the checks, attaches the 
 | `structural` | string or mapping | `retry` | How the model generates the output again after a **schema** failure. The values are the same four values, but not `none`. See [Re-roll or steer](#re-roll-or-steer) |
 | `max_iterations` | integer 1–10 | `3` | The total number of generations for each record, including the first. If you set it explicitly with `repair: none`, it is a configuration error, not a setting that does nothing |
 | `on_exhausted` | string | `return_last` | The result when no iterations remain: `return_last`, `fail`, or `raise`. The same rule applies: do not set it under `repair: none` |
-| `judge_budget` | integer ≥ 1 | no limit | The maximum number of real `llm_judge` LLM calls that the suite of this action may make in the full run |
+| `judge_budget` | integer ≥ 1 | no limit | The maximum number of values that the `llm_judge` rules of this action may send to the judge in the full run. One value counts once, whatever `votes` is |
 | `judge_mode` | string | the run mode of the action | How Agent Actions sends the `llm_judge` calls of the action: `batch` (as batches of their own, see [Judging in batch](#judging-in-batch)) or `online`. Set `online` to keep the judge calls of a batch action online. `batch` on an online action is a preflight defect |
 
 Each entry in `expectations:` (or in a suite file) has this shape:
@@ -252,7 +252,7 @@ At load time, Agent Actions automatically adds each reference in `context:` to t
 ### Caching and budget
 
 - **Cache:** The key of a judge call is `(expectation, resolved value)`. Two records (or two rules) can produce byte-identical content for the same rule. Then Agent Actions gets the second result from the cache, and does not make another real LLM call. The `context:` of the rule is not part of the key. If two records hold the same value with different grounding context, the judge reads only the context of the first record. The second record gets the same verdict. This is the same online and in batch.
-- **Budget:** `judge_budget` on the `expect:` block sets the maximum number of real judge calls for all the records that the action processes in one run. Cache hits do not count. When the budget is exhausted, Agent Actions marks each subsequent judge outcome `skipped`. The message says that the budget is exhausted. A skipped outcome did not pass. Thus a skipped outcome with `error` severity is in **both** the `failed` list and the `skipped` list of the verdict. Agent Actions could not check the rule, and a rule that it could not check is not satisfied.
+- **Budget:** `judge_budget` on the `expect:` block sets the maximum number of judged values for all the records that the action processes in one run. One value counts one unit, whatever `votes` is: the `votes` calls for that value share the unit. Cache hits do not count. When the budget is exhausted, Agent Actions marks each subsequent judge outcome `skipped`. The message says that the budget is exhausted. A skipped outcome did not pass. Thus a skipped outcome with `error` severity is in **both** the `failed` list and the `skipped` list of the verdict. Agent Actions could not check the rule, and a rule that it could not check is not satisfied.
 - **Failure isolation:** If the LLM call of the judge has an error (network, authentication, rate limit), only that outcome fails. The outcome has the error in its `detail`. The error does not stop the processing of the record. A quota or billing stop at a judge call stops the run (see [quota stop](../cli/run.md#quota-stop)).
 
 ### Judging in batch
@@ -360,6 +360,8 @@ The payload is the difference between this option and `retry`. An authored promp
 :::
 
 ### Migrating from `reprompt:`
+
+This section migrates a `reprompt:` block. To move a hand-built chain of actions onto `expect:`, see [Migrate a Check Chain to `expect:`](../../guides/expectations-migration.md). In such a chain, one action checks an output, a tool collects the verdicts and a third action rewrites the failures. That guide also lists the checks that must stay hand-built.
 
 `reprompt:` was removed. Agent Actions refuses a configuration that has it at load. The error names the `expect:` block that
 replaces it. The full migration is below. All four blocks that can contain `reprompt:`
