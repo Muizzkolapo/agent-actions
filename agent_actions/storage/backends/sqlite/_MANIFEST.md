@@ -46,7 +46,6 @@ Plain mixin classes, one per concern, that `SQLiteBackend` (in `../sqlite_backen
 | `storage.backend` | outbound | Disposition constants, `batch_file_names_key`, and `StorageBackend` for typing |
 | `utils` | outbound | `deep_json` encodes and decodes payload rows |
 | `errors` | outbound | `SerializationError`, `DataValidationError` |
-| `record` | outbound | `GUARD_SKIP` reason read by `get_terminal_record_ids` |
 | `logging` | outbound | `DIAGNOSTIC` marks trace-truncation and missing-trace notices |
 | `config` | outbound | `StorageDefaults` for maintenance retention defaults |
 | `storage.backends.sqlite_backend` | inbound | `SQLiteBackend` composes every mixin here |

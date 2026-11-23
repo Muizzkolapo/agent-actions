@@ -312,10 +312,9 @@ TERMINAL_DISPOSITIONS (not reprocessed on re-run):
   SUCCESS, FILTERED, SKIPPED, PASSTHROUGH, EXHAUSTED
 
   These records are "done" from the disposition gate's perspective.
-  The gate carries them forward without reprocessing.
-  get_terminal_record_ids() leaves out a PASSTHROUGH whose reason is
-  guard_skip: earlier versions recorded an online guard skip that way, and
-  a skip answers nothing (1348).
+  The gate carries them forward without reprocessing. A guard skip is
+  recorded as UNPROCESSED, so it is never carried: a skip answers
+  nothing (1348).
 
 RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an action stopped partway):
   FAILED, EXHAUSTED, DEFERRED

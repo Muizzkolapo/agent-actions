@@ -77,7 +77,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `logging` | outbound | Backends mark their bookkeeping notices as framework-internal |
 | `errors` | outbound | `StoreFormatError` for a store of another storage format; `SerializationError` for a payload that cannot be read |
 | `utils` | outbound | `plain_copy` of a cached file, `deep_json` for stored rows, and `gc_pause` around a reconstruction |
-| `record` | outbound | Lifecycle checks on stored rows, and the reason strings dispositions are read by: `get_terminal_record_ids` leaves out a `passthrough` an earlier version wrote for a guard skip (`GUARD_SKIP`) |
+| `record` | outbound | Lifecycle checks on stored rows, and `PARSE_ERROR` for the disposition of a schema-echo row |
 | `output` | inbound | FileWriter and UnifiedSourceDataSaver delegate writes to StorageBackend |
 | `input` | inbound | SourceDataLoader reads from StorageBackend |
 | `workflow` | inbound | Coordinator initializes backend; runner and executor query target/disposition state |

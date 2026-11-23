@@ -5,9 +5,7 @@ import sqlite3
 from collections.abc import Iterable
 from typing import Any
 
-from agent_actions.record.reasons import GUARD_SKIP
 from agent_actions.storage.backend import (
-    DISPOSITION_PASSTHROUGH,
     NODE_LEVEL_RECORD_ID,
     VALID_DISPOSITIONS,
     Disposition,
@@ -256,11 +254,7 @@ class SQLiteDispositionMixin(SQLitePayloadCodecMixin):
             return cursor.fetchone() is not None
 
     def get_terminal_record_ids(self, action_name: str) -> set[str]:
-        """Return record_ids with any gate-terminal disposition for an action.
-
-        A guard skip is no answer. Earlier versions recorded one online as
-        ``passthrough``, and a store they wrote still holds those rows.
-        """
+        """Return record_ids with any gate-terminal disposition for an action."""
         from agent_actions.storage.backend import TERMINAL_DISPOSITIONS
 
         action_name = self._validate_identifier(action_name, "action_name")
@@ -269,20 +263,13 @@ class SQLiteDispositionMixin(SQLitePayloadCodecMixin):
         sql = (
             f"SELECT DISTINCT record_id FROM record_disposition "  # nosec B608  # only ? placeholders are interpolated
             f"WHERE action_name = ? AND disposition IN ({placeholders}) "
-            f"AND record_id != ? "
-            f"AND NOT (disposition = ? AND COALESCE(reason, '') = ?)"
+            f"AND record_id != ?"
         )
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
                 sql,
-                (
-                    action_name,
-                    *terminal,
-                    NODE_LEVEL_RECORD_ID,
-                    DISPOSITION_PASSTHROUGH,
-                    GUARD_SKIP,
-                ),
+                (action_name, *terminal, NODE_LEVEL_RECORD_ID),
             )
             return {row["record_id"] for row in cursor.fetchall()}
 
