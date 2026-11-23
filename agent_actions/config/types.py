@@ -101,7 +101,6 @@ class ActionConfigDict(TypedDict, total=False):
     # Model
     model_vendor: str
     model_name: str
-    model: str  # legacy fallback for model_name
     api_key: str  # env var reference
     gemini_api_key: str  # vendor-specific API key override
     openai_api_key: str  # vendor-specific API key override

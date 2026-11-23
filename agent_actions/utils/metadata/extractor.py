@@ -55,7 +55,7 @@ class MetadataExtractor:
         """Get model name from agent configuration."""
         if not agent_config:
             return None
-        return agent_config.get("model_name") or agent_config.get("model")
+        return agent_config.get("model_name")
 
 
 class MetadataTimer:
