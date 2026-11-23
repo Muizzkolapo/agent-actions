@@ -425,6 +425,30 @@ The lock is an `RLock` (reentrant) because the `connection` property may be call
 
 ---
 
+## Storage Format
+
+`StorageBackend._STORAGE_FORMAT_VERSION` (4) is the one storage format this version
+reads and writes. `SQLiteBackend.initialize()` runs in one `BEGIN IMMEDIATE`
+transaction, so another process never sees the tables without the format:
+
+```
+No table in the file   → create every table, record storage_format_version = 4
+                          in workflow_metadata
+Any table in the file  → read storage_format_version; any other value, or none,
+                          raises StoreFormatError and closes the connection
+```
+
+`create_readonly()` applies the same check. The check comes before any read or write,
+so a store of another format is never changed. The error names the store file and tells
+the user to run `agac clean -a <workflow> --all`, which removes the store. `agac run
+--fresh` does not help: it deletes rows and keeps the file. Nothing deletes a store
+automatically. `agac clean --all` cannot read the batch registry of such a store, so it
+removes the store without reclaiming local batch records. The docs scanner skips it with
+a warning.
+
+A change to what the store holds — a column, a table, an encoding — raises the format.
+No code reads a store of an earlier format.
+
 ## Schema Migration (_enforce_schema)
 
 When the framework upgrades and adds columns to a table, existing databases need to be updated without losing data. `_enforce_schema()` runs at initialization, before `CREATE TABLE` statements:

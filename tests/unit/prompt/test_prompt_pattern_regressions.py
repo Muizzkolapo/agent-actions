@@ -83,37 +83,23 @@ class TestLspIndexerReadError:
 
 
 # ---------------------------------------------------------------------------
-# I-2: COALESCE guards NULL record_count in scan_data
+# I-2: COALESCE guards the empty SUM in scan_data
 # ---------------------------------------------------------------------------
 class TestScanSqliteCoalesce:
-    def test_null_record_count_defaults_to_zero(self, tmp_path):
-        """SUM(record_count) with NULL rows must return 0, not None."""
-        import sqlite3
+    def test_a_store_with_no_target_rows_counts_zero(self, tmp_path):
+        """SUM(record_count) over no rows is NULL; the scan reports 0."""
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
         db = tmp_path / "test.db"
-        conn = sqlite3.connect(str(db))
-        conn.execute(
-            "CREATE TABLE target_data "
-            "(action_name TEXT, relative_path TEXT, data TEXT, record_count INTEGER)"
-        )
-        conn.execute(
-            "INSERT INTO target_data VALUES (?, ?, ?, ?)",
-            ("my_action", "file.json", '{"x":1}', None),
-        )
-        conn.execute(
-            "CREATE TABLE source_data "
-            "(id INTEGER PRIMARY KEY, relative_path TEXT, source_guid TEXT, data TEXT)"
-        )
-        conn.commit()
-        conn.close()
-
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+        writer = SQLiteBackend(str(db), "test")
+        writer.initialize()
+        writer.close()
 
         backend = SQLiteBackend.create_readonly(db)
         result = backend.scan_data()
         backend.close()
         assert result is not None
-        assert result["nodes"]["my_action"]["record_count"] == 0
+        assert result["nodes"] == {}
         assert result["target_count"] == 0
 
 

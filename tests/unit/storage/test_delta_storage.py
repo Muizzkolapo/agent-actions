@@ -508,47 +508,6 @@ class TestMetadata:
         assert backend._get_upstream_actions("merge") == ["branch_a", "branch_b"]
 
 
-class TestFormatVersionCheck:
-    """Format version prevents silent corruption on downgrade."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        b = _make_backend(tmp_path)
-        _set_execution_order(b, ["a1"])
-        yield b
-        b.close()
-
-    def test_format_version_stored_on_first_write(self, backend):
-        """First write_target stores format version in metadata."""
-        backend.write_target(
-            "a1",
-            "f.json",
-            [{"_state": "active", "content": {"a1": {"x": 1}}}],
-            is_first_action=True,
-        )
-        ver = backend.load_metadata("storage_format_version")
-        assert ver == "3"
-
-    def test_old_code_rejects_delta_db(self, backend, tmp_path):
-        """Code with lower version raises ConfigurationError on delta DB."""
-        from agent_actions.errors.configuration import ConfigValidationError
-
-        # Simulate a future version
-        backend.save_metadata("storage_format_version", "99")
-
-        with pytest.raises(ConfigValidationError, match="storage format version 99"):
-            backend.read_target("a1", "f.json")
-
-    def test_corrupt_version_raises(self, backend):
-        """Non-integer version raises ConfigurationError."""
-        from agent_actions.errors.configuration import ConfigValidationError
-
-        backend.save_metadata("storage_format_version", "not_a_number")
-
-        with pytest.raises(ConfigValidationError, match="Corrupt"):
-            backend.read_target("a1", "f.json")
-
-
 class TestPreviewReconstruction:
     """preview_target reconstructs deltas before pagination."""
 

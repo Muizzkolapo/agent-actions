@@ -792,50 +792,6 @@ class TestServiceInitSqliteError:
 class TestSchemaEnforcement:
     """Tests for _enforce_schema dropping stale tables."""
 
-    def test_old_schema_migrated_with_alter_table(self, tmp_path):
-        """Table with missing columns gets them added via ALTER TABLE, preserving data."""
-        import sqlite3
-
-        db_path = tmp_path / "test.db"
-        # Create a DB with old schema missing 'detail' and 'input_snapshot' columns
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("""
-            CREATE TABLE record_disposition (
-                id INTEGER PRIMARY KEY,
-                action_name TEXT,
-                record_id TEXT,
-                disposition TEXT,
-                reason TEXT
-            )
-        """)
-        conn.execute(
-            "INSERT INTO record_disposition (action_name, record_id, disposition) VALUES ('a', 'r', 'd')"
-        )
-        conn.commit()
-        conn.close()
-
-        backend = SQLiteBackend(str(db_path), "test_workflow")
-        backend.initialize()
-
-        # Table should now have all required columns
-        cursor = backend.connection.cursor()
-        cursor.execute("PRAGMA table_info(record_disposition)")
-        columns = {row[1] for row in cursor.fetchall()}
-        assert "detail" in columns
-        assert "input_snapshot" in columns
-
-        # Old data must be preserved (ALTER TABLE, not DROP TABLE)
-        cursor.execute("SELECT COUNT(*) FROM record_disposition")
-        assert cursor.fetchone()[0] == 1
-
-        # Verify the existing row is intact
-        cursor.execute("SELECT action_name, record_id, disposition FROM record_disposition")
-        row = cursor.fetchone()
-        assert row["action_name"] == "a"
-        assert row["record_id"] == "r"
-        assert row["disposition"] == "d"
-        backend.close()
-
     def test_correct_schema_not_dropped(self, tmp_path):
         """Table with all columns is left intact on initialize()."""
         db_path = tmp_path / "test.db"

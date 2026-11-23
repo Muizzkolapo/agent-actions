@@ -233,6 +233,8 @@ agac run -w my_workflow --fresh
 
 `--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`). It does not delete the database file. `agac clean --all` removes all the `agent_io` directories, including `staging/`, `target/` and the database in the store. It asks for confirmation unless `--force` is set. The store folder stays. It holds only the empty run lock file `<workflow>.db.lock`.
 
+If a command refuses the store because the store records a different storage format, `--fresh` does not help. Run `agac clean -a <workflow> --all` to remove the store. Refer to [Storage Format](./index.md#storage-format).
+
 ## See Also
 
 - [Input Formats](./input-formats.md) — How to structure input data

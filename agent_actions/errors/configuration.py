@@ -143,3 +143,9 @@ class GuardNotEvaluatedError(RecordContextError):
     """Raised when a guard gave no verdict on one record in its time; that record fails alone."""
 
     pass
+
+
+class StoreFormatError(ConfigurationError):
+    """Raised when a store records a storage format other than the one this version writes."""
+
+    pass

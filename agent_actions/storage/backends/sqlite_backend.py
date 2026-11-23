@@ -12,7 +12,7 @@ from typing import Any  # noqa: F401
 
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.classification import mark_action_fatal
-from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.errors.configuration import ConfigValidationError, StoreFormatError
 from agent_actions.errors.processing import SerializationError  # noqa: F401
 from agent_actions.errors.validation import DataValidationError  # noqa: F401
 from agent_actions.logging.diagnostics import DIAGNOSTIC  # noqa: F401
@@ -281,6 +281,13 @@ class SQLiteBackend(
             conn = sqlite3.connect(f"file://{encoded_path}?immutable=1", uri=True)
             conn.row_factory = sqlite3.Row
 
+        try:
+            instance._refuse_other_format(
+                instance._recorded_format(conn.cursor()), str(db_path), instance.workflow_name
+            )
+        except BaseException:
+            conn.close()
+            raise
         instance._connection = conn
         return instance
 
@@ -347,36 +354,35 @@ class SQLiteBackend(
             return self._connection
 
     def initialize(self) -> None:
-        """Create connection, enforce schema, create tables and indexes."""
+        """Create a new store, or open one that records the current storage format."""
         if self._readonly:
             raise RuntimeError("Cannot initialize a read-only backend instance.")
         with self._lock:
             self._open_connection()
             cursor = self.connection.cursor()
             try:
+                # One transaction, so another process sees no tables without the format.
+                cursor.execute("BEGIN IMMEDIATE")
+                cursor.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table'"
+                    " AND name NOT LIKE 'sqlite_%' LIMIT 1"
+                )
+                if cursor.fetchone() is not None:
+                    self._refuse_other_format(
+                        self._recorded_format(cursor), str(self.db_path), self.workflow_name
+                    )
                 self._enforce_schema(cursor)
-                cursor.execute(self.SOURCE_TABLE_SQL)
-                cursor.execute(self.TARGET_TABLE_SQL)
-                cursor.execute(self.DISPOSITION_TABLE_SQL)
-                cursor.execute(self.SOURCE_INDEX_SQL)
-                cursor.execute(self.SOURCE_INDEX_REPEAT_OF_SQL)
-                cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
-                cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
-                cursor.execute(self.DISPOSITION_INDEX_ACTION_RECORD_SQL)
-                cursor.execute(self.PROMPT_TRACE_TABLE_SQL)
-                cursor.execute(self.TRACE_INDEX_ACTION_SQL)
-                cursor.execute(self.TRACE_INDEX_ACTION_RECORD_SQL)
-                cursor.execute(self.TRACE_INDEX_ACTION_SOURCE_SQL)
-                cursor.execute(self.TRACE_DICTIONARY_TABLE_SQL)
-                cursor.execute(self.CHECKPOINT_TABLE_SQL)
-                cursor.execute(self.CHECKPOINT_INDEX_SQL)
-                cursor.execute(self.METADATA_TABLE_SQL)
+                self._create_tables(cursor)
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
                     self.db_path,
                     extra={"workflow_name": self.workflow_name},
                 )
+            except StoreFormatError:
+                self.connection.rollback()
+                self.close()
+                raise
             except sqlite3.Error as e:
                 self.connection.rollback()
                 logger.error(
@@ -385,6 +391,43 @@ class SQLiteBackend(
                     extra={"db_path": str(self.db_path), "workflow_name": self.workflow_name},
                 )
                 raise
+
+    def _create_tables(self, cursor: sqlite3.Cursor) -> None:
+        for sql in (
+            self.SOURCE_TABLE_SQL,
+            self.TARGET_TABLE_SQL,
+            self.DISPOSITION_TABLE_SQL,
+            self.SOURCE_INDEX_SQL,
+            self.SOURCE_INDEX_REPEAT_OF_SQL,
+            self.DISPOSITION_INDEX_ACTION_SQL,
+            self.DISPOSITION_INDEX_ACTION_DISP_SQL,
+            self.DISPOSITION_INDEX_ACTION_RECORD_SQL,
+            self.PROMPT_TRACE_TABLE_SQL,
+            self.TRACE_INDEX_ACTION_SQL,
+            self.TRACE_INDEX_ACTION_RECORD_SQL,
+            self.TRACE_INDEX_ACTION_SOURCE_SQL,
+            self.TRACE_DICTIONARY_TABLE_SQL,
+            self.CHECKPOINT_TABLE_SQL,
+            self.CHECKPOINT_INDEX_SQL,
+            self.METADATA_TABLE_SQL,
+        ):
+            cursor.execute(sql)
+        cursor.execute(
+            "INSERT OR IGNORE INTO workflow_metadata (key, value)"
+            " VALUES ('storage_format_version', ?)",
+            (str(self._STORAGE_FORMAT_VERSION),),
+        )
+
+    @staticmethod
+    def _recorded_format(cursor: sqlite3.Cursor) -> str | None:
+        cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'workflow_metadata'"
+        )
+        if cursor.fetchone() is None:
+            return None
+        cursor.execute("SELECT value FROM workflow_metadata WHERE key = 'storage_format_version'")
+        row = cursor.fetchone()
+        return None if row is None else str(row[0])
 
     def _enforce_schema(self, cursor: sqlite3.Cursor) -> None:
         """Add missing columns to existing tables via ALTER TABLE.

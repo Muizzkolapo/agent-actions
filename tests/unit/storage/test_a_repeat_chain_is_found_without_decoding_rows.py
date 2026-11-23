@@ -5,26 +5,12 @@ stores the guid a row repeats in its own indexed column. NULL there means the
 row was written before the column existed, and its payload is read instead.
 """
 
-import json
-import sqlite3
-
 import pytest
 
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 FILE = "pages.json"
 BODY = "the quick brown fox jumps over the lazy dog. " * 20
-
-PRE_COLUMN_SOURCE_TABLE_SQL = """
-    CREATE TABLE source_data (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        relative_path TEXT NOT NULL,
-        source_guid TEXT NOT NULL,
-        data TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(relative_path, source_guid)
-    )
-"""
 
 
 def _source(guid: str, repeat_of: object = None) -> dict:
@@ -179,57 +165,3 @@ class TestCost:
         assert backend.records_share_a_repeat_chain(["solo"]) is False
 
         assert decodes == ["record 'old'"]
-
-
-class TestAStoreFromBeforeTheColumn:
-    @pytest.fixture
-    def old_db(self, db):
-        conn = sqlite3.connect(str(db))
-        conn.execute(PRE_COLUMN_SOURCE_TABLE_SQL)
-        rows = [
-            ("a.json", "base", _source("base")),
-            ("a.json", "solo", _source("solo")),
-            ("b.json", "repeat", _source("repeat", repeat_of="base")),
-        ]
-        conn.executemany(
-            "INSERT INTO source_data (relative_path, source_guid, data) VALUES (?, ?, ?)",
-            [(path, guid, json.dumps(row)) for path, guid, row in rows],
-        )
-        conn.commit()
-        conn.close()
-        return db
-
-    def test_opening_it_adds_the_column_and_keeps_every_row(self, old_db):
-        backend = _open(old_db)
-        try:
-            columns = {
-                row[1]
-                for row in backend.connection.execute("PRAGMA table_info(source_data)").fetchall()
-            }
-            nulls = backend.connection.execute(
-                "SELECT COUNT(*) FROM source_data WHERE repeat_of_source_guid IS NULL"
-            ).fetchone()[0]
-
-            assert "repeat_of_source_guid" in columns
-            assert nulls == 3
-            assert backend.read_source("a.json") == [_source("base"), _source("solo")]
-            assert backend.read_source("b.json") == [_source("repeat", repeat_of="base")]
-        finally:
-            backend.close()
-
-    def test_its_text_rows_answer_both_directions(self, old_db):
-        backend = _open(old_db)
-        try:
-            _assert_chain_answers(backend)
-        finally:
-            backend.close()
-
-    def test_a_row_written_after_the_upgrade_joins_a_chain_with_its_rows(self, old_db):
-        backend = _open(old_db)
-        try:
-            backend.write_source("c.json", [_source("again", repeat_of="solo")])
-
-            assert backend.records_share_a_repeat_chain(["solo"]) is True
-            assert backend.records_share_a_repeat_chain(["again"]) is True
-        finally:
-            backend.close()
