@@ -9,6 +9,7 @@ the entries of a few megabytes, and the map reads back exactly as one string rea
 from __future__ import annotations
 
 import gc
+import sqlite3
 import tracemalloc
 from typing import Any
 
@@ -186,5 +187,43 @@ def test_a_save_that_fails_to_name_its_parts_leaves_the_last_map_whole(backend, 
             FILE,
         )
 
+    assert BatchContextManager.load_batch_context_map(backend, ACTION, FILE) == earlier
+    assert _keys(backend) == keys_before
+
+
+class _CommitFailsOnce:
+    """The store's connection, whose first commit after naming the parts fails."""
+
+    def __init__(self, connection: Any) -> None:
+        self._connection = connection
+        self._armed = False
+
+    def execute(self, sql: str, params: Any = ()) -> Any:
+        if any("#parts" in str(value) for value in params):
+            self._armed = True
+        return self._connection.execute(sql, params)
+
+    def commit(self) -> None:
+        if self._armed:
+            self._armed = False
+            raise sqlite3.OperationalError("disk I/O error")
+        self._connection.commit()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._connection, name)
+
+
+def test_a_save_whose_parts_key_fails_to_commit_leaves_the_last_map_whole(backend, monkeypatch):
+    monkeypatch.setattr(context_module, "_PART_CHARS", 10_000)
+    earlier = _context_map(10)
+    BatchContextManager.save_batch_context_map(backend, ACTION, earlier, FILE)
+    keys_before = _keys(backend)
+    connection = backend._connection
+    backend._connection = _CommitFailsOnce(connection)
+
+    with pytest.raises(ProcessingError, match="Failed to save context map"):
+        BatchContextManager.save_batch_context_map(backend, ACTION, _context_map(40), FILE)
+
+    backend._connection = connection
     assert BatchContextManager.load_batch_context_map(backend, ACTION, FILE) == earlier
     assert _keys(backend) == keys_before
