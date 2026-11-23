@@ -40,7 +40,7 @@ Look at the vote counts, not only pass or fail. A known-good output with 3 of 5 
 ## 4 Only then let it block
 
 1. Set `severity: error` and `repair: auto`.
-2. Set `judge_budget` to about records × votes × `max_iterations`, plus a margin.
+2. Set `judge_budget` to about records × judge rules × `max_iterations`, plus a margin. One unit is one judged value; `votes` does not change the count.
 3. After the first full run, compare the pass rate with the calibration. A much lower pass rate means that the production data differs from the samples, or that the field the judge reads is empty or wrong (Rule 3 of the skill).
 
 ## 5 Keep the samples

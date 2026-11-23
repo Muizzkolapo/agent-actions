@@ -23,9 +23,9 @@ An action's schema says what shape its output takes. An expectation says what ma
 
 1. **Put type arguments under `params:`.** `id`, `type`, `field`, `severity` and `hint` stay at the top of the rule. A rule with `values:` at the top level is refused at preflight.
 2. **Use a code rule when code can decide.** An `llm_judge` costs one model call for each vote, each record and each repair round. A regex, a value list or a length check costs nothing.
-3. **Never let a judge vote on a missing or empty field.** Put `not_null` on the field before the `llm_judge` rule. A field that is missing fails the rule with its reason. A field that is present but empty goes to the judge, the judge votes FAIL, and each repair round repeats the same failure.
+3. **Give a missing or empty field its own rule.** Add `not_null` on each field that an `llm_judge` rule reads. Every rule runs, whatever its place in the list, so the judge still sees an empty value. `not_null` gives the record a clear reason (`value is an empty str`), and the repair round gets that reason as feedback. The judge's FAIL alone does not say that the field is empty.
 4. **Calibrate before a rule may block.** Run a new rule with `severity: warn` on known-good outputs first. Make it `error` only when the known-good outputs pass it. If they fail it, the rule is wrong, not the outputs.
-5. **Count the cost of repair.** `max_iterations: 3` with `votes: 5` can make 15 judge calls for one record. Set `judge_budget` to cap the judge calls of the action.
+5. **Count the cost of repair.** `max_iterations: 3` with `votes: 5` can make 15 model calls for one record. A value that does not change between rounds reuses its verdict. `judge_budget` caps the judged values of the action: one unit for each value, whatever `votes` is.
 
 ## The shape
 
