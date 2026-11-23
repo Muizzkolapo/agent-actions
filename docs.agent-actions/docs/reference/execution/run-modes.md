@@ -110,7 +110,7 @@ A batch action prepares its requests one input file at a time. The store keeps t
 - One request for each record of the file. A request holds only what the prompt observes.
 - The context map of the batch. Collection rebuilds each output row from this map. The map holds each record of the file, and it shares the record with the input. The store keeps the map in parts of about 4 MB. Thus a save does not make a second copy of the file in memory.
 
-The action lets the file go before it reads the next file. Thus the memory grows with the largest input file, and not with all of the files.
+The action lets the file go before it reads the next file. Thus the memory grows with the largest input file, and not with all of the files. To lower the peak, split a large staging file into smaller files.
 
 All of the actions of a step run at the same time, up to `--concurrency-limit` (default 5). Each batch action of the step holds one file. An online action beside it also holds the file that it processes. For a step with large records, use one of these settings:
 
