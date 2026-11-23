@@ -19,6 +19,7 @@ from agent_actions.config.path_config import (
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import (
     ChunkConfig,
+    OlderFormatWorkflowKeys,
     WorkflowConfig,
     dump_defaults,
     refuse_blank_output_field,
@@ -404,23 +405,7 @@ class ConfigManager:
             try:
                 workflow = WorkflowConfig.model_validate(self.user_config)
             except ValidationError as e:
-                field_errors = [
-                    {
-                        "field": ".".join(str(x) for x in err["loc"]),
-                        "message": err["msg"],
-                        "type": err["type"],
-                    }
-                    for err in e.errors()
-                ][:10]
-                raise ConfigurationError(
-                    "Workflow configuration is invalid",
-                    context={
-                        "config_path": str(self.constructor_path),
-                        "workflow_name": self.user_config.get("name", "unknown"),
-                        "validation_errors": field_errors,
-                    },
-                    cause=e,
-                ) from e
+                raise self._invalid_workflow(e, self.user_config.get("name", "unknown")) from e
 
             validated_actions = [
                 action.model_dump(mode="python", exclude_unset=True, by_alias=True)
@@ -447,6 +432,10 @@ class ConfigManager:
             validate_granularity_for_kind,
         )
 
+        try:
+            OlderFormatWorkflowKeys.model_validate(self.user_config)
+        except ValidationError as e:
+            raise self._invalid_workflow(e, self.agent_name) from e
         agents_section = self.user_config[self.agent_name]
         self._load_project_endpoints()
         if "agents" in agents_section:
@@ -476,6 +465,25 @@ class ConfigManager:
                 agent["granularity"] = "file"
             agents.append(agent)
         return agents
+
+    def _invalid_workflow(self, error: ValidationError, workflow_name: str) -> ConfigurationError:
+        field_errors = [
+            {
+                "field": ".".join(str(x) for x in err["loc"]),
+                "message": err["msg"],
+                "type": err["type"],
+            }
+            for err in error.errors()
+        ][:10]
+        return ConfigurationError(
+            "Workflow configuration is invalid",
+            context={
+                "config_path": str(self.constructor_path),
+                "workflow_name": workflow_name,
+                "validation_errors": field_errors,
+            },
+            cause=error,
+        )
 
     def _load_project_endpoints(self) -> None:
         """Validate the project's endpoints for a workflow that reads no project defaults."""

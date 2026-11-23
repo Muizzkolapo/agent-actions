@@ -679,7 +679,7 @@ class AgentWorkflow:
                 raise
 
     def _workflow_setting(self, key: str) -> Any:
-        """A top-level key of the workflow file as written; the schema has checked it."""
+        """A top-level key of the workflow file as written; the config load has checked it."""
         config_mgr = getattr(self.config, "manager", None)
         user_cfg = getattr(config_mgr, "user_config", None)
         return user_cfg.get(key) if isinstance(user_cfg, dict) else None
