@@ -283,7 +283,7 @@ def test_a_resubmission_over_a_failed_batch_loses_the_failed_record(tmp_path, pr
 def test_a_registry_entry_nothing_can_parse_still_gives_up_its_id(project, tmp_path):
     """--fresh reads ids to release, then deletes the registry holding them.
 
-    A retired recovery type refuses to become a `BatchJobEntry`, and the remedy
+    An unknown recovery type refuses to become a `BatchJobEntry`, and the remedy
     the framework prints for that is --fresh — so reading through the model would
     strand exactly the record the user was told to clear.
     """
@@ -295,11 +295,11 @@ def test_a_registry_entry_nothing_can_parse_still_gives_up_its_id(project, tmp_p
     backend.load_metadata.return_value = json.dumps(
         {
             "pages.json": {"batch_id": "batch-parent", "status": "completed"},
-            "pages.json_reprompt_1": {"batch_id": "batch-retired", "recovery_type": "reprompt"},
+            "pages.json_made_up_1": {"batch_id": "batch-unknown", "recovery_type": "made_up"},
         }
     )
 
-    assert BatchRegistryManager.batch_ids(backend, ACTION) == ["batch-parent", "batch-retired"]
+    assert BatchRegistryManager.batch_ids(backend, ACTION) == ["batch-parent", "batch-unknown"]
 
 
 def test_a_corrupt_registry_gives_up_no_id_rather_than_raising(project):
@@ -420,9 +420,7 @@ def test_an_entry_no_model_will_read_survives_a_save(project, tmp_path):
         "pages.json_bad_1": {
             "batch_id": "b-bad",
             "status": "completed",
-            "timestamp": "t",
             "provider": "agac-provider",
-            "recovery_type": "not-a-recovery-type",
         },
     }
     written = {}
@@ -507,9 +505,7 @@ def _unreadable_entry(batch_id):
     return {
         "batch_id": batch_id,
         "status": "completed",
-        "timestamp": "t",
         "provider": "agac-provider",
-        "recovery_type": "not-a-recovery-type",
     }
 
 
@@ -664,9 +660,7 @@ class TestAnOverwriteOverAnEntryNothingCanRead:
                     key: {
                         "batch_id": batch_id,
                         "status": "completed",
-                        "timestamp": "t",
                         "provider": "agac-provider",
-                        "recovery_type": "not-a-recovery-type",
                     }
                 }
             )

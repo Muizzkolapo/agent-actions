@@ -1,0 +1,9 @@
+kind: Under the Hood
+body: >-
+  A deferred batch whose stored recovery state names a recovery type or phase that this
+  version does not know is now refused with one error. The error names the action, the batch
+  entry or file, and the unknown value, and tells you to re-run the action with `--fresh`.
+  Before, only the retired `reprompt` name was refused. Any other unknown value made the
+  registry skip the entry, or made the recovery state read as empty, so the next run could
+  submit the batch again. The list of retired names is removed.
+time: 2026-11-23T22:00:00.000000+00:00
