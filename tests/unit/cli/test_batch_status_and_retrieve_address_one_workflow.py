@@ -197,7 +197,9 @@ def test_retrieve_writes_under_the_actions_target_folder_and_prints_the_path(pro
     assert _Retrieval.built[0]["action_name"] == "extract"
 
 
-def test_retrieve_from_a_workflow_that_does_not_load_warns_it_writes_raw_answers(project, services):
+def test_retrieve_from_a_workflow_that_does_not_load_warns_it_writes_raw_answers(
+    project, services
+):
     workflow_root = _workflow(project, "pipeline")
     _store(workflow_root, "pipeline", {"extract": ["b1"]})
 

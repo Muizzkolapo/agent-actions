@@ -59,12 +59,12 @@ def _make_ctx(tmp_dirs, *, action_configs=None, agent_config=None, data_chunk=No
 def _run_batch_and_get_prep_kwargs(ctx):
     """Run _process_batch_mode and return the kwargs passed to BatchTaskPreparator."""
     with (
-        patch(f"{_PREP_MODULE}.BatchTaskPreparator") as MockPrep,
-        patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc,
+        patch(f"{_PREP_MODULE}.BatchTaskPreparator") as mock_prep,
+        patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as mock_svc,
     ):
-        MockSvc.return_value.submit_batch_job.return_value = SubmissionResult(batch_id="vid_123")
+        mock_svc.return_value.submit_batch_job.return_value = SubmissionResult(batch_id="vid_123")
         _process_batch_mode(ctx)
-    return MockPrep.call_args[1]
+    return mock_prep.call_args[1]
 
 
 class TestBatchFirstStagePipelineContext:
@@ -122,8 +122,8 @@ class TestBatchFirstStageTemplateContext:
         _, _, input_file = tmp_dirs
         ctx = _make_ctx(tmp_dirs, data_chunk=data_chunk)
 
-        with patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc:
-            mock_submit = MockSvc.return_value.submit_batch_job
+        with patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as mock_svc:
+            mock_submit = mock_svc.return_value.submit_batch_job
             mock_submit.return_value = SubmissionResult(batch_id="vid_123")
             _process_batch_mode(ctx)
 
@@ -138,8 +138,8 @@ class TestBatchFirstStageTemplateContext:
         data_chunk = [{"batch_id": "b1", "batch_uuid": "b1_0", "content": "x"}]
         ctx = _make_ctx(tmp_dirs, data_chunk=data_chunk)
 
-        with patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as MockSvc:
-            mock_submit = MockSvc.return_value.submit_batch_job
+        with patch(f"{_SUBMISSION_MODULE}.BatchSubmissionService") as mock_svc:
+            mock_submit = mock_svc.return_value.submit_batch_job
             mock_submit.return_value = SubmissionResult(batch_id="vid_123")
             _process_batch_mode(ctx)
 

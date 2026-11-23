@@ -161,7 +161,8 @@ class TestFilterFaninObserveHazard:
         assert len(warnings) == 1
 
     def test_skip_guard_does_not_trigger_filter_fanin_warning(self):
-        """Skip-guarded action at fan-in -> handled by _check_guard_skipped_observe_refs, not here."""
+        """Skip-guarded action at fan-in -> handled by _check_guard_skipped_observe_refs, not
+        here."""
         workflow = _make_workflow(
             _llm_action("source_action", schema_fields=["data"]),
             _llm_action(
@@ -377,7 +378,8 @@ class TestFilterFaninObserveHazard:
         assert "consumer_wildcard" not in consumer_names
 
     def test_deps_inferred_from_context_scope(self):
-        """Dependencies inferred from observe refs (no explicit dependencies) still detect fan-in."""
+        """Dependencies inferred from observe refs (no explicit dependencies) still detect
+        fan-in."""
         workflow = _make_workflow(
             _llm_action("source_action", schema_fields=["data"]),
             _llm_action(

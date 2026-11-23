@@ -206,7 +206,7 @@ class BaseBatchClientTests(ABC):
         """
         result = provider.parse_provider_response(provider_success_response_json)
         assert isinstance(result, BatchResult), "Must return BatchResult"
-        assert result.success == True, "Success response must have success=True"
+        assert result.success is True, "Success response must have success=True"
         assert result.custom_id == "test-123", "custom_id must match response"
         assert result.error is None, "Successful response should have no error"
         assert isinstance(result.content, dict), "JSON content should be parsed as dict"
@@ -224,7 +224,7 @@ class BaseBatchClientTests(ABC):
         """
         result = provider.parse_provider_response(provider_success_response_string)
         assert isinstance(result, BatchResult), "Must return BatchResult"
-        assert result.success == True, "Success response must have success=True"
+        assert result.success is True, "Success response must have success=True"
         assert result.custom_id == "test-456", "custom_id must match"
         assert isinstance(result.content, str), "Plain text should remain as string"
         assert result.error is None, "No error for successful response"
@@ -241,7 +241,7 @@ class BaseBatchClientTests(ABC):
         """
         result = provider.parse_provider_response(provider_error_response)
         assert isinstance(result, BatchResult), "Must return BatchResult even for errors"
-        assert result.success == False, "Error response must have success=False"
+        assert result.success is False, "Error response must have success=False"
         assert result.custom_id == "test-789", "custom_id must match error response"
         assert result.error is not None, "Error field must be populated"
         assert isinstance(result.error, str), "Error must be a string"

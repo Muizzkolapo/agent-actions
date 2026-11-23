@@ -104,7 +104,10 @@ class TestFileMode:
 
     def test_each_record_is_judged_on_its_own_fields(self):
         records = [
-            {"source_guid": "g1", "content": {"prep": {"code": "ONE", "region": "n", "zone": "z"}}},
+            {
+                "source_guid": "g1",
+                "content": {"prep": {"code": "ONE", "region": "n", "zone": "z"}},
+            },
             {"source_guid": "g2", "content": {"prep": {"code": "TWO", "region": "s"}}},
             {"source_guid": "g3", "content": {"prep": {"code": "THREE"}}},
         ]

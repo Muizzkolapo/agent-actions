@@ -338,7 +338,8 @@ class BatchProcessingService:
         Args:
             output_directory: Output directory path
             agent_config: Agent configuration
-            action_name: Override action_name for storage backend writes (uses self._workflow_name if not provided)
+            action_name: Override action_name for storage backend writes (uses self._workflow_name
+                if not provided)
 
         Returns:
             The output file paths written, and the files left unread

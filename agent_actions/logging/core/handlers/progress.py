@@ -119,7 +119,8 @@ class ProgressRenderer(ConsoleEventHandler):
         pending = event.data.get("pending", [])
         # 1-based: a run ending on "Step 11/12" reads as one step short.
         head = self._style(
-            f"Step {event.data.get('step_index', 0) + 1}/{event.data.get('total_steps', 0)}", "cyan"
+            f"Step {event.data.get('step_index', 0) + 1}/{event.data.get('total_steps', 0)}",
+            "cyan",
         )
         if not pending:
             actions = event.data.get("actions", [])

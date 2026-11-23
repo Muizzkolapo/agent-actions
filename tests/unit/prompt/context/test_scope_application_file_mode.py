@@ -6,6 +6,10 @@ source resolution, empty observe, None namespace, and directive interactions.
 
 from copy import deepcopy
 
+from agent_actions.prompt.context.scope_application import (
+    apply_context_scope_for_records,
+)
+
 
 def _without_detail(skipped: list[dict]) -> list[dict]:
     """The skip minus its `detail`, so an exact-shape assertion stays readable.
@@ -15,10 +19,6 @@ def _without_detail(skipped: list[dict]) -> list[dict]:
     """
     return [{k: v for k, v in s.items() if k != "detail"} for s in skipped]
 
-
-from agent_actions.prompt.context.scope_application import (
-    apply_context_scope_for_records,
-)
 
 # ── Test data ──────────────────────────────────────────────────────────
 

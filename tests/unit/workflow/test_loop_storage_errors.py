@@ -55,7 +55,10 @@ class TestLoadFromStorageBackendErrors:
             loop_manager._load_from_storage_backend("version_agent_1")
 
     def test_file_not_found_for_single_file_skips_and_continues(self, loop_manager):
-        loop_manager.storage_backend.list_target_files.return_value = ["file_a.json", "file_b.json"]
+        loop_manager.storage_backend.list_target_files.return_value = [
+            "file_a.json",
+            "file_b.json",
+        ]
         loop_manager.storage_backend.read_target.side_effect = [
             FileNotFoundError("file_a.json not found"),
             [{"id": "rec1", "data": "ok"}],

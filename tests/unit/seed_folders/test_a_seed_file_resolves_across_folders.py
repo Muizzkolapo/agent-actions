@@ -59,7 +59,9 @@ class TestAFileIsFoundInTheFirstFolderThatHoldsIt:
             project_files={"rules.json": {"label": "PROJECT"}},
         )
 
-        assert _load(config_path, {"rules": "$file:rules.json"}) == {"rules": {"label": "WORKFLOW"}}
+        assert _load(config_path, {"rules": "$file:rules.json"}) == {
+            "rules": {"label": "WORKFLOW"}
+        }
 
     def test_the_workflow_file_wins_over_a_listed_folder_too(self, tmp_path):
         _, config_path = _project(
@@ -68,7 +70,9 @@ class TestAFileIsFoundInTheFirstFolderThatHoldsIt:
             shared={"shared_seeds": {"rules.json": {"label": "SHARED"}}},
         )
 
-        assert _load(config_path, {"rules": "$file:rules.json"}) == {"rules": {"label": "WORKFLOW"}}
+        assert _load(config_path, {"rules": "$file:rules.json"}) == {
+            "rules": {"label": "WORKFLOW"}
+        }
 
     def test_a_selected_seed_resolves_each_file_by_itself(self, tmp_path):
         _, config_path = _project(
@@ -176,12 +180,15 @@ class TestAListedFolderIsChecked:
             _load(config_path, {"a": "$file:a.json"})
 
         assert str(excinfo.value) == (
-            f"seed_data_paths: '{entry}' is outside the project. Use a folder inside the project root."
+            f"seed_data_paths: '{entry}' is outside the project. Use a folder inside the "
+            "project root."
         )
 
     def test_a_symlink_to_a_folder_outside_the_project_is_a_config_error(self, tmp_path):
         (tmp_path / "outside").mkdir()
-        project, config_path = _project(tmp_path, listed=("linked",), workflow_files={"a.json": {}})
+        project, config_path = _project(
+            tmp_path, listed=("linked",), workflow_files={"a.json": {}}
+        )
         os.symlink(tmp_path / "outside", project / "linked")
 
         with pytest.raises(ConfigurationError, match="'linked' is outside the project"):

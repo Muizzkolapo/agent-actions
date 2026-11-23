@@ -19,7 +19,9 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
 
-_GET_API_KEY = "agent_actions.llm.batch.infrastructure.batch_client_resolver.BaseClient.get_api_key"
+_GET_API_KEY = (
+    "agent_actions.llm.batch.infrastructure.batch_client_resolver.BaseClient.get_api_key"
+)
 
 
 def _make_agent_config(
@@ -240,7 +242,9 @@ class TestGetForConfigNarrowedExceptions:
             pytest.param(
                 ImportError("No module named 'openai'"), "Provider SDK not installed", id="import"
             ),
-            pytest.param(KeyError("missing_field"), "Missing required configuration key", id="key"),
+            pytest.param(
+                KeyError("missing_field"), "Missing required configuration key", id="key"
+            ),
             pytest.param(OSError("Connection refused"), "Infrastructure error", id="os"),
             pytest.param(
                 TypeError("unexpected keyword argument"), "Invalid configuration", id="type"
@@ -278,7 +282,9 @@ class TestGetForBatchIdNarrowedExceptions:
             pytest.param(
                 ImportError("No module named 'openai'"), "Provider SDK not installed", id="import"
             ),
-            pytest.param(KeyError("missing_field"), "Missing required configuration key", id="key"),
+            pytest.param(
+                KeyError("missing_field"), "Missing required configuration key", id="key"
+            ),
             pytest.param(OSError("Connection refused"), "Infrastructure error", id="os"),
             pytest.param(RuntimeError("unexpected"), "Failed to create client", id="runtime"),
             pytest.param(

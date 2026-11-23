@@ -115,7 +115,8 @@ def test_a_carried_failure_is_unchanged():
 
 def test_a_json_mode_action_keeps_a_carried_string():
     seen = _run(
-        [{"custom_id": "r0", "success": True, "content": "plain"}], {**VALIDATOR, "json_mode": True}
+        [{"custom_id": "r0", "success": True, "content": "plain"}],
+        {**VALIDATOR, "json_mode": True},
     )
 
     assert [r.content for r in seen["accumulated"]] == ["plain"]

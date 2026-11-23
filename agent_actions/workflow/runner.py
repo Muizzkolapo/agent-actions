@@ -302,7 +302,9 @@ class ActionRunner:
         dependencies = action_config.get("dependencies", [])
 
         if not dependencies and not previous_action_type:
-            upstream_data_dirs = self._resolve_start_node_directories(agent_folder_path, agent_type)
+            upstream_data_dirs = self._resolve_start_node_directories(
+                agent_folder_path, agent_type
+            )
         elif dependencies and hasattr(self, "action_indices") and self.action_indices:
             upstream_data_dirs = self._resolve_dependency_directories(
                 agent_folder_path,
@@ -351,8 +353,12 @@ class ActionRunner:
         """Process a single file with the strategy."""
         if self.storage_backend is None:
             relative_path = params.locations.item.relative_to(params.locations.input_path)
-            (params.locations.output_path / relative_path).parent.mkdir(parents=True, exist_ok=True)
-        params.strategy.execute(self._strategy_params(params, storage_backend=self.storage_backend))
+            (params.locations.output_path / relative_path).parent.mkdir(
+                parents=True, exist_ok=True
+            )
+        params.strategy.execute(
+            self._strategy_params(params, storage_backend=self.storage_backend)
+        )
 
     def process_and_generate_for_action(self, params: ProcessGenerateParams) -> str:
         """Process and generate data for an action using the provided strategy."""

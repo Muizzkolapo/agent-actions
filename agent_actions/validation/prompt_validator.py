@@ -69,7 +69,8 @@ class PromptValidator(BaseValidator):
     def _check_prompt_id_duplicates(
         self, file_name: str, prompt_ids_in_file: list[str]
     ) -> set[str]:
-        """Report IDs used twice in one file; a `$file.ID` reference lets other files reuse an ID."""
+        """Report IDs used twice in one file; a `$file.ID` reference lets other files reuse an
+        ID."""
         duplicates = self._find_duplicate_ids_in_list(prompt_ids_in_file)
         if duplicates:
             id_list = ", ".join(duplicates)
@@ -128,7 +129,11 @@ class PromptValidator(BaseValidator):
             return f"No prompt IDs found in file '{file_name}' despite sections being present."
         if not prompt_ids and not sections:
             return None
-        if not content.strip().startswith("{") and not content.strip().startswith("#") and sections:
+        if (
+            not content.strip().startswith("{")
+            and not content.strip().startswith("#")
+            and sections
+        ):
             return (
                 f"File '{file_name}' does not start with a markdown heading "
                 f"but contains prompt sections."
@@ -148,7 +153,8 @@ class PromptValidator(BaseValidator):
         return None
 
     def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
-        """Validate each prompt file in *data*, a list of paths, once per file; *config* is unused."""
+        """Validate each prompt file in *data*, a list of paths, once per file; *config* is
+        unused."""
         self.clear_errors()
         self.clear_warnings()
         self._validation_target = self.validator_name

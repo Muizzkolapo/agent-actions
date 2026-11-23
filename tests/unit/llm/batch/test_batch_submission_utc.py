@@ -24,7 +24,9 @@ class TestBatchEntryTimestampIsUTCAware:
         captured_entries: list[BatchJobEntry] = []
 
         mock_registry = MagicMock()
-        mock_registry.save_batch_job.side_effect = lambda key, entry: captured_entries.append(entry)
+        mock_registry.save_batch_job.side_effect = lambda key, entry: captured_entries.append(
+            entry
+        )
 
         svc = BatchSubmissionService(
             task_preparator=MagicMock(),

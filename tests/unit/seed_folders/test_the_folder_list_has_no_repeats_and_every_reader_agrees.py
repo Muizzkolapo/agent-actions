@@ -126,7 +126,10 @@ def _seed_ref(value):
 class TestTheHoverReadsTheFileTheRunReads:
     def test_a_workflow_file_is_previewed(self, tmp_path):
         project, config_path = _nested_project(
-            tmp_path, ["shared"], workflow_files={"a.json": {"label": "OWN"}}, shared={"shared": {}}
+            tmp_path,
+            ["shared"],
+            workflow_files={"a.json": {"label": "OWN"}},
+            shared={"shared": {}},
         )
         index = MagicMock()
         index.root = project

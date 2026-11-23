@@ -169,7 +169,9 @@ class TestHardening:
             (tmp_path / "agent_workflow" / "sneaky").symlink_to(external)
             monkeypatch.chdir(tmp_path)
 
-            result = CliRunner().invoke(cli, ["batch", "status", "-a", "sneaky", "--batch-id", "x"])
+            result = CliRunner().invoke(
+                cli, ["batch", "status", "-a", "sneaky", "--batch-id", "x"]
+            )
             assert result.exit_code != 0
             assert "not found" in result.output.lower()
         finally:

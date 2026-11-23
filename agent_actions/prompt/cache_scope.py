@@ -1,4 +1,5 @@
-"""Whether a call's prompt and tools are the same for every record, so a prompt-cache mark on them can be read.
+"""Whether a call's prompt and tools are the same for every record, so a prompt-cache mark on them
+can be read.
 
 Each check fails closed: what it cannot prove the same for every record counts as differing,
 because a mark on text that differs writes a cache entry on every request and is never read.
@@ -109,19 +110,22 @@ def record_reads_in_prompt(agent_config: Mapping[str, Any]) -> tuple[str, ...]:
 
 
 def schema_dispatches(agent_config: Mapping[str, Any]) -> tuple[str, ...]:
-    """The ``dispatch_task(...)`` calls in the action's schema; each can give a record its own tools."""
+    """The ``dispatch_task(...)`` calls in the action's schema; each can give a record its own
+    tools."""
     schema = agent_config.get(SCHEMA_KEY)
     if schema is None and agent_config.get(SCHEMA_NAME_KEY):
         project_root = agent_config.get("_project_root")
         schema = SchemaLoader.load_schema(
-            agent_config[SCHEMA_NAME_KEY], project_root=Path(project_root) if project_root else None
+            agent_config[SCHEMA_NAME_KEY],
+            project_root=Path(project_root) if project_root else None,
         )
     return tuple(dict.fromkeys(f"dispatch_task('{name}')" for name in _dispatch_calls(schema)))
 
 
 @dataclass(frozen=True)
 class CachePointUse:
-    """The `{% cache_point %}` tags of an action's prompt template, and what is read before the last."""
+    """The `{% cache_point %}` tags of an action's prompt template, and what is read before the
+    last."""
 
     count: int = 0
     repeats: bool = False
@@ -198,7 +202,8 @@ def _seed_file_dispatch_reason(agent_config: Mapping[str, Any]) -> str | None:
 @lru_cache(maxsize=256)
 def _file_calls_dispatch(path: str, _mtime_ns: int, _size: int) -> bool:
     return (
-        _DISPATCH_START.search(Path(path).read_text(encoding="utf-8", errors="replace")) is not None
+        _DISPATCH_START.search(Path(path).read_text(encoding="utf-8", errors="replace"))
+        is not None
     )
 
 
@@ -236,7 +241,9 @@ def _chains(ast: nodes.Template) -> Iterator[tuple[nodes.Name, str, str | None]]
             if isinstance(current, nodes.Getattr):
                 steps.append((f".{current.attr}", current.attr))
             elif isinstance(current.arg, nodes.Const) and isinstance(current.arg.value, str | int):
-                steps.append((f"[{current.arg.value!r}]".replace("'", '"'), str(current.arg.value)))
+                steps.append(
+                    (f"[{current.arg.value!r}]".replace("'", '"'), str(current.arg.value))
+                )
             else:
                 steps.append(("[*]", None))
             current = current.node
@@ -336,6 +343,8 @@ def _reads(
             reads.add(name.name)
     if any(f.name == "random" and counted(f) for f in ast.find_all(nodes.Filter)):
         reads.add("| random")
-    if any(n.name == "lipsum" and n.ctx == "load" and counted(n) for n in ast.find_all(nodes.Name)):
+    if any(
+        n.name == "lipsum" and n.ctx == "load" and counted(n) for n in ast.find_all(nodes.Name)
+    ):
         reads.add("lipsum()")
     return reads

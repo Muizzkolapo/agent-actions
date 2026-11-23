@@ -59,7 +59,8 @@ class TestAnActionWhoseEveryFileTheGuardSkips:
         config.write_text(
             config.read_text().replace(
                 "    expect: { repair: none }\n",
-                "    guard: { condition: 'source.page_content == \"Page zz.\"', on_false: skip }\n",
+                "    guard: { condition: 'source.page_content == \"Page zz.\"', "
+                "on_false: skip }\n",
             )
         )
         return SimpleNamespace(project=project, runs=_run_to_the_end(project))

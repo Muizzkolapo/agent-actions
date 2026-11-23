@@ -1,4 +1,5 @@
-"""A batch file of a prompt with a cache point holds the records of one source next to each other."""
+"""A batch file of a prompt with a cache point holds the records of one source next to each
+other."""
 
 from __future__ import annotations
 

@@ -61,9 +61,13 @@ def test_each_version_fans_out_under_its_own_name(run, action):
     assert action in run, f"{action} never ran — the version fan-out did not expand"
 
 
-@pytest.mark.parametrize("action", ["canonicalize_marks", "aggregate_votes", "consolidate_id_note"])
+@pytest.mark.parametrize(
+    "action", ["canonicalize_marks", "aggregate_votes", "consolidate_id_note"]
+)
 def test_each_merge_consumer_runs(run, action):
-    assert re.search(rf"✓ {action}\b", run), f"{action} did not complete — its version merge failed"
+    assert re.search(rf"✓ {action}\b", run), (
+        f"{action} did not complete — its version merge failed"
+    )
 
 
 def test_the_file_granularity_reduce_runs(run):

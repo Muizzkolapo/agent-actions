@@ -1,4 +1,5 @@
-"""Tests for ActionStateManager extension methods (is_workflow_done, get_pending_actions, get_skipped_actions, etc.)."""
+"""Tests for ActionStateManager extension methods (is_workflow_done, get_pending_actions,
+get_skipped_actions, etc.)."""
 
 import pytest
 
@@ -19,7 +20,9 @@ class TestIsWorkflowDone:
         [
             pytest.param({"a": "completed", "b": "completed"}, True, id="all_completed"),
             pytest.param(
-                {"a": "completed", "b": "failed", "c": "completed"}, True, id="completed_and_failed"
+                {"a": "completed", "b": "failed", "c": "completed"},
+                True,
+                id="completed_and_failed",
             ),
             pytest.param(
                 {"a": "completed", "b": "failed", "c": "skipped"},

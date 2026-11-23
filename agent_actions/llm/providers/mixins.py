@@ -164,7 +164,8 @@ class OpenAICompatibleResponseMixin:
         return (body.get("choices") or [{}])[0] or {}
 
     def _no_answer(self, raw_response: dict[str, Any]) -> NoAnswer | None:
-        """A refusal, or a message with no content, ended by the online client's ``chat_no_answer``."""
+        """A refusal, or a message with no content, ended by the online client's
+        ``chat_no_answer``."""
         choice = self._first_choice(raw_response)
         message = choice.get("message") or {}
         body = (raw_response.get("response") or {}).get("body") or {}

@@ -99,7 +99,7 @@ actions:
       required: [case]
     context_scope: {{ observe: [source.kind] }}
 {router_guard}    _builtin: {{ tool: route, field: source.kind, cases: [a, b], default: {str(default).lower()} }}
-"""
+"""  # noqa: E501
         + "".join(branches)
         + f"""  - name: joined
     kind: tool

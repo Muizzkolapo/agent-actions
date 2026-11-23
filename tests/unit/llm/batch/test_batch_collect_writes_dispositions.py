@@ -96,7 +96,9 @@ def _deferred(backend: SQLiteBackend, *guids: str) -> None:
 
 def _exhausted_after(attempts: int) -> RecoveryMetadata:
     return RecoveryMetadata(
-        retry=RetryMetadata(attempts=attempts, failures=attempts, succeeded=False, reason="missing")
+        retry=RetryMetadata(
+            attempts=attempts, failures=attempts, succeeded=False, reason="missing"
+        )
     )
 
 
@@ -332,7 +334,10 @@ class TestAFileThatThrewMarksItsRecordsFailedBeforeClearingDeferred:
             workflow_name=ACTION,
         )
         service._context_manager.load_batch_context_map.return_value = {
-            "t-r1": {ContextMetaKeys.FILTER_STATUS: str(FilterStatus.INCLUDED), "source_guid": "r1"}
+            "t-r1": {
+                ContextMetaKeys.FILTER_STATUS: str(FilterStatus.INCLUDED),
+                "source_guid": "r1",
+            }
         }
         return service
 

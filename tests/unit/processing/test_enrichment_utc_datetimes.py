@@ -44,7 +44,8 @@ class TestEnrichmentPipelineUTC:
         assert elapsed >= 0.0
 
     def test_naive_datetime_subtraction_would_fail(self):
-        """Verify that mixing naive and aware datetimes raises TypeError (proves why fix matters)."""
+        """Verify that mixing naive and aware datetimes raises TypeError (proves why fix
+        matters)."""
         naive = datetime.now()
         aware = datetime.now(UTC)
         with pytest.raises(TypeError):

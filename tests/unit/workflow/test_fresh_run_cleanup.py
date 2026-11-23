@@ -209,7 +209,9 @@ class TestFreshRunClearsBatchJsonlFiles:
 
     def test_non_json_files_preserved(self, tmp_path: Path):
         """Non-JSON/JSONL files in batch/ are not deleted."""
-        batch_dir = tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / "extract" / "batch"
+        batch_dir = (
+            tmp_path / "agent_workflow" / "wf" / "agent_io" / "target" / "extract" / "batch"
+        )
         batch_dir.mkdir(parents=True)
         (batch_dir / "notes.txt").write_text("keep me")
 

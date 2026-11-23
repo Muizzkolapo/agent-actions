@@ -417,7 +417,9 @@ class BatchSubmissionService:
         if repairing:
             # Not left to whoever started the repair: finalize would read an earlier
             # run's inputs as this one's.
-            self._context_manager.clear_batch_inputs(self._storage_backend, action_name, batch_name)
+            self._context_manager.clear_batch_inputs(
+                self._storage_backend, action_name, batch_name
+            )
         elif run_input_guids is not None:
             self._context_manager.save_batch_inputs(
                 self._storage_backend, action_name, run_input_guids, batch_name

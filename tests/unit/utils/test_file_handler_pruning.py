@@ -42,7 +42,9 @@ class TestFindProjectDirsSkipsNonProjectDirs:
 
         assert find_project_dirs(tmp_path, _named_overview) == [target]
 
-    def test_only_the_project_copy_is_found_beside_a_same_named_dir_in_a_virtualenv(self, tmp_path):
+    def test_only_the_project_copy_is_found_beside_a_same_named_dir_in_a_virtualenv(
+        self, tmp_path
+    ):
         venv = _make_venv(tmp_path)
         (venv / "lib" / "overview").mkdir()
         target = tmp_path / "prompt_store" / "overview"

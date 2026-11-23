@@ -69,7 +69,8 @@ def test_context_dict_is_copied_on_construction(cls):
 
     # Stored context should still have the original value
     assert exc.context.get("key") == "original", (
-        f"{cls.__name__}.context was not defensively copied: mutation propagated from caller's dict"
+        f"{cls.__name__}.context was not defensively copied: mutation propagated from "
+        "caller's dict"
     )
 
 

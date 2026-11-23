@@ -95,7 +95,8 @@ class HitlServer:
             saved_fingerprint = state.get("data_fingerprint")
             if saved_fingerprint and saved_fingerprint != self._data_fingerprint:
                 logger.warning(
-                    "HITL state file data fingerprint mismatch — input content changed, starting fresh"
+                    "HITL state file data fingerprint mismatch — input content changed, "
+                    "starting fresh"
                 )
                 return
             saved_reviews = state.get("record_reviews", [])
@@ -301,7 +302,8 @@ class HitlServer:
                 jsonify(
                     {
                         "success": False,
-                        "error": "Record decision must include hitl_status as approved or rejected.",
+                        "error": "Record decision must include hitl_status as approved "
+                        "or rejected.",
                     }
                 ),
                 400,
@@ -442,7 +444,9 @@ class HitlServer:
                 self.response["record_reviews"] = record_reviews
             self.response_event.set()
 
-    def _validate_reject_comment(self, review: dict, record_label: str | None = None) -> str | None:
+    def _validate_reject_comment(
+        self, review: dict, record_label: str | None = None
+    ) -> str | None:
         """Return an error message if a rejected review is missing a required comment."""
         if not self.require_comment_on_reject:
             return None

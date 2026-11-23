@@ -113,7 +113,8 @@ class PathManager:
         result = find_project_root_dir(search_path, marker_file=self.config.marker_file)
         if result is None:
             raise ProjectRootNotFoundError(
-                f"Project root not found. Searched for '{self.config.marker_file}', 'agent_actions', or 'agent_config' "
+                f"Project root not found. Searched for '{self.config.marker_file}', "
+                "'agent_actions', or 'agent_config' "
                 f"starting from {search_path}"
             )
 
@@ -140,9 +141,8 @@ class PathManager:
         # Resolve project root first — this may clear _path_cache if CWD changed.
         project_root = self.get_project_root()
 
-        cache_key = (
-            f"{path_type.value}:{agent_name}:{action_name}:{hash(frozenset(template_vars.items()))}"
-        )
+        variables = hash(frozenset(template_vars.items()))
+        cache_key = f"{path_type.value}:{agent_name}:{action_name}:{variables}"
 
         if cache_key in self._path_cache and self.config.cache_paths:
             return self._path_cache[cache_key]

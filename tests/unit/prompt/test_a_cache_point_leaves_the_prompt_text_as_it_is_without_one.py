@@ -1,4 +1,5 @@
-"""A `{% cache_point %}` in a prompt template leaves the rendered text as it is without the tag, and says where it stood."""
+"""A `{% cache_point %}` in a prompt template leaves the rendered text as it is without the tag,
+and says where it stood."""
 
 from __future__ import annotations
 
@@ -44,7 +45,9 @@ class TestTheRenderedText:
         assert _prepare(WITH_POINT).formatted_prompt == _prepare(WITHOUT_POINT).formatted_prompt
 
     def test_a_cache_point_inside_a_line_leaves_the_text_around_it(self):
-        marked = _prepare("Page: {{ source.page_content }}{% cache_point %} Slot: {{ slots.fact }}")
+        marked = _prepare(
+            "Page: {{ source.page_content }}{% cache_point %} Slot: {{ slots.fact }}"
+        )
         plain = _prepare("Page: {{ source.page_content }} Slot: {{ slots.fact }}")
 
         assert marked.formatted_prompt == plain.formatted_prompt

@@ -94,7 +94,9 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
         already_structured: bool,
     ) -> bool:
         """Check if we have no precomputed fields, unstructured data."""
-        has_passthrough_config = ContextScopeStructuredStrategy.has_passthrough_config(agent_config)
+        has_passthrough_config = ContextScopeStructuredStrategy.has_passthrough_config(
+            agent_config
+        )
         return (
             (passthrough_fields is None or len(passthrough_fields) == 0)
             and not already_structured
@@ -152,7 +154,9 @@ class NoOpStrategy(IPassthroughTransformStrategy):
         already_structured: bool,
     ) -> bool:
         """Check if structured data with no passthrough."""
-        has_passthrough_config = ContextScopeStructuredStrategy.has_passthrough_config(agent_config)
+        has_passthrough_config = ContextScopeStructuredStrategy.has_passthrough_config(
+            agent_config
+        )
         return (
             already_structured
             and not has_passthrough_config

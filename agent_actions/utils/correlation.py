@@ -145,8 +145,10 @@ class VersionIdGenerator:
                 if force
                 else (source_guid or "")
             )
-            obj["version_correlation_id"] = cls.get_or_create_position_based_version_correlation_id(
-                record_index, version_base_name, workflow_session_id, file_context=file_context
+            obj["version_correlation_id"] = (
+                cls.get_or_create_position_based_version_correlation_id(
+                    record_index, version_base_name, workflow_session_id, file_context=file_context
+                )
             )
         elif source_guid:
             obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(

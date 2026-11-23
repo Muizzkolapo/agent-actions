@@ -4,7 +4,8 @@ After an edit to an action's model, prompt, schema, guard, context scope, depend
 settings or endpoint, the answers stand, so a model swapped partway through a long run loses
 nothing: records not yet answered are answered under the edit, a warning names what changed
 and every action reading the edited one, each prompt trace row records the config it was
-answered under, and ``--rerun <action>`` answers the action and its readers again. `bystander` reads nothing the edits touch; each tool logs a
+answered under, and ``--rerun <action>`` answers the action and its readers again. `bystander`
+reads nothing the edits touch; each tool logs a
 line per record to `calls.log`, so a test sees which actions ran.
 """
 
@@ -364,7 +365,9 @@ def _project_default(root, line):
     config = root / "agent_actions.yml"
     text = config.read_text()
     assert text.count("default_agent_config:\n") == 1
-    config.write_text(text.replace("default_agent_config:\n", f"default_agent_config:\n  {line}\n"))
+    config.write_text(
+        text.replace("default_agent_config:\n", f"default_agent_config:\n  {line}\n")
+    )
 
 
 SUMMARY_INTENT = '    intent: "Say what the item is"\n'

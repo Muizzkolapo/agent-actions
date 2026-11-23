@@ -380,7 +380,9 @@ class TestRegistrationInTranslatorChain:
         )
         translator = ErrorTranslator()
         result = translator.translate(exc)
-        assert result.title == "Auto-discovered UDF file failed to import: /proj/tools/uses_yaml.py"
+        assert (
+            result.title == "Auto-discovered UDF file failed to import: /proj/tools/uses_yaml.py"
+        )
         assert "Python could not find the module 'PyYAML'" in result.fix
 
     def test_translator_routes_udf_with_yaml_cause_through_udf_formatter(self):
@@ -405,7 +407,9 @@ class TestRegistrationInTranslatorChain:
         )
         translator = ErrorTranslator()
         result = translator.translate(exc)
-        assert result.title == "Auto-discovered UDF file failed to import: /proj/tools/uses_yaml.py"
+        assert (
+            result.title == "Auto-discovered UDF file failed to import: /proj/tools/uses_yaml.py"
+        )
         assert result.category == "Configuration Error"
         assert "YAML syntax error" not in result.title
 

@@ -43,7 +43,11 @@ class TestOpenAIBatchClient(BaseBatchClientTests):
         mock_file.id = "file-input-456"
         mock_client.files.create.return_value = mock_file
         mock_file_content = Mock()
-        mock_file_content.content = b'{"custom_id": "1", "response": {"status_code": 200, "body": {"choices": [{"message": {"content": "test"}}]}}}\n'
+        mock_file_content.content = (
+            b'{"custom_id": "1", "response": {"status_code": 200, '
+            b'"body": {"choices": [{"message": {"content": '
+            b'"test"}}]}}}\n'
+        )
         mock_client.files.content.return_value = mock_file_content
         return provider
 

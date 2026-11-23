@@ -207,7 +207,8 @@ class ConfigValidator(BaseValidator):
             missing = deps - available_agents
             if missing:
                 self.add_error(
-                    f"Agent '{agent_name}' has missing dependencies: {', '.join(sorted(missing))}.",
+                    f"Agent '{agent_name}' has missing dependencies: "
+                    f"{', '.join(sorted(missing))}.",
                     field="dependencies",
                     value=list(missing),
                 )

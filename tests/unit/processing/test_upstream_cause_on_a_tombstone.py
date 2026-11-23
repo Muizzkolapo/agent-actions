@@ -1,4 +1,5 @@
-"""The upstream cause on an ``upstream_unprocessed`` tombstone, on routes the CLI test misses (1429)."""
+"""The upstream cause on an ``upstream_unprocessed`` tombstone, on routes the CLI test misses
+(1429)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,5 @@
-"""A retry round, then a judge batch, then the file: the judge step rebuilds exhaustion as retry left it.
+"""A retry round, then a judge batch, then the file: the judge step rebuilds exhaustion as retry
+left it.
 
 The step that runs once a judge batch returns rebuilds retry exhaustion from the
 saved state. A record the retry recovered is not exhausted, and a record the retry

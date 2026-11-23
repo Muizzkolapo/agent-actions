@@ -1,4 +1,5 @@
-"""What an action reads — its context_scope and dependencies — is stamped beside config_hash (1332).
+"""What an action reads — its context_scope and dependencies — is stamped beside config_hash
+(1332).
 
 Each has a digest of its own so that recording it changed no digest already stored: a
 store stamped before holds neither, and an absent digest never reads as an edit.

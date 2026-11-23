@@ -255,7 +255,9 @@ class ExpectReportCommand:
             self._render(tallies, actions)
 
         if self.fail_under is not None:
-            declared = [a for a in actions if inspector.action_configs[a].get("expect") is not None]
+            declared = [
+                a for a in actions if inspector.action_configs[a].get("expect") is not None
+            ]
             gatable = self._gatable(inspector, actions, produced, stored, filtered)
             self._gate(tallies, self.fail_under, gatable, declared)
         return tallies
@@ -529,7 +531,8 @@ def _report_heading(tally: ActionTally, suffix: str | None = None) -> Text:
         # The rate above is over rated records only; without this the survivors
         # of a run that tombstoned records would read as full health.
         heading.append(
-            f"  ⚠ {tally.unverified} record{'s' if tally.unverified != 1 else ''} carried no verdict",
+            f"  ⚠ {tally.unverified} record{'s' if tally.unverified != 1 else ''} carried "
+            "no verdict",
             style="yellow",
         )
     return heading

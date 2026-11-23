@@ -1,4 +1,5 @@
-"""ActionCompleteEvent must carry record_count from result.metrics in both serial and parallel modes."""
+"""ActionCompleteEvent must carry record_count from result.metrics in both serial and parallel
+modes."""
 
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -153,5 +154,6 @@ def test_resolve_batch_outcome_completed_populates_record_count():
     assert result.status == ActionStatus.COMPLETED
     assert isinstance(result.metrics, ExecutionMetrics)
     assert result.metrics.record_count == 12, (
-        f"batch completion did not thread record_count: got {result.metrics.record_count}, expected 12"
+        "batch completion did not thread record_count: got "
+        f"{result.metrics.record_count}, expected 12"
     )

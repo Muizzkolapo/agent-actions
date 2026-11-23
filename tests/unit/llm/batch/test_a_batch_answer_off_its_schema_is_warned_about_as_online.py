@@ -53,7 +53,9 @@ def _schema_warnings(caplog, run) -> list[str]:
     ]
 
 
-def _both(caplog, tmp_path, vendor: str, text: str, **settings: Any) -> tuple[list[str], list[str]]:
+def _both(
+    caplog, tmp_path, vendor: str, text: str, **settings: Any
+) -> tuple[list[str], list[str]]:
     config = action_config(json_mode=True, **settings)
     in_online = _schema_warnings(caplog, lambda: online(vendor, text, config))
     in_batch = _schema_warnings(caplog, lambda: batch(vendor, text, config, tmp_path))
@@ -62,7 +64,9 @@ def _both(caplog, tmp_path, vendor: str, text: str, **settings: Any) -> tuple[li
 
 @pytest.mark.parametrize("vendor", VENDORS)
 @pytest.mark.parametrize("text", OFF_SCHEMA.values(), ids=OFF_SCHEMA.keys())
-def test_an_answer_off_the_schema_is_warned_about_in_online_s_words(vendor, text, caplog, tmp_path):
+def test_an_answer_off_the_schema_is_warned_about_in_online_s_words(
+    vendor, text, caplog, tmp_path
+):
     in_batch, in_online = _both(caplog, tmp_path, vendor, text, schema=SCHEMA)
 
     assert in_batch == in_online

@@ -149,7 +149,8 @@ class BaseClient(ABC):
                     "action_name": agent_config["agent_type"],
                     "field": API_KEY_KEY,
                     "operation": "get_api_key",
-                    "hint": "Add api_key to agent_actions.yml, workflow defaults, or action config",
+                    "hint": "Add api_key to agent_actions.yml, workflow defaults, or "
+                    "action config",
                 },
             )
         env_var_name = api_key_env_name(key_name)
@@ -161,7 +162,8 @@ class BaseClient(ABC):
                     "env_var": env_var_name,
                     "config_value": key_name,
                     "operation": "get_api_key",
-                    "hint": f"Set the environment variable:\\n  export {env_var_name}=your-api-key",
+                    "hint": "Set the environment variable:\\n  export "
+                    f"{env_var_name}=your-api-key",
                 },
             )
         api_key = os.getenv(env_var_name)

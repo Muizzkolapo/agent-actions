@@ -1,4 +1,5 @@
-"""The Conditional Merge the data-lineage page shows answers each record from its own branch (1378).
+"""The Conditional Merge the data-lineage page shows answers each record from its own branch
+(1378).
 
 The page's two guarded branches and its merge template are taken as written and run by
 `agac run`, online and batch: one record per branch, and `combine` is sent each record
@@ -105,7 +106,8 @@ class Project:
         (workflow / "agent_io" / "staging").mkdir(parents=True)
         (self.root / "tools").mkdir()
         (self.root / "agent_actions.yml").write_text(
-            "default_agent_config: {model_name: gpt-4o-mini}\nschema_path: schema\ntool_path: tools\n"
+            "default_agent_config: {model_name: gpt-4o-mini}\nschema_path: "
+            "schema\ntool_path: tools\n"
         )
         (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(config or _config(run_mode))
         (workflow / "agent_io" / "staging" / "pages.json").write_text(
@@ -140,7 +142,9 @@ class Project:
 
 
 @pytest.mark.parametrize("run_mode", ["online", "batch"])
-def test_combine_answers_each_record_with_the_result_of_the_branch_that_kept_it(tmp_path, run_mode):
+def test_combine_answers_each_record_with_the_result_of_the_branch_that_kept_it(
+    tmp_path, run_mode
+):
     project = Project(tmp_path, run_mode)
 
     transcript = project.run_to_the_end()

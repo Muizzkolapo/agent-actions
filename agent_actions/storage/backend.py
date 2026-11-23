@@ -276,7 +276,8 @@ class StorageBackend(ABC):
                     from agent_actions.errors.configuration import ConfigValidationError
 
                     raise ConfigValidationError(
-                        f"Corrupt storage_format_version in workflow_metadata: {stored_version!r}. "
+                        "Corrupt storage_format_version in workflow_metadata: "
+                        f"{stored_version!r}. "
                         f"Expected an integer. Re-run with --fresh to reset.",
                         context={"stored_version": stored_version},
                     ) from None
@@ -298,7 +299,9 @@ class StorageBackend(ABC):
         reset_for_downstream(result, action_name=action_name)
         return result
 
-    def read_target_for_rewrite(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
+    def read_target_for_rewrite(
+        self, action_name: str, relative_path: str
+    ) -> list[dict[str, Any]]:
         """Reconstructed rows of an action's own output, without the downstream reset.
 
         For a caller writing these rows back where they came from — carry-forward
@@ -626,7 +629,9 @@ class StorageBackend(ABC):
             else:
                 logger.error("Delta record %s in '%s' has no content key.", guid, action_name)
 
-            full_record = {k: v for k, v in record.items() if k != "content" and k != "_delta_mode"}
+            full_record = {
+                k: v for k, v in record.items() if k != "content" and k != "_delta_mode"
+            }
             full_record["content"] = full_content
 
             reconstructed.append(full_record)
@@ -648,7 +653,8 @@ class StorageBackend(ABC):
                     self._dependency_graph_cache = json.loads(raw)
                 except json.JSONDecodeError:
                     logger.warning(
-                        "Corrupt dependency_graph in metadata — reconstruction will use flat fallback."
+                        "Corrupt dependency_graph in metadata — reconstruction will use "
+                        "flat fallback."
                     )
                     self._dependency_graph_cache = {}
             else:
@@ -924,7 +930,8 @@ class StorageBackend(ABC):
         """
 
     def get_failed_items(self, action_name: str) -> list[dict[str, Any]]:
-        """Return item-level failure dispositions (failed or exhausted), excluding node-level sentinels.
+        """Return item-level failure dispositions (failed or exhausted), excluding node-level
+        sentinels.
 
         The same set `agac retry` selects, so an action holding a record it would retry
         never reads as clean.

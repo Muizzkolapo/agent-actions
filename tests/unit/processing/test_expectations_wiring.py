@@ -292,7 +292,9 @@ def test_an_empty_single_record_still_counts_as_empty_output(monkeypatch):
     from agent_actions.processing.helpers import _is_empty_output
 
     strategy = OnlineStrategy(expectation_service=ExpectationService(SUITE, repair="none"))
-    monkeypatch.setattr(OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ({}, True))
+    monkeypatch.setattr(
+        OnlineStrategy, "_call_llm", lambda self, task, ctx, prompt, *_: ({}, True)
+    )
     result = strategy.invoke(make_task(), make_context())
     assert _is_empty_output(result.response) is True
 

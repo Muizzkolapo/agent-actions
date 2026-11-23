@@ -1,4 +1,5 @@
-"""ConfigManager raises RuntimeError, not AssertionError, when a method is called before load_configs."""
+"""ConfigManager raises RuntimeError, not AssertionError, when a method is called before
+load_configs."""
 
 import pytest
 

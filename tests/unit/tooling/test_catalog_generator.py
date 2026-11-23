@@ -595,11 +595,15 @@ class TestEventWindowInvariants:
 
     def test_the_window_is_newest_first_whatever_the_mix(self):
         for label, shape in self.SHAPES.items():
-            stamps = [e["meta"]["timestamp"] for e in _merge_event_tails(self._sources(shape), 100)]
+            stamps = [
+                e["meta"]["timestamp"] for e in _merge_event_tails(self._sources(shape), 100)
+            ]
             assert stamps == sorted(stamps, reverse=True), label
 
     def test_a_lone_error_survives_a_log_full_of_routine_rows(self):
-        window = _merge_event_tails(self._sources(self.SHAPES["one error among routine rows"]), 100)
+        window = _merge_event_tails(
+            self._sources(self.SHAPES["one error among routine rows"]), 100
+        )
         levels = Counter(e["level"] for e in window)
 
         assert levels == {"info": 99, "error": 1}
@@ -649,7 +653,9 @@ class TestEventWindowUnderRandomShapes:
                             "level": level,
                             "message": f"w{log} {level} {seq}",
                             "meta": {
-                                "timestamp": f"2026-09-22T10:{seq // 60 % 60:02d}:{seq % 60:02d}.{seq:06d}Z"
+                                "timestamp": (
+                                    f"2026-09-22T10:{seq // 60 % 60:02d}:{seq % 60:02d}.{seq:06d}Z"
+                                )
                             },
                             "data": {},
                         }

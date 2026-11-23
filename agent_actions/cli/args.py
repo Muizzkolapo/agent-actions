@@ -54,7 +54,8 @@ class RetryCommandArgs(BaseModel):
     )
     record: str | None = Field(
         default=None,
-        description="Specific record source_guid to retry. If omitted, retries all failed records.",
+        description="Specific record source_guid to retry. If omitted, retries all "
+        "failed records.",
     )
     dry_run: bool = Field(
         default=False,
@@ -100,7 +101,8 @@ class RunCommandArgs(BaseModel):
     )
     record_limit: int | None = Field(
         None,
-        description="Cap each action at this many records per input file, whatever the config sets",
+        description="Cap each action at this many records per input file, whatever the "
+        "config sets",
         ge=1,
     )
     file_limit: int | None = Field(

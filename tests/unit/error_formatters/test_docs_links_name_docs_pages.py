@@ -221,7 +221,9 @@ def _link_constants() -> dict[str, str]:
         f"No docs-link module at {_LINKS_REL}. Every docs link must be a constant there."
     )
     module = importlib.import_module(_LINKS_MODULE)
-    names = {n: v for n, v in vars(module).items() if not (n.startswith("__") and n.endswith("__"))}
+    names = {
+        n: v for n, v in vars(module).items() if not (n.startswith("__") and n.endswith("__"))
+    }
     refused = sorted(n for n, v in names.items() if n.startswith("_") or not isinstance(v, str))
     assert refused == [], (
         f"{_LINKS_REL} may hold only public link strings; it also holds: {refused}"

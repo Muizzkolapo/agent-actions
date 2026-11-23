@@ -48,8 +48,8 @@ class TestBatchModeReturnsPath:
 
         with patch(
             "agent_actions.llm.batch.services.submission.BatchSubmissionService"
-        ) as MockSubmission:
-            MockSubmission.return_value.submit_batch_job.return_value = SubmissionResult(
+        ) as mock_submission:
+            mock_submission.return_value.submit_batch_job.return_value = SubmissionResult(
                 batch_id="vendor_id_123"
             )
             result = _process_batch_mode(ctx)
@@ -73,8 +73,8 @@ class TestBatchModeReturnsPath:
 
         with patch(
             "agent_actions.llm.batch.services.submission.BatchSubmissionService"
-        ) as MockSubmission:
-            MockSubmission.return_value.submit_batch_job.return_value = SubmissionResult(
+        ) as mock_submission:
+            mock_submission.return_value.submit_batch_job.return_value = SubmissionResult(
                 passthrough={"type": "written"}
             )
             result = _process_batch_mode(ctx)
@@ -103,10 +103,10 @@ class TestOnlineModeReturnsPath:
         with (
             patch(
                 "agent_actions.input.preprocessing.staging.initial_pipeline.UnifiedProcessor"
-            ) as MockProc,
+            ) as mock_proc,
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = (
+            mock_proc.return_value.process.return_value = (
                 [{"result": "ok"}],
                 CollectionStats(success=1),
             )
@@ -147,10 +147,10 @@ class TestInitialPipelineZeroSuccessFailure:
         with (
             patch(
                 "agent_actions.input.preprocessing.staging.initial_pipeline.UnifiedProcessor"
-            ) as MockProc,
+            ) as mock_proc,
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = (output, stats)
+            mock_proc.return_value.process.return_value = (output, stats)
 
             return _process_online_mode_with_record_processor(
                 data_chunk, ctx, str(input_file), str(base), str(output_dir), data_chunk
@@ -221,10 +221,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as mock_proc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = ([], CollectionStats(filtered=1))
+            mock_proc.return_value.process.return_value = ([], CollectionStats(filtered=1))
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
 
@@ -246,10 +246,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}, {"id": "2"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as mock_proc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = ([], CollectionStats(unprocessed=2))
+            mock_proc.return_value.process.return_value = ([], CollectionStats(unprocessed=2))
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
 
@@ -262,10 +262,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = []
 
         with (
-            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as mock_proc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = ([], CollectionStats())
+            mock_proc.return_value.process.return_value = ([], CollectionStats())
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
             assert isinstance(result, str)
@@ -285,10 +285,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as mock_proc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = ([], CollectionStats(success=1))
+            mock_proc.return_value.process.return_value = ([], CollectionStats(success=1))
 
             with pytest.raises(RuntimeError, match="tool returned empty result"):
                 _call_online(data_chunk, ctx, input_file, base, output)
@@ -300,10 +300,10 @@ class TestInitialPipelineGuardSkipAndToolAction:
         data_chunk = [{"id": "1"}]
 
         with (
-            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as MockProc,
+            patch(f"{_PATCH_PREFIX}.UnifiedProcessor") as mock_proc,
             patch(f"{_PATCH_PREFIX}.FileWriter"),
         ):
-            MockProc.return_value.process.return_value = ([], CollectionStats(success=1))
+            mock_proc.return_value.process.return_value = ([], CollectionStats(success=1))
 
             result = _call_online(data_chunk, ctx, input_file, base, output)
             assert isinstance(result, str)

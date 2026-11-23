@@ -276,7 +276,9 @@ def test_a_drop_or_a_passthrough_added_counts_as_an_edit_to_the_context_scope(co
     assert _ran(completed) == {"recap": ITEMS, "after_recap": ITEMS}
 
     _edit(
-        completed, "      passthrough: [merge_direct.n_votes]", "      drop: [merge_direct.n_votes]"
+        completed,
+        "      passthrough: [merge_direct.n_votes]",
+        "      drop: [merge_direct.n_votes]",
     )
 
     result = _agac(completed, "run", "-a", WORKFLOW)
@@ -291,7 +293,10 @@ def test_a_drop_or_a_passthrough_added_counts_as_an_edit_to_the_context_scope(co
     [
         pytest.param(None, id="nothing-edited"),
         pytest.param(
-            (SCOPE, "observe: [merge_direct.decision, stage_items.item_id, merge_direct.decision]"),
+            (
+                SCOPE,
+                "observe: [merge_direct.decision, stage_items.item_id, merge_direct.decision]",
+            ),
             id="scope-reordered-and-repeated",
         ),
     ],

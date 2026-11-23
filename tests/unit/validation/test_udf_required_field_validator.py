@@ -46,7 +46,8 @@ _UNCONDITIONAL_VIA_NAME = (
 
 # Written unconditionally at function top level, just after the initial literal.
 _TOP_LEVEL_SUBSCRIPT_ASSIGN = (
-    "def build(data):\n    result = {'options': []}\n    result['answer'] = []\n    return result\n"
+    "def build(data):\n    result = {'options': []}\n    "
+    "result['answer'] = []\n    return result\n"
 )
 
 _TOP_LEVEL_UPDATE_LITERAL = (
@@ -492,7 +493,8 @@ def test_a_re_bound_dict_is_read_from_its_last_binding():
         "    match data:\n        case {'a': a}:\n            out['answer'] = a\n"
         "        case _:\n            out['answer'] = None\n",
         # a branch that raises never reaches the return
-        "    if not data:\n        raise ValueError('empty')\n    else:\n        out['answer'] = 1\n",
+        "    if not data:\n        raise ValueError('empty')\n    else:\n        "
+        "out['answer'] = 1\n",
         # set inside a `with`
         "    with lock:\n        out['answer'] = 1\n",
     ],
@@ -576,7 +578,8 @@ def test_a_list_of_two_is_not_read():
         "    for r in data:\n        out['answer'] = out.pop('answer') + r\n",
         "    for r in data:\n        prev = out.pop('answer')\n        out['answer'] = prev + r\n",
         "    while data:\n        out['answer'] = out.pop('answer') + data.pop()\n",
-        "    for r in data:\n        out.clear()\n        out.update({'options': [], 'answer': r})\n",
+        "    for r in data:\n        out.clear()\n        out.update({'options': [], "
+        "'answer': r})\n",
     ],
 )
 def test_a_key_a_loop_removes_and_sets_again_is_not_flagged(loop):

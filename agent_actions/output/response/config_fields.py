@@ -25,7 +25,8 @@ SIMPLE_CONFIG_FIELDS = {
     "kind": DEFAULT_ACTION_KIND,  # Default: 'llm' (LLM action). Use 'tool' for UDF actions.
     # Execution settings
     "run_mode": RunMode.ONLINE,  # Default: online mode
-    "granularity": "record",  # Default: record-level processing. Use 'file' for batch processing (tool only).
+    # Default: record-level processing. Use 'file' for batch processing (tool only).
+    "granularity": "record",
     "is_operational": True,  # Default: enabled
     "on_empty": "warn",  # Default: an empty answer fails its record; also 'error' or 'skip'
     # LLM configuration

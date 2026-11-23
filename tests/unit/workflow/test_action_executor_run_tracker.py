@@ -61,7 +61,9 @@ class TestExecutorRunTrackerInit:
             pytest.param({"kind": "hitl", "model_vendor": "hitl"}, "hitl", id="hitl"),
         ],
     )
-    def test_track_action_start_records_the_action_type(self, executor, action_config, action_type):
+    def test_track_action_start_records_the_action_type(
+        self, executor, action_config, action_type
+    ):
         mock_tracker = MagicMock()
         executor.run_tracker = mock_tracker
         executor.run_id = "run-abc-123"

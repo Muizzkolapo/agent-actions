@@ -118,7 +118,9 @@ class TestAStagingWalk:
         """A first stage stores `notes.csv` as `notes.json`, and a nested file by its path."""
         _store(backend, "notes.json", "sub/pages.json", "pages.json", "sub/gone.json")
 
-        process_files(_runner(backend), _params([_staged(tmp_path, "notes.csv", "sub/pages.json")]))
+        process_files(
+            _runner(backend), _params([_staged(tmp_path, "notes.csv", "sub/pages.json")])
+        )
 
         assert _held(backend) == ["notes.json", "sub/pages.json"]
 
@@ -335,7 +337,9 @@ class TestAStorageWalk:
 
         assert _held(backend) == ["a.json", "b.json", "gone.json"]
 
-    def test_a_stored_file_it_could_not_read_keeps_everything(self, backend, tmp_path, monkeypatch):
+    def test_a_stored_file_it_could_not_read_keeps_everything(
+        self, backend, tmp_path, monkeypatch
+    ):
         _store(backend, "a.json", "b.json", action=UPSTREAM)
         _store(backend, "a.json", "b.json", "gone.json")
         read = backend.read_target

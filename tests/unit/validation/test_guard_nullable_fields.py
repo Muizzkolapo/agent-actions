@@ -317,7 +317,9 @@ class TestApplyGuardNullableSchemaFixes:
         """Two guarded upstreams -> both fields fixed."""
         action_configs = dict(
             [
-                _guarded_llm_config("action_a", guard={"condition": "x > 0", "on_false": "filter"}),
+                _guarded_llm_config(
+                    "action_a", guard={"condition": "x > 0", "on_false": "filter"}
+                ),
                 _guarded_llm_config("action_b", guard={"condition": "y > 0", "on_false": "skip"}),
                 _tool_config(
                     "consumer",

@@ -348,12 +348,15 @@ class ValidateUDFsCommand:
         self.console.print("[red]❌ Workflow configuration is not valid[/red]\n")
         self.console.print(f"  {escape(get_error_detail(error))}\n")
         self.console.print(
-            "  This is the same check [cyan]agac inspect[/cyan] runs; run it for the full report.\n"
+            "  This is the same check [cyan]agac inspect[/cyan] runs; run it for the "
+            "full report.\n"
         )
 
     def _handle_not_found_error(self, error: FunctionNotFoundError) -> None:
         """Handle function not found error with formatted output."""
-        self.console.print(f"[red]❌ Function '{error.context['function_name']}' not found[/red]\n")
+        self.console.print(
+            f"[red]❌ Function '{error.context['function_name']}' not found[/red]\n"
+        )
         self.console.print("  This function is referenced in your config but not registered.")
         self.console.print("  Did you forget the @udf_tool decorator?\n")
         available = error.context.get("available_functions", [])

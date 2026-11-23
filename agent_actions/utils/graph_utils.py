@@ -19,7 +19,8 @@ def topological_sort(dependencies: dict[T, list[T]]) -> list[T]:
         from agent_actions.errors import DataValidationError  # type: ignore[unreachable]
 
         message = (
-            f"Invalid type for dependencies: expected dictionary, got {type(dependencies).__name__}"
+            "Invalid type for dependencies: expected dictionary, got "
+            f"{type(dependencies).__name__}"
         )
         raise DataValidationError(message, context={"operation": "topological_sort"})
     # A dict, not a set: the queue below is seeded from this in order, so a set would make

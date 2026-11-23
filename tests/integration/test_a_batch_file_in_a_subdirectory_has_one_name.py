@@ -245,7 +245,9 @@ def test_of_two_files_that_shared_a_basename_before_the_first_walked_keeps_it(tm
     action = _Action(tmp_path)
     _as_stored_before(action, "sub1/page.json", [rec("a1", keep=True)])
 
-    action.run({"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]})
+    action.run(
+        {"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]}
+    )
 
     assert action.files() == {
         "page.json": ["processed:a1@batch-1"],
@@ -266,7 +268,9 @@ def test_a_basename_holding_both_files_rows_keeps_only_the_first_ones_when_it_se
     action.process("page.json", [rec("a1", keep=True), rec("b1", keep=True)])
     action.collect()
 
-    action.run({"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]})
+    action.run(
+        {"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]}
+    )
 
     assert action.files() == {
         "page.json": ["processed:a1@batch-1"],

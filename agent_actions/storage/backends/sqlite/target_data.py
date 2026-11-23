@@ -123,13 +123,15 @@ class SQLiteTargetDataMixin(SQLitePayloadCodecMixin):
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "SELECT DISTINCT relative_path FROM target_data WHERE action_name = ? ORDER BY relative_path",
+                "SELECT DISTINCT relative_path FROM target_data WHERE action_name = ? "
+                "ORDER BY relative_path",
                 (action_name,),
             )
             return [row["relative_path"] for row in cursor.fetchall()]
 
     def has_target_rows(self, action_name: str) -> bool:
-        """One indexed probe; a row stored before record_count existed is measured from its data."""
+        """One indexed probe; a row stored before record_count existed is measured from its
+        data."""
         action_name = self._validate_identifier(action_name, "action_name")
         with self._lock:
             cursor = self.connection.cursor()

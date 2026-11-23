@@ -381,7 +381,9 @@ def _check_cases_against_enum(
     # `string` in a type list and in an enum.
     types = [t for t in (kind if isinstance(kind, list) else [kind]) if t != "null"]
     bad_type = kind is not None and types != ["string"]
-    bad_values = [value for value in enum or [] if value is not None and not isinstance(value, str)]
+    bad_values = [
+        value for value in enum or [] if value is not None and not isinstance(value, str)
+    ]
     if bad_type or bad_values:
         cause = f"type {kind!r}" if bad_type else f"enum {enum!r}"
         raise ConfigurationError(
@@ -402,7 +404,8 @@ def _check_cases_against_enum(
     uncovered = [value for value in allowed if value not in spec["cases"]]
     if uncovered and not spec["default"]:
         raise ConfigurationError(
-            f"{where}: {', '.join(uncovered)} {'is a value' if len(uncovered) == 1 else 'are values'} "
+            f"{where}: {', '.join(uncovered)} "
+            f"{'is a value' if len(uncovered) == 1 else 'are values'} "
             f"of {spec['field']} with no case, and 'default: {FILTER}' would filter every "
             "such record. Give each a case, or name a default branch.",
             context={"route": router["name"], "uncovered": uncovered},

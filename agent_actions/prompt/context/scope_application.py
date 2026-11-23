@@ -383,7 +383,8 @@ def apply_context_scope(  # noqa: C901
 
                 llm_context.setdefault(ns_name, {})[field_name] = value
 
-                # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
+                # DO NOT remove from prompt_context - users need it for {{action.field}} template
+                # refs
 
         except ValueError as e:
             fire_event(

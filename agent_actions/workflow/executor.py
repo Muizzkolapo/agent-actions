@@ -754,8 +754,8 @@ class ActionExecutor:
     def _staged_input(
         self, action_name: str, action_config: ActionConfigDict
     ) -> dict[str, list[int]] | None:
-        fingerprint: dict[str, list[int]] | None = self.deps.action_runner.staged_input_fingerprint(
-            action_name, action_config
+        fingerprint: dict[str, list[int]] | None = (
+            self.deps.action_runner.staged_input_fingerprint(action_name, action_config)
         )
         return fingerprint
 
@@ -806,8 +806,9 @@ class ActionExecutor:
         record_limit, _ = resolve_record_limit(action_config)
         file_limit, _ = resolve_file_limit(action_config)
         stored_limit = details.get("record_limit")
-        record_limit_changed = stored_limit != record_limit and not _limit_cannot_reach_the_records(
-            details, record_limit
+        record_limit_changed = (
+            stored_limit != record_limit
+            and not _limit_cannot_reach_the_records(details, record_limit)
         )
         limits_changed = record_limit_changed or details.get("file_limit") != file_limit
         was_truncated = self.deps.state_manager.adopt_truncation_marker(action_name)
@@ -1088,7 +1089,9 @@ class ActionExecutor:
             ).items()
             if config.get("is_operational", True)
         }
-        reads = {name: self._reads(name, config, list(configs)) for name, config in configs.items()}
+        reads = {
+            name: self._reads(name, config, list(configs)) for name, config in configs.items()
+        }
         stale = {action_name}
         # To a fixed point rather than in one pass, so nothing rests on the order the
         # configs happen to be held in.
@@ -1238,7 +1241,9 @@ class ActionExecutor:
         if any(row[2] in FAILURE_DISPOSITIONS for row in settled) and (
             self.deps.state_manager.get_status(action_name) == ActionStatus.COMPLETED
         ):
-            self.deps.state_manager.update_status(action_name, ActionStatus.COMPLETED_WITH_FAILURES)
+            self.deps.state_manager.update_status(
+                action_name, ActionStatus.COMPLETED_WITH_FAILURES
+            )
 
     def _check_prior_output(
         self, storage_backend: Any, action_name: str
@@ -1289,7 +1294,9 @@ class ActionExecutor:
 
         if blocking is not None:
             logger.info("Action %s has %s from prior run — re-running", action_name, blocking)
-            storage_backend.clear_disposition(action_name, blocking, record_id=NODE_LEVEL_RECORD_ID)
+            storage_backend.clear_disposition(
+                action_name, blocking, record_id=NODE_LEVEL_RECORD_ID
+            )
             self.deps.state_manager.update_status(action_name, ActionStatus.PENDING)
             return (False, None)
         if stands:
@@ -1347,7 +1354,9 @@ class ActionExecutor:
             self.run_tracker.record_action_complete(config=config)
 
         return ActionExecutionResult(
-            success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics(duration=duration)
+            success=True,
+            status=ActionStatus.COMPLETED,
+            metrics=ExecutionMetrics(duration=duration),
         )
 
     def _track_action_start(self, params: ActionRunParams) -> None:
@@ -1716,7 +1725,8 @@ class ActionExecutor:
                 )
 
     def _resolve_completion_status(self, action_name: str) -> ActionStatus:
-        """Classify action outcome: FAILED (all items failed), SKIPPED (guard-filtered, holding no record), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
+        """Classify action outcome: FAILED (all items failed), SKIPPED (guard-filtered, holding no
+        record), COMPLETED_WITH_FAILURES (partial), or COMPLETED."""
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return ActionStatus.COMPLETED
@@ -2018,7 +2028,8 @@ class ActionExecutor:
 
     @staticmethod
     def _holds_rows(storage_backend: Any, action_name: str) -> bool:
-        """has_target_rows, read as True when the store cannot say: a wrong True only keeps rows."""
+        """has_target_rows, read as True when the store cannot say: a wrong True only keeps
+        rows."""
         try:
             return bool(storage_backend.has_target_rows(action_name))
         except Exception as e:
@@ -2109,7 +2120,8 @@ class ActionExecutor:
             if should_skip:
                 if result is None:
                     raise RuntimeError(
-                        f"Action '{action_name}' marked completed but _verify_completion_status returned no result"
+                        f"Action '{action_name}' marked completed but "
+                        "_verify_completion_status returned no result"
                     )
                 return result
             current_status = self.deps.state_manager.get_status(action_name)
@@ -2118,7 +2130,9 @@ class ActionExecutor:
             return self._handle_batch_check(action_name, action_idx, action_config, start_time)
 
         # A deliberate halt is not a failure to retry: refuse before any work.
-        if action_is_halted(getattr(self.deps.action_runner, "storage_backend", None), action_name):
+        if action_is_halted(
+            getattr(self.deps.action_runner, "storage_backend", None), action_name
+        ):
             return self._handle_halted_action(action_name, start_time)
 
         # Circuit breaker: skip if any upstream dependency has failed.
@@ -2177,7 +2191,8 @@ class ActionExecutor:
             if should_skip:
                 if result is None:
                     raise RuntimeError(
-                        f"Action '{action_name}' marked completed but _verify_completion_status returned no result"
+                        f"Action '{action_name}' marked completed but "
+                        "_verify_completion_status returned no result"
                     )
                 return result
             current_status = self.deps.state_manager.get_status(action_name)
@@ -2188,7 +2203,9 @@ class ActionExecutor:
             )
 
         # A deliberate halt is not a failure to retry: refuse before any work.
-        if action_is_halted(getattr(self.deps.action_runner, "storage_backend", None), action_name):
+        if action_is_halted(
+            getattr(self.deps.action_runner, "storage_backend", None), action_name
+        ):
             return self._handle_halted_action(action_name, start_time)
 
         # Circuit breaker: skip if any upstream dependency has failed.

@@ -85,7 +85,9 @@ def test_a_row_stored_as_a_delta_comes_back_unmarked(backend):
     )
     assert _stored(backend) == ["delta"]
 
-    assert [r.get("_delta_mode") for r in backend.read_target_for_rewrite("a2", "f.json")] == [None]
+    assert [r.get("_delta_mode") for r in backend.read_target_for_rewrite("a2", "f.json")] == [
+        None
+    ]
 
 
 def test_two_rows_under_one_identity_keep_their_own_modes(backend):

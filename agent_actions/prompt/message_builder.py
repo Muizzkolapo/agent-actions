@@ -417,7 +417,8 @@ class MessageBuilder:
     def _check_shared_len(shared_prompt_len: int | None, prompt: str) -> None:
         if shared_prompt_len is not None and not 0 <= shared_prompt_len <= len(prompt):
             raise ValueError(
-                f"shared_prompt_len {shared_prompt_len} is outside a prompt of length {len(prompt)}"
+                f"shared_prompt_len {shared_prompt_len} is outside a prompt of length "
+                f"{len(prompt)}"
             )
 
     @staticmethod
@@ -498,17 +499,17 @@ class MessageBuilder:
         LLM context and can trigger schema-echo behavior where the model
         returns the schema definition itself instead of conforming data.
         """
-        _META_KEYS = MessageBuilder._SCHEMA_META_KEYS
+        meta_keys = MessageBuilder._SCHEMA_META_KEYS
         if isinstance(schema, dict):
-            stripped = {k: v for k, v in schema.items() if k not in _META_KEYS}
+            stripped = {k: v for k, v in schema.items() if k not in meta_keys}
             # Also strip from nested schema wrappers (OpenAI: {"name":..., "schema": {...}})
             if "schema" in stripped and isinstance(stripped["schema"], dict):
                 stripped["schema"] = {
-                    k: v for k, v in stripped["schema"].items() if k not in _META_KEYS
+                    k: v for k, v in stripped["schema"].items() if k not in meta_keys
                 }
             if "input_schema" in stripped and isinstance(stripped["input_schema"], dict):
                 stripped["input_schema"] = {
-                    k: v for k, v in stripped["input_schema"].items() if k not in _META_KEYS
+                    k: v for k, v in stripped["input_schema"].items() if k not in meta_keys
                 }
             return stripped
         if isinstance(schema, list):
@@ -596,7 +597,9 @@ class MessageBuilder:
             return f"<|begin_of_output_schema|> : {clean} : <|end_of_output_schema|>"
         if schema_injection == SchemaInjection.INLINE_FULL_LIST and schema is not None:
             clean = MessageBuilder._strip_schema_metadata(schema)
-            return f"<|begin_of_output_schema|> : list of this [{clean}] : <|end_of_output_schema|>"
+            return (
+                f"<|begin_of_output_schema|> : list of this [{clean}] : <|end_of_output_schema|>"
+            )
         if schema_injection == SchemaInjection.INLINE_FIELDS:
             return MessageBuilder._build_field_schema_instruction(schema)
         return None
@@ -613,7 +616,10 @@ class MessageBuilder:
             schema_fields = schema.keys()
 
         fields_str = ", ".join([f"'{fname}'" for fname in schema_fields])
-        return f"<|begin_of_output_schema|> : GENERATE JSON with the fields {fields_str} : <|end_of_output_schema|>"
+        return (
+            f"<|begin_of_output_schema|> : GENERATE JSON with the fields {fields_str} "
+            ": <|end_of_output_schema|>"
+        )
 
     @staticmethod
     def _wrap_in_roles(

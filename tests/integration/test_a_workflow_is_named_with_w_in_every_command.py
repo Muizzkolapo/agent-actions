@@ -57,7 +57,8 @@ def project(tmp_path_factory) -> Path:
     (root / "schema" / WORKFLOW).mkdir(parents=True)
     (root / "prompt_store").mkdir()
     (root / "agent_actions.yml").write_text(
-        "default_agent_config:\n  api_key: OLLAMA_API_KEY\n  model_name: mock\nschema_path: schema\n"
+        "default_agent_config:\n  api_key: OLLAMA_API_KEY\n  model_name: "
+        "mock\nschema_path: schema\n"
     )
     (root / ".env").write_text("OLLAMA_API_KEY=not-used\n")
     (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(CONFIG)

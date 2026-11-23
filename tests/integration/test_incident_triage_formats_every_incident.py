@@ -22,7 +22,9 @@ def test_every_incident_reaches_the_triage_output(tmp_path):
     workflow = root / "agent_workflow" / "incident_triage"
     config = workflow / "agent_config" / "incident_triage.yml"
     config.write_text(
-        re.sub(r"(?m)^(\s*)model_vendor: \S+", r"\1model_vendor: agac-provider", config.read_text())
+        re.sub(
+            r"(?m)^(\s*)model_vendor: \S+", r"\1model_vendor: agac-provider", config.read_text()
+        )
     )
     incidents = json.loads(next((workflow / "agent_io" / "staging").glob("*.json")).read_text())
 

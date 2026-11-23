@@ -181,7 +181,8 @@ class RetryService:
     def _wait_before_retry(
         self, error: Exception, attempt: int, log_context: str, reason: str
     ) -> float:
-        """The provider's Retry-After when the error carries one, capped at max_delay; else backoff."""
+        """The provider's Retry-After when the error carries one, capped at max_delay; else
+        backoff."""
         prefix = f"Retry attempt {attempt}/{self.max_attempts}{log_context}: {reason} - {error}"
         context = getattr(error, "context", None)
         retry_after = context.get("retry_after") if isinstance(context, dict) else None

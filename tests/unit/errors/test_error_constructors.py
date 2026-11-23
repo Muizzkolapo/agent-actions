@@ -68,7 +68,8 @@ class TestAgentActionsErrorDefensiveCopy:
         assert err.context == {}
 
     def test_non_dict_context_stored_as_is_for_backward_compat(self):
-        """Non-dict context (e.g., string) is preserved — backward compat for test_exceptions.py."""
+        """Non-dict context (e.g., string) is preserved — backward compat for
+        test_exceptions.py."""
         err = AgentActionsError("test", context="string context")  # type: ignore[arg-type]
         assert err.context == "string context"
 

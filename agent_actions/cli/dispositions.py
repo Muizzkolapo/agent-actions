@@ -332,7 +332,10 @@ class DispositionsCommand:
     help="Show only failed/exhausted/unprocessed records with details.",
 )
 @click.option(
-    "--json", "as_json", is_flag=True, help="Print the count of each disposition per action as JSON"
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Print the count of each disposition per action as JSON",
 )
 @handles_user_errors("dispositions")
 @requires_project

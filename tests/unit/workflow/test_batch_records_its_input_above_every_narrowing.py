@@ -256,8 +256,10 @@ class TestStagingHandsTheRecordingToTheSubmission:
         recorded_input = [{"source_guid": "i1"}, {"source_guid": "i2"}]
 
         captured: dict[str, Any] = {}
-        with patch("agent_actions.llm.batch.services.submission.BatchSubmissionService") as MockSvc:
-            MockSvc.return_value.submit_batch_job.side_effect = lambda *a, **k: captured.update(
+        with patch(
+            "agent_actions.llm.batch.services.submission.BatchSubmissionService"
+        ) as mock_svc:
+            mock_svc.return_value.submit_batch_job.side_effect = lambda *a, **k: captured.update(
                 k
             ) or SubmissionResult(batch_id="b1")
             _process_batch_mode(

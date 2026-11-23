@@ -109,7 +109,8 @@ class TestTheActionLineNamesTheFault:
         assert CAUSE in line, f"the action's own line does not name the fault:\n  {line}"
 
     def test_the_cause_leads_the_message(self, crashed):
-        """`agac dispositions` truncates the reason at 60 chars, so a trailing cause is invisible."""
+        """`agac dispositions` truncates the reason at 60 chars, so a trailing cause is
+        invisible."""
         output, _ = crashed
         line = next(ln for ln in output.splitlines() if "✗ " + TOOL in ln)
         detail = line.split("✗ ", 1)[1]

@@ -159,8 +159,10 @@ def _validate_staged_data(
     first_item = records[0]
     source_content = first_item
 
-    agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
-        cast("ActionConfigDict", agent_config), action_configs
+    agent_indices, dependency_configs, version_context = (
+        ProcessingPipeline._build_pipeline_context(
+            cast("ActionConfigDict", agent_config), action_configs
+        )
     )
     try:
         PromptPreparationService.prepare_prompt_with_context(
@@ -530,7 +532,9 @@ def _give_repeats_their_own_identity(
             row["source_guid"] = candidate
             repeats += 1
     if repeats:
-        logger.info("%d staged record(s) repeat content and were given their own identity", repeats)
+        logger.info(
+            "%d staged record(s) repeat content and were given their own identity", repeats
+        )
     return rows
 
 
@@ -926,9 +930,11 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     from agent_actions.processing.disposition_gate import DispositionGate
     from agent_actions.workflow.pipeline import ProcessingPipeline
 
-    agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
-        cast("ActionConfigDict", ctx.agent_config),
-        ctx.action_configs,
+    agent_indices, dependency_configs, version_context = (
+        ProcessingPipeline._build_pipeline_context(
+            cast("ActionConfigDict", ctx.agent_config),
+            ctx.action_configs,
+        )
     )
 
     task_preparator = BatchTaskPreparator(
@@ -990,9 +996,11 @@ def _process_online_mode_with_record_processor(
     from agent_actions.processing.disposition_gate import DispositionGate
     from agent_actions.workflow.pipeline import ProcessingPipeline, _stored_rows
 
-    agent_indices, dependency_configs, version_context = ProcessingPipeline._build_pipeline_context(
-        cast("ActionConfigDict", ctx.agent_config),
-        ctx.action_configs,
+    agent_indices, dependency_configs, version_context = (
+        ProcessingPipeline._build_pipeline_context(
+            cast("ActionConfigDict", ctx.agent_config),
+            ctx.action_configs,
+        )
     )
     strategy = OnlineLLMStrategy(agent_config=ctx.agent_config, agent_name=ctx.agent_name)
     disposition_gate = DispositionGate(

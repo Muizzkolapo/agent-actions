@@ -38,7 +38,8 @@ class TestSchemaMigrationPreservesData:
                 (f"action_{i}", f"file_{i}.json", json.dumps([{"id": i}]), 1),
             )
             cursor.execute(
-                "INSERT INTO record_disposition (action_name, record_id, disposition, reason, relative_path) "
+                "INSERT INTO record_disposition (action_name, record_id, disposition, "
+                "reason, relative_path) "
                 "VALUES (?, ?, ?, ?, ?)",
                 (f"action_{i}", f"record_{i}", "SUCCESS", "completed", f"file_{i}.json"),
             )

@@ -350,7 +350,10 @@ class TestProcessSingleFile:
 
         params = SingleFileProcessParams(
             locations=FileLocationParams(
-                item=f, input_path=input_dir, output_path=output_dir, input_directory=str(input_dir)
+                item=f,
+                input_path=input_dir,
+                output_path=output_dir,
+                input_directory=str(input_dir),
             ),
             action_config={"agent_type": "test"},
             action_name="test_agent",
@@ -371,7 +374,10 @@ class TestProcessSingleFile:
 
         params = SingleFileProcessParams(
             locations=FileLocationParams(
-                item=f, input_path=input_dir, output_path=output_dir, input_directory=str(input_dir)
+                item=f,
+                input_path=input_dir,
+                output_path=output_dir,
+                input_directory=str(input_dir),
             ),
             action_config={"agent_type": "test"},
             action_name="test_agent",
@@ -389,7 +395,10 @@ class TestProcessSingleFile:
 
         params = SingleFileProcessParams(
             locations=FileLocationParams(
-                item=f, input_path=input_dir, output_path=output_dir, input_directory=str(input_dir)
+                item=f,
+                input_path=input_dir,
+                output_path=output_dir,
+                input_directory=str(input_dir),
             ),
             action_config={"agent_type": "test"},
             action_name="test_agent",

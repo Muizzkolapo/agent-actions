@@ -12,7 +12,9 @@ from agent_actions.utils.schema_utils import is_compiled_schema
 logger = logging.getLogger(__name__)
 
 
-def process_schema_config(agent: dict[str, Any], action: dict[str, Any], template_replacer) -> None:
+def process_schema_config(
+    agent: dict[str, Any], action: dict[str, Any], template_replacer
+) -> None:
     """
     Process schema configuration for an agent.
 
@@ -87,7 +89,8 @@ def compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None
         # stripping — rule blocks are for the author, never for a provider.
         items_schema = _without_rules(schema_fields["items"])
         if isinstance(items_schema, dict) and (
-            items_schema.get("type", "object" if "properties" in items_schema else None) == "object"
+            items_schema.get("type", "object" if "properties" in items_schema else None)
+            == "object"
         ):
             # The schema describes one record, so a flag at its root covers the records.
             items_schema.setdefault(

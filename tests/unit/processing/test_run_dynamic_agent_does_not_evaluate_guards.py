@@ -3,7 +3,8 @@
 `prefilter_by_guard` has already evaluated it on every path that reaches this function, and
 the online record path also runs `TaskPreparer.prepare`, the authoritative evaluation. Both
 build context through `build_guard_context`, which `processing/guard_context.py` names the
-single source of truth and says duplicating is a merge-blocking anti-pattern. A second evaluation here would be a
+single source of truth and says duplicating is a merge-blocking anti-pattern. A second evaluation
+here would be a
 third surface, and one that reads a different `source`: it passed no `context` to
 `evaluate()`, so `_build_evaluation_context` never ran and the guard saw the bare item.
 """

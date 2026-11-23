@@ -111,7 +111,8 @@ class _OpenAIFiles:
 
     def content(self, file_id):
         lines = []
-        for line in (_DIR / f"{file_id.replace('file-out-', 'file-in-')}.jsonl").read_text().splitlines():
+        requests = _DIR / f"{file_id.replace('file-out-', 'file-in-')}.jsonl"
+        for line in requests.read_text().splitlines():
             custom_id = json.loads(line)["custom_id"]
             lines.append(json.dumps({"custom_id": custom_id, "error": None, "response": {
                 "status_code": 200,

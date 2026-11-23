@@ -124,7 +124,9 @@ def test_an_actions_own_failure_is_not_a_record_and_is_listed_beside_the_counts(
     )
     backend.set_disposition("publish", NODE_LEVEL_RECORD_ID, "failed", reason="no input")
 
-    summarize, publish = dispositions_report(backend, WORKFLOW, ["summarize", "publish"])["actions"]
+    summarize, publish = dispositions_report(backend, WORKFLOW, ["summarize", "publish"])[
+        "actions"
+    ]
 
     assert summarize["total"] == 1 and summarize["counts"]["failed"] == 0
     assert summarize["action_level"] == [
@@ -155,9 +157,9 @@ def test_json_does_not_take_quarantined(tmp_path, monkeypatch):
 
 
 def test_each_count_key_is_its_table_header_in_snake_case():
-    assert {key: header.lower().replace(" ", "_") for key, (header, _) in TABLE_COUNTS.items()} == {
-        key: key for key in TABLE_COUNTS
-    }
+    assert {
+        key: header.lower().replace(" ", "_") for key, (header, _) in TABLE_COUNTS.items()
+    } == {key: key for key in TABLE_COUNTS}
     assert COUNT_KEYS[: len(TABLE_COUNTS)] == tuple(TABLE_COUNTS)
 
 

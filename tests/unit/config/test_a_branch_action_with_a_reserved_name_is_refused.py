@@ -1,4 +1,5 @@
-"""A branch action named like a framework namespace is refused, as in a workflow without an include.
+"""A branch action named like a framework namespace is refused, as in a workflow without an
+include.
 
 A branch action `source` hid the staged `source` namespace of its instance, with no message.
 """

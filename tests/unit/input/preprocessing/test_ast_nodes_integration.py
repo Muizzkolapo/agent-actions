@@ -178,7 +178,9 @@ class TestEvaluateNodeIntegration:
 
     def test_missing_field_raises_value_error(self, sample_data):
         """Missing field raises ValueError instead of silently returning None."""
-        node = ComparisonNode(FieldNode("nonexistent"), ComparisonOperator.EQ, LiteralNode("value"))
+        node = ComparisonNode(
+            FieldNode("nonexistent"), ComparisonOperator.EQ, LiteralNode("value")
+        )
         with pytest.raises(ValueError, match="does not exist"):
             evaluate_node(node, sample_data)
 
@@ -366,7 +368,8 @@ class TestParserBooleanLiterals:
         "field", ["true_count", "nothing", "is_active", "not_valid", "inner", "android"]
     )
     def test_reserved_word_prefix_fields_still_parse(self, parser, field):
-        """Field names that begin with or contain reserved words must still be valid identifiers."""
+        """Field names that begin with or contain reserved words must still be valid
+        identifiers."""
         result = parser.parse(f"{field} == 1")
         assert result.success, (
             f"Field name '{field}' should parse successfully, got: {result.error}"
@@ -414,7 +417,9 @@ class TestParserOperatorMapping:
                 'email CONTAINS "@example.com"', {"email": "john@gmail.com"}, id="contains"
             ),
             pytest.param('name LIKE "John%"', {"name": "Jane Doe"}, id="like"),
-            pytest.param('status NOT IN ["deleted", "banned"]', {"status": "deleted"}, id="not_in"),
+            pytest.param(
+                'status NOT IN ["deleted", "banned"]', {"status": "deleted"}, id="not_in"
+            ),
         ],
     )
     def test_operator(self, parser, data, clause, override):

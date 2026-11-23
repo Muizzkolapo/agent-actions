@@ -567,7 +567,9 @@ class TestRepairingWithoutAStore:
                 records, {"record_limit": 5}, "flatten", retried=frozenset({"r1"})
             )
 
-        assert [r.getMessage() for r in caplog.records if "storage backend" in r.getMessage()] == []
+        assert [
+            r.getMessage() for r in caplog.records if "storage backend" in r.getMessage()
+        ] == []
 
     def test_a_run_that_is_not_repairing_says_nothing(self, caplog):
         records = [{"source_guid": f"r{i}"} for i in range(6)]
@@ -575,4 +577,6 @@ class TestRepairingWithoutAStore:
         with caplog.at_level("WARNING", logger="agent_actions.utils.limits"):
             record_indices_to_process(records, {"record_limit": 1}, "flatten")
 
-        assert [r.getMessage() for r in caplog.records if "storage backend" in r.getMessage()] == []
+        assert [
+            r.getMessage() for r in caplog.records if "storage backend" in r.getMessage()
+        ] == []

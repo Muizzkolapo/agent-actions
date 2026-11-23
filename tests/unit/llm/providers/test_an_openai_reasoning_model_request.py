@@ -172,7 +172,10 @@ class TestTheBatchBody:
 
 def test_a_batch_refusal_fails_its_record_with_the_reason():
     """An answered line with no answer in it: the reason is its error, and it has no content."""
-    line = {"custom_id": "r1", "response": {"status_code": 200, "body": _completion(None, REFUSAL)}}
+    line = {
+        "custom_id": "r1",
+        "response": {"status_code": 200, "body": _completion(None, REFUSAL)},
+    }
 
     result = OpenAIBatchClient(api_key="k").parse_provider_response(line)
 

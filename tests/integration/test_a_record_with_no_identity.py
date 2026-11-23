@@ -287,7 +287,9 @@ def test_batch_holds_and_records_what_online_does_for_a_record_with_no_source_gu
     assert _status(batch) == _status(online) == ActionStatus.COMPLETED
 
 
-@pytest.mark.parametrize("inputs", [answered(), unpreparable()], ids=["answered", "not_preparable"])
+@pytest.mark.parametrize(
+    "inputs", [answered(), unpreparable()], ids=["answered", "not_preparable"]
+)
 def test_the_failed_row_of_a_record_with_no_source_guid_keeps_what_it_arrived_with(modes, inputs):
     """Its target_id and what the action above said are all that tell a reader which
     record it was, and the reason names it by that target_id."""
@@ -483,7 +485,9 @@ def test_collecting_clears_a_deferred_mark_left_under_the_target_id_by_an_earlie
         config = _submit(batch, answered())
     batch.backend.set_disposition(ACTION, "t-n1", DISPOSITION_DEFERRED)
 
-    _collect(batch.backend, batch.provider, config, batch.out, Path(batch.file).name, 1, Answerer())
+    _collect(
+        batch.backend, batch.provider, config, batch.out, Path(batch.file).name, 1, Answerer()
+    )
 
     assert _recorded(batch) == {"a1": "success"}
 
@@ -499,7 +503,9 @@ def test_abandoning_a_batch_marks_no_failure_under_the_target_id_of_a_record_wit
         _submit(batch, answered())
     command = RetryCommand(RetryCommandArgs(agent="w", abandon_in_flight=True))
 
-    command._settle_batches_in_flight(batch.backend, command._batches_owed(batch.backend, [ACTION]))
+    command._settle_batches_in_flight(
+        batch.backend, command._batches_owed(batch.backend, [ACTION])
+    )
 
     assert batch.failures() == ["a1"]
 

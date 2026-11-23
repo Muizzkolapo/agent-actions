@@ -1,4 +1,5 @@
-"""An Anthropic usage, of an online response or a batch line, names its cache read and cache write tokens."""
+"""An Anthropic usage, of an online response or a batch line, names its cache read and cache write
+tokens."""
 
 from __future__ import annotations
 

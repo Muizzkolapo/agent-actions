@@ -339,7 +339,9 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
                     ),
                     selection_range=lsp.Range(
                         start=lsp.Position(line=location.line, character=location.column),
-                        end=lsp.Position(line=location.line, character=location.column + len(name)),
+                        end=lsp.Position(
+                            line=location.line, character=location.column + len(name)
+                        ),
                     ),
                 )
             )
@@ -451,7 +453,9 @@ def document_highlight(params: lsp.DocumentHighlightParams) -> list[lsp.Document
         return []
 
     references = index.references_by_file.get(file_path, [])
-    target = find_reference_at_position(references, params.position.line, params.position.character)
+    target = find_reference_at_position(
+        references, params.position.line, params.position.character
+    )
     if not target:
         return []
 

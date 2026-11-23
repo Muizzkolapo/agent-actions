@@ -136,7 +136,8 @@ def test_the_scan_still_finds_the_documented_commands():
     ],
 )
 def test_the_walk_reads_a_command_as_agac_does(words, path):
-    """Guards the walk: an option's value is not a subcommand, and `init` routes a name to `new`."""
+    """Guards the walk: an option's value is not a subcommand, and `init` routes a name to
+    `new`."""
     assert _walk(words) == (path, None)
 
 

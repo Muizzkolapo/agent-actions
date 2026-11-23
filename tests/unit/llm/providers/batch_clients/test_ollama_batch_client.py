@@ -94,7 +94,9 @@ class TestOllamaBatchClient(BaseBatchClientTests):
         assert result["custom_id"] == "test-transform"
         assert result["response"]["status_code"] == 200
         assert result["response"]["body"]["model"] == "llama2"
-        assert result["response"]["body"]["choices"][0]["message"]["content"] == "Hello from Ollama"
+        assert (
+            result["response"]["body"]["choices"][0]["message"]["content"] == "Hello from Ollama"
+        )
         assert result["response"]["body"]["usage"]["prompt_tokens"] == 15
         assert result["response"]["body"]["usage"]["completion_tokens"] == 8
         assert result["response"]["body"]["usage"]["total_tokens"] == 23

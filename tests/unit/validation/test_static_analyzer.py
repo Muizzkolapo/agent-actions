@@ -30,7 +30,8 @@ class TestSchemaExtractorLLMAction:
         config = {"kind": "hitl"}
         result = extractor.extract_schema(config)
         assert isinstance(result, OutputSchema)
-        # HITL should produce fields from HITL_OUTPUT_JSON_SCHEMA (hitl_status, user_comment, timestamp)
+        # HITL should produce fields from HITL_OUTPUT_JSON_SCHEMA (hitl_status, user_comment,
+        # timestamp)
         assert "hitl_status" in result.schema_fields
 
 
@@ -85,5 +86,6 @@ class TestSchemaExtractorExtractFieldsFromJsonSchema:
         }
         result = extractor.extract_schema(config)
         assert isinstance(result, OutputSchema)
-        # context_scope.observe entries are extracted via _extract_field_name("upstream.field_a") -> "field_a"
+        # context_scope.observe entries are extracted via _extract_field_name("upstream.field_a")
+        # -> "field_a"
         assert "field_a" in result.observe_fields

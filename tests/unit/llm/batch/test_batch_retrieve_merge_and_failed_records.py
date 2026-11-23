@@ -153,7 +153,9 @@ class TestMergeOrder:
         )
         assert content["test_action"]["summary"] == "LLM output"
 
-    def test_existing_content_namespace_wins_per_field(self, strategy: BatchResultStrategy) -> None:
+    def test_existing_content_namespace_wins_per_field(
+        self, strategy: BatchResultStrategy
+    ) -> None:
         """A namespace already in record content keeps its values; passthrough fills gaps."""
         context_map = {
             "t-001": _build_context_map_row(

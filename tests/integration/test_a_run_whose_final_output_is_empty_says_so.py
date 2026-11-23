@@ -64,7 +64,9 @@ def _run(tmp_path, keep):
     (directory / "agent_io" / "staging").mkdir(parents=True)
     (directory / "agent_config" / f"{WORKFLOW}.yml").write_text(CONFIG.format(keep=keep))
     (directory / "agent_io" / "staging" / "pages.json").write_text(
-        json.dumps([{"page_id": "p0", "page_content": "a"}, {"page_id": "p1", "page_content": "b"}])
+        json.dumps(
+            [{"page_id": "p0", "page_content": "a"}, {"page_id": "p1", "page_content": "b"}]
+        )
     )
     (root / "tools" / WORKFLOW).mkdir(parents=True)
     (root / "tools" / WORKFLOW / "final.py").write_text(TOOLS)

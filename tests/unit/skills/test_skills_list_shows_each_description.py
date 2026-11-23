@@ -10,7 +10,9 @@ _SKILLS = Path(__file__).resolve().parents[3] / "agent_actions" / "skills"
 
 
 def test_the_frontmatter_description_is_read():
-    text = "---\nname: demo\ndescription: Run demo workflows safely.\n---\n\n# Demo\n\nBody text.\n"
+    text = (
+        "---\nname: demo\ndescription: Run demo workflows safely.\n---\n\n# Demo\n\nBody text.\n"
+    )
     assert skill_description(text) == "Run demo workflows safely."
 
 

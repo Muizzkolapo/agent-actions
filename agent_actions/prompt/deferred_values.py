@@ -802,7 +802,9 @@ class LoadRender:
                 context={"value": rendered.strip()},
             ) from None
         if not isinstance(parsed, dict) or list(parsed) != ["k"]:
-            raise TemplateRenderingError(f"{path}: once rendered, the value is more than one value")
+            raise TemplateRenderingError(
+                f"{path}: once rendered, the value is more than one value"
+            )
         return parsed["k"]
 
 

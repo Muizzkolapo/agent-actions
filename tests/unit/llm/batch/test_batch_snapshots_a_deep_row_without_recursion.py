@@ -129,7 +129,9 @@ class TestEveryBuilderSnapshotsADeepRow:
             ),
         )
 
-        result = BatchResultStrategy()._build_expectations_exhausted(_ctx(row), "t-1", batch_result)
+        result = BatchResultStrategy()._build_expectations_exhausted(
+            _ctx(row), "t-1", batch_result
+        )
 
         _assert_snapshot_is_a_full_independent_copy(result.source_snapshot, row)
 

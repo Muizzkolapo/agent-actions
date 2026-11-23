@@ -204,7 +204,8 @@ class UnifiedProcessor:
                     whole_file
                     and gate_carry_ids
                     and any(
-                        record.get("_state") not in CASCADE_BLOCKING_VALUES for record in to_process
+                        record.get("_state") not in CASCADE_BLOCKING_VALUES
+                        for record in to_process
                     )
                 ):
                     logger.info(
@@ -263,7 +264,9 @@ class UnifiedProcessor:
                     missing_ids -= repair_carry_ids
                     missing_ids |= answer_again
                     if missing_ids:
-                        to_process.extend(r for r in passing if r.get("source_guid") in missing_ids)
+                        to_process.extend(
+                            r for r in passing if r.get("source_guid") in missing_ids
+                        )
                     # With nothing stored for the file the carry read its checkpoint rows:
                     # what the strategy returned, saved before enrichment and collection,
                     # in a run that stopped or whose store failed to write the file. A FILE

@@ -193,7 +193,8 @@ class ReferenceParser:
         """Parse Jinja format: {{ action.field }}"""
         if not (reference.startswith("{{") and reference.endswith("}}")):
             raise InvalidReferenceError(
-                f"Invalid Jinja reference: '{reference}'. Expected format: '{{{{ action.field }}}}'"
+                f"Invalid Jinja reference: '{reference}'. Expected format: '{{{{ "
+                "action.field }}'"
             )
 
         content = reference[2:-2].strip()

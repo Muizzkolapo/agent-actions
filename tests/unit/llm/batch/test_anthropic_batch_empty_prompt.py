@@ -1,4 +1,5 @@
-"""An Anthropic batch request sends its prompt in the user message, as online does, never as a system prompt."""
+"""An Anthropic batch request sends its prompt in the user message, as online does, never as a
+system prompt."""
 
 from __future__ import annotations
 

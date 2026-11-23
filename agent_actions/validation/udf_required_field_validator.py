@@ -122,7 +122,8 @@ def _is_name(node: ast.expr, target: str) -> bool:
 
 
 def _initial_mapping(stmt: ast.stmt, target: str) -> ast.expr | None:
-    """The mapping literal ``stmt`` binds to ``target`` (``target = ...`` or ``target: T = ...``)."""
+    """The mapping literal ``stmt`` binds to ``target`` (``target = ...`` or ``target: T =
+    ...``)."""
     if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
         bound, value = stmt.targets[0], stmt.value
     elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
@@ -199,7 +200,9 @@ def _keys_added(
         return None
     keys = {kw.arg for kw in call.keywords if kw.arg is not None}
     if call.args:
-        literal = _mapping_literal_keys(call.args[0]) if _is_mapping_literal(call.args[0]) else None
+        literal = (
+            _mapping_literal_keys(call.args[0]) if _is_mapping_literal(call.args[0]) else None
+        )
         if literal is None:
             return None
         keys |= literal
@@ -236,7 +239,8 @@ def _merge(states: list[_State]) -> _State:
 
 
 def _walk_own(nodes: list[ast.AST]) -> Iterator[ast.AST]:
-    """Every node under ``nodes`` that runs in this scope — not a nested def, lambda or class body."""
+    """Every node under ``nodes`` that runs in this scope — not a nested def, lambda or class
+    body."""
     stack = list(nodes)
     while stack:
         node = stack.pop()
@@ -658,7 +662,8 @@ def _statements(body: list[ast.stmt], block: str | None) -> Iterator[tuple[ast.s
 
 
 def _where_set(func: ast.FunctionDef | ast.AsyncFunctionDef, field: str) -> tuple[int, str] | None:
-    """The first line that sets ``field`` on the returned name by name, and the block it sits in."""
+    """The first line that sets ``field`` on the returned name by name, and the block it sits
+    in."""
     target = _returned_name(func)
     if target is None:
         return None
@@ -766,7 +771,9 @@ def _finding(
     tail = _last_return(func)
     if tail not in lacking:
         early = lacking[0]
-        block = next((block for stmt, block in _statements(func.body, None) if stmt is early), None)
+        block = next(
+            (block for stmt, block in _statements(func.body, None) if stmt is early), None
+        )
         how = f"returns without it at {_located(early.lineno, info)}" + (
             f", inside {block}" if block else ""
         )

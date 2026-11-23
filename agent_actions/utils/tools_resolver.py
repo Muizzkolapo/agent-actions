@@ -117,7 +117,8 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
                             resolved.relative_to(safe_root)
                         except ValueError as exc:
                             raise ConfigValidationError(
-                                f"Tool file path '{tool_file_path}' resolves outside the project root "
+                                f"Tool file path '{tool_file_path}' resolves outside the "
+                                "project root "
                                 f"'{safe_root}' — possible path traversal"
                             ) from exc
                         with open(resolved, encoding="utf-8") as f:

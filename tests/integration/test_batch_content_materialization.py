@@ -324,7 +324,9 @@ class TestPartialBatchFailure:
         writer.write_target(output)
 
         data = sqlite_backend.read_target("verify_answer", "partial.json")
-        populated = [r for r in data if r.get("content", {}).get("verify_answer") not in (None, {})]
+        populated = [
+            r for r in data if r.get("content", {}).get("verify_answer") not in (None, {})
+        ]
         assert len(populated) >= 2
 
 
@@ -350,7 +352,8 @@ class TestProviderParseChain:
                         {
                             "message": {
                                 "role": "assistant",
-                                "content": '{"verified_answer": "C", "verification_reasoning": "Correct"}',
+                                "content": '{"verified_answer": "C", '
+                                '"verification_reasoning": "Correct"}',
                             },
                             "finish_reason": "stop",
                         }

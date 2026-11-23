@@ -132,7 +132,8 @@ def _extract_retry_after(e: Exception) -> float | None:
     """Seconds the provider asked to wait, from the error's response headers; None if unreadable.
 
     Reads `retry-after-ms`, then `retry-after` as seconds or as an HTTP date. A wait in the
-    past is 0; a value that is not a number (`nan` included) is unreadable. Works with SDKs that expose `response.headers` (OpenAI, Anthropic, Groq).
+    past is 0; a value that is not a number (`nan` included) is unreadable. Works with SDKs that
+    expose `response.headers` (OpenAI, Anthropic, Groq).
     """
     if not hasattr(e, "response") or not e.response:
         return None
@@ -327,7 +328,8 @@ def wrap_vendor_error(
 
 
 def error_for_status(status_code: int, message: str) -> VendorAPIError | NetworkError:
-    """The error online raises for an answer with *status_code*, for a caller that has no exception.
+    """The error online raises for an answer with *status_code*, for a caller that has no
+    exception.
 
     402 is a quota or billing stop, 429 a rate limit and any 5xx a network error, as the
     type-based mappings classify them (the SDKs' ``InternalServerError`` is every 5xx);
@@ -361,7 +363,8 @@ def is_truncated(reason: Any) -> bool:
     return name is not None and name.lower() in _TRUNCATED_STOP_REASONS
 
 
-# Stops the provider made, not the model: a content filter, a safety or recitation block, a refusal.
+# Stops the provider made, not the model: a content filter, a safety or recitation block, a
+# refusal.
 _PROVIDER_STOP_REASONS = frozenset({"content_filter", "safety", "recitation", "refusal"})
 
 
@@ -372,7 +375,8 @@ def is_stopped_by_provider(reason: Any) -> bool:
 
 
 def is_unfinished(reason: Any) -> bool:
-    """Whether the answer ended before the model finished it: cut off, or stopped by the provider."""
+    """Whether the answer ended before the model finished it: cut off, or stopped by the
+    provider."""
     return is_truncated(reason) or is_stopped_by_provider(reason)
 
 
@@ -382,7 +386,8 @@ def refusal_text(refusal: str) -> str:
 
 
 def empty_parse_error(stop_reason: Any) -> str:
-    """The parse error for a JSON-mode response that holds no text, naming why the model stopped."""
+    """The parse error for a JSON-mode response that holds no text, naming why the model
+    stopped."""
     return f"Empty response from API (stop_reason={stop_reason_name(stop_reason)})"
 
 
@@ -405,13 +410,15 @@ def cut_off_parse_error(stop_reason: Any) -> str:
 def stopped_parse_error(stop_reason: Any) -> str:
     """The parse error for a JSON answer that a filter or a block stopped partway."""
     return (
-        f"The provider stopped the answer before its end (stop_reason={stop_reason_name(stop_reason)})"
+        "The provider stopped the answer before its end "
+        f"(stop_reason={stop_reason_name(stop_reason)})"
         "; the answer is not complete"
     )
 
 
 def unfinished_parse_error(stop_reason: Any) -> str | None:
-    """The parse error for a JSON answer that ended before the model finished it; None otherwise."""
+    """The parse error for a JSON answer that ended before the model finished it; None
+    otherwise."""
     if is_truncated(stop_reason):
         return cut_off_parse_error(stop_reason)
     if is_stopped_by_provider(stop_reason):

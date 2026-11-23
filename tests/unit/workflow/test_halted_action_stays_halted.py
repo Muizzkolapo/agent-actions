@@ -127,7 +127,8 @@ class TestTheHaltIsRecorded:
             ),
             pytest.param(
                 DependencyError(
-                    "Action 'author_stem': a.json: boom (Found 1 files but failed to process any.)",
+                    "Action 'author_stem': a.json: boom (Found 1 files but failed to "
+                    "process any.)",
                     context={"action": ORDINARY, "files_found": 1},
                     cause=RuntimeError("boom"),
                 ),

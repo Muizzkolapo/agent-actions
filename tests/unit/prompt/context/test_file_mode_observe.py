@@ -8,6 +8,12 @@ The only cross-record reference is ``source.*`` (resolved from source_data).
 
 import pytest
 
+from agent_actions.errors import DataValidationError
+from agent_actions.prompt.context.scope_application import (
+    _resolve_observe_refs_for_flat_keys,
+    apply_context_scope_for_records,
+)
+
 
 def _without_detail(skipped: list[dict]) -> list[dict]:
     """The skip minus its `detail`, so an exact-shape assertion stays readable.
@@ -17,12 +23,6 @@ def _without_detail(skipped: list[dict]) -> list[dict]:
     """
     return [{k: v for k, v in s.items() if k != "detail"} for s in skipped]
 
-
-from agent_actions.errors import DataValidationError
-from agent_actions.prompt.context.scope_application import (
-    _resolve_observe_refs_for_flat_keys,
-    apply_context_scope_for_records,
-)
 
 # -----------------------------------------------------------------------
 # _resolve_observe_refs_for_flat_keys
@@ -239,7 +239,9 @@ class TestApplyContextScopeForRecords:
         ``content.source``; nothing writes a flat pool row any more.
         """
         data = [{"source_guid": "sg-flat", "content": {"extract": {"text": "Q"}}}]
-        source_data = [{"source_guid": "sg-flat", "url": "https://example.com", "title": "Example"}]
+        source_data = [
+            {"source_guid": "sg-flat", "url": "https://example.com", "title": "Example"}
+        ]
         context_scope = {"observe": ["extract.text", "source.url"]}
 
         with pytest.raises(DataValidationError, match="sg-flat"):

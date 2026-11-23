@@ -390,7 +390,9 @@ def _warning_for(prompt: str) -> str:
             PromptPreparationService._render_prompt_template(
                 prompt, CONTEXT, agent_name="write", mode="online"
             )
-    (event,) = [call.args[0] for call in fired.call_args_list if hasattr(call.args[0], "field_ref")]
+    (event,) = [
+        call.args[0] for call in fired.call_args_list if hasattr(call.args[0], "field_ref")
+    ]
     return event.message
 
 

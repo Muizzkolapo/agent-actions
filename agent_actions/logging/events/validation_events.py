@@ -60,7 +60,9 @@ class ValidationCompleteEvent(BaseEvent):
             status_parts.append(f"{self.error_count} errors")
         status_str = f" ({', '.join(status_parts)})" if status_parts else ""
         result = "passed" if self.error_count == 0 else "failed"
-        self.message = f"Validation {result}: {self.target} in {self.elapsed_time:.2f}s{status_str}"
+        self.message = (
+            f"Validation {result}: {self.target} in {self.elapsed_time:.2f}s{status_str}"
+        )
         self.data = {
             "target": self.target,
             "validator": self.validator,

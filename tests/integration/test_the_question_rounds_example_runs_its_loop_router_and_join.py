@@ -77,7 +77,10 @@ def test_the_join_holds_each_topic_once_published_or_flagged(project, run):
 
     assert bank == {
         "photosynthesis": {"status": "published", "summary": "photosynthesis: passed in round 1"},
-        "plate tectonics": {"status": "published", "summary": "plate tectonics: passed in round 2"},
+        "plate tectonics": {
+            "status": "published",
+            "summary": "plate tectonics: passed in round 2",
+        },
         "the water cycle": {
             "status": "needs review",
             "summary": "the water cycle: round 3: the question does not test the water cycle",

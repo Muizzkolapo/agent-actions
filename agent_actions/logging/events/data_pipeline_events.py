@@ -1,4 +1,5 @@
-"""Data validation, transformation, record processing, batch processing, and result collection events (DV/DT/RP/BP/RC prefixes)."""
+"""Data validation, transformation, record processing, batch processing, and result collection
+events (DV/DT/RP/BP/RC prefixes)."""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -142,7 +143,10 @@ class EnrichmentPipelineCompleteEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"Enrichment pipeline complete ({self.enricher_count} enrichers in {self.elapsed_time:.3f}s)"
+        self.message = (
+            f"Enrichment pipeline complete ({self.enricher_count} enrichers in "
+            f"{self.elapsed_time:.3f}s)"
+        )
         self.data = {
             "enricher_count": self.enricher_count,
             "elapsed_time": self.elapsed_time,
@@ -216,7 +220,10 @@ class RecordTransformedEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.action_name}] Record {self.record_index} transformed: {self.input_size} -> {self.output_size} items"
+        self.message = (
+            f"[{self.action_name}] Record {self.record_index} transformed: "
+            f"{self.input_size} -> {self.output_size} items"
+        )
         self.data = {
             "action_name": self.action_name,
             "record_index": self.record_index,
@@ -297,7 +304,11 @@ class BatchProcessingProgressEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.action_name}] Batch progress: {self.processed}/{self.total} ({self.successes} success, {self.failures} failures)"
+        self.message = (
+            f"[{self.action_name}] Batch progress: "
+            f"{self.processed}/{self.total} ({self.successes} success, "
+            f"{self.failures} failures)"
+        )
         self.data = {
             "action_name": self.action_name,
             "processed": self.processed,
@@ -322,7 +333,10 @@ class BatchDataProcessingCompleteEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.action_name}] Batch processing complete: {self.total_records} records in {self.elapsed_time:.2f}s"
+        self.message = (
+            f"[{self.action_name}] Batch processing complete: "
+            f"{self.total_records} records in {self.elapsed_time:.2f}s"
+        )
         self.data = {
             "action_name": self.action_name,
             "total_records": self.total_records,

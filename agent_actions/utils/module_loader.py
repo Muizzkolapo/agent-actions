@@ -84,7 +84,9 @@ def load_module_from_path(
                         module_path_obj = None
 
                 if module_path_obj and module_path_obj.is_file():
-                    spec = importlib.util.spec_from_file_location(module_name, str(module_path_obj))
+                    spec = importlib.util.spec_from_file_location(
+                        module_name, str(module_path_obj)
+                    )
 
                     if spec and spec.loader:
                         module = importlib.util.module_from_spec(spec)

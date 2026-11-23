@@ -1,4 +1,5 @@
-"""A prompt-cache mark goes only on a prompt that is the same for every record, online and in batch."""
+"""A prompt-cache mark goes only on a prompt that is the same for every record, online and in
+batch."""
 
 from __future__ import annotations
 

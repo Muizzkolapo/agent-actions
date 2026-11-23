@@ -218,7 +218,9 @@ def test_a_retry_of_another_record_keeps_the_failed_row_of_a_record_with_no_sour
 
 
 @pytest.mark.parametrize("mode", ["online", "batch"])
-def test_a_plain_run_over_the_record_with_no_source_guid_stores_its_failed_row_once(tmp_path, mode):
+def test_a_plain_run_over_the_record_with_no_source_guid_stores_its_failed_row_once(
+    tmp_path, mode
+):
     """It refuses the record again and writes that row, carrying none stored beside it."""
     project = _project(tmp_path, mode)
     _run(project, "--fresh")

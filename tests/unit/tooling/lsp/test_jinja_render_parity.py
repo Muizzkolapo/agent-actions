@@ -428,7 +428,8 @@ def test_a_unicode_line_separator_in_a_value_keeps_every_reference(tmp_path):
         tmp_path,
         'name: wf\ndescription: "first\u2028second"\nactions:\n'
         "  - name: a\n    kind: tool\n    impl: ta\n"
-        "  - name: b\n    kind: tool\n    impl: tb\n    dependencies:\n      - a\n      - missing\n",
+        "  - name: b\n    kind: tool\n    impl: tb\n    dependencies:\n      - a\n      "
+        "- missing\n",
     )
 
     assert render_workflow_source(wf, tmp_path).action_sources["b"].line == 6
@@ -442,7 +443,8 @@ def test_a_unicode_line_separator_in_a_value_keeps_every_reference(tmp_path):
 def test_a_unicode_line_separator_before_a_last_name_line_keeps_the_actions(tmp_path):
     wf = _project(
         tmp_path,
-        'name: wf\ndescription: "first\u2028second"\nactions:\n  - name: a\n    kind: tool\n  - name: zed',
+        'name: wf\ndescription: "first\u2028second"\nactions:\n  - name: a\n    kind: '
+        "tool\n  - name: zed",
     )
 
     idx = build_index(tmp_path)
@@ -872,7 +874,8 @@ def test_a_filter_body_under_an_emitted_action_is_not_the_action_above(tmp_path)
         "- name: a\n  kind: tool\n  impl: tool_a\n  {{ emit('b') }}\n"
         "  {% filter safe %}\n  impl: tool_b\n  {% endfilter %}\n",
         {
-            "m.jinja2": "{% macro emit(n) -%}\nx_note: 1\n- name: {{ n }}\n  kind: tool\n{%- endmacro %}\n"
+            "m.jinja2": "{% macro emit(n) -%}\nx_note: 1\n- name: {{ n }}\n  kind: "
+            "tool\n{%- endmacro %}\n"
         },
     )
 
@@ -1207,7 +1210,10 @@ def test_a_tag_that_opens_dependencies_ends_the_context_list_above_it(tmp_path):
 
     refs = build_index(tmp_path).references_by_file[wf]
 
-    assert render_workflow_source(wf, tmp_path).data["actions"][1]["dependencies"] == ["setup", "a"]
+    assert render_workflow_source(wf, tmp_path).data["actions"][1]["dependencies"] == [
+        "setup",
+        "a",
+    ]
     assert [r.type for r in refs if r.value == "a"] in ([], [ReferenceType.ACTION])
 
 
@@ -1362,7 +1368,8 @@ def test_an_expression_that_opens_a_key_ends_the_context_list(tmp_path, tail):
 def test_the_last_of_a_repeated_actions_key_is_read(tmp_path):
     wf = _project(
         tmp_path,
-        "name: wf\nactions:\n  - name: a\n    impl: old_tool\nactions:\n  - name: a\n    impl: new_tool\n",
+        "name: wf\nactions:\n  - name: a\n    impl: old_tool\nactions:\n  - name: a\n    "
+        "impl: new_tool\n",
     )
 
     assert build_index(tmp_path).file_actions[wf]["a"].impl_ref == "new_tool"
@@ -1448,7 +1455,8 @@ def test_a_name_mark_moved_to_a_line_that_is_not_a_name_gives_no_source(tmp_path
         "{% from 'my_steps.jinja2' import step %}\nname: wf\nactions:\n"
         "{{ step('x') | replace(':1:', ':3:') }}\n{{ step('ok') }}\n",
         {
-            "my_steps.jinja2": "{% macro step(n) -%}\n- name: {{ n }}\n  kind: tool\n  impl: t\n{%- endmacro %}\n"
+            "my_steps.jinja2": "{% macro step(n) -%}\n- name: {{ n }}\n  kind: tool\n  "
+            "impl: t\n{%- endmacro %}\n"
         },
     )
 
@@ -1470,7 +1478,8 @@ def _ref_pairs(wf: Path, tmp_path: Path) -> set[tuple[str, str]]:
             id="starts-on-the-key-line",
         ),
         pytest.param(
-            "    prompt:\n      Summarize {{ source.topic }} in one line,\n      and keep it short.\n",
+            "    prompt:\n      Summarize {{ source.topic }} in one line,\n      and "
+            "keep it short.\n",
             id="starts-on-the-next-line",
         ),
     ],
@@ -1676,7 +1685,9 @@ def test_the_text_for_the_tree_holds_each_version_value_as_written(tmp_path):
         pytest.param('    guard: &g "up.x > {{ i }}"\n', "up.x > {{ i }}", id="anchor"),
         pytest.param("    guard: >-\n      up.x > {{ i }}\n", "up.x > {{ i }}", id="folded"),
         pytest.param("    guard: {{ i }} < up.x  # later\n", "{{ i }} < up.x", id="comment"),
-        pytest.param("    guard: {{ i }} < up.x {# why #}\n", "{{ i }} < up.x", id="jinja-comment"),
+        pytest.param(
+            "    guard: {{ i }} < up.x {# why #}\n", "{{ i }} < up.x", id="jinja-comment"
+        ),
         pytest.param(
             "    guard: {{ i }} < up.x and up.s == it's  # later\n",
             "{{ i }} < up.x and up.s == it's",
@@ -1825,7 +1836,9 @@ def test_a_workflow_with_no_tag_is_read_as_yaml_when_the_templates_do_not_load(t
     "workflow, renders",
     [
         pytest.param("actions:\n  - name: a\n    kind: tool\n", True, id="no-tag"),
-        pytest.param("# {% set k = 1 %}\nactions:\n  - name: a\n    kind: tool\n", False, id="tag"),
+        pytest.param(
+            "# {% set k = 1 %}\nactions:\n  - name: a\n    kind: tool\n", False, id="tag"
+        ),
     ],
 )
 def test_a_templates_path_that_is_a_file_fails_only_a_workflow_with_a_tag(

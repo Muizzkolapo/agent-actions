@@ -87,7 +87,8 @@ def _parse_data_source(raw: Any) -> DataSourceConfig:
         return DataSourceConfig(**raw)
 
     raise ConfigurationError(
-        f"Invalid data_source value: expected str, dict, or DataSourceConfig, got {type(raw).__name__}",
+        "Invalid data_source value: expected str, dict, or DataSourceConfig, got "
+        f"{type(raw).__name__}",
         context={"data_source": repr(raw)},
     )
 

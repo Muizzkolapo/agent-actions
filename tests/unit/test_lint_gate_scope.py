@@ -75,7 +75,8 @@ def _in_scope_trees() -> set[str]:
 def _plant(contents: str) -> dict[str, Path]:
     """One offending file per in-scope tree, uniquely named so parallel runs don't collide."""
     planted = {
-        tree: _REPO_ROOT / tree / f"_lint_gate_probe_{uuid4().hex}.py" for tree in _in_scope_trees()
+        tree: _REPO_ROOT / tree / f"_lint_gate_probe_{uuid4().hex}.py"
+        for tree in _in_scope_trees()
     }
     for path in planted.values():
         path.write_text(contents)

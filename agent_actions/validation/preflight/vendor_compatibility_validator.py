@@ -4,8 +4,6 @@ import importlib
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from agent_actions.llm.config.vendor import NON_LLM_VENDORS, ONLINE_ONLY_VENDORS
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.output.response.config_fields import get_default
@@ -15,6 +13,8 @@ from agent_actions.validation.preflight.error_formatter import (
     PreFlightErrorFormatter,
     ValidationIssue,
 )
+
+logger = logging.getLogger(__name__)
 
 # Single source of truth: runtime CLIENT_REGISTRY defines valid vendors.
 VALID_VENDORS = set(CLIENT_REGISTRY.keys())
@@ -231,7 +231,8 @@ class VendorCompatibilityValidator(BaseValidator):
         return unsupported
 
     def get_supported_vendors(self) -> set[str]:
-        """Every supported vendor name: the client registry and the project's declared endpoints."""
+        """Every supported vendor name: the client registry and the project's declared
+        endpoints."""
         from agent_actions.llm.config.endpoints import project_endpoints
 
         return VALID_VENDORS | set(project_endpoints())

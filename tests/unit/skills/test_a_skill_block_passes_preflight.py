@@ -109,7 +109,8 @@ def _authored(action: dict[str, Any]) -> dict[str, Any]:
 
 
 def _borrowed(action: dict[str, Any]) -> dict[str, Any]:
-    """An earlier block's action; one whose schema the page does not show stands in, wired as shown."""
+    """An earlier block's action; one whose schema the page does not show stands in, wired as
+    shown."""
     if isinstance(action.get("schema"), dict):
         return _authored(action)
     observe = (action.get("context_scope") or {}).get("observe") or ["source.*"]

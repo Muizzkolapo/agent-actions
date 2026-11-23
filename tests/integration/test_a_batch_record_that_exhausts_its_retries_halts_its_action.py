@@ -31,7 +31,8 @@ def retries_that_raise(project):  # noqa: F811
     config.write_text(
         config.read_text().replace(
             "  run_mode: batch\n",
-            "  run_mode: batch\n  retry: { enabled: true, max_attempts: 2, on_exhausted: raise }\n",
+            "  run_mode: batch\n  retry: { enabled: true, max_attempts: 2, on_exhausted: "
+            "raise }\n",
         )
     )
     return project

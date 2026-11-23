@@ -207,7 +207,9 @@ class TestValidateUserCodePath:
         assert result is True
 
     def test_valid_directory(self, validator, tmp_path):
-        result = validator.validate({"operation": "validate_user_code_path", "path": str(tmp_path)})
+        result = validator.validate(
+            {"operation": "validate_user_code_path", "path": str(tmp_path)}
+        )
         assert result is True
 
     def test_nonexistent_path(self, validator, tmp_path):

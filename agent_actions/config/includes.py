@@ -822,7 +822,9 @@ def _inclusion(
     if not isinstance(bindings, dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in bindings.items()
     ):
-        raise ConfigurationError(f"{where}: 'inputs' must map each branch input to an action name.")
+        raise ConfigurationError(
+            f"{where}: 'inputs' must map each branch input to an action name."
+        )
     override = _override(entry.get("override"), branch, where)
     removed = _removal(entry.get("remove"), branch, where)
     for action_name in override:
@@ -924,7 +926,8 @@ def _overridden(
             )
         if key not in _OVERRIDE_KEYS:
             raise ConfigurationError(
-                f"{where}: key '{key}' is not an action field.{_near_miss(str(key), _OVERRIDE_KEYS)}",
+                f"{where}: key '{key}' is not an action "
+                f"field.{_near_miss(str(key), _OVERRIDE_KEYS)}",
                 context=context,
             )
     merged = dict(action)
@@ -1172,7 +1175,9 @@ def _final_names(action: Any) -> list[str]:
 def _ordered_names(action: Any) -> list[str]:
     """*action*'s own name, then each name its versions expand to."""
     own = (
-        [action["name"]] if isinstance(action, dict) and isinstance(action.get("name"), str) else []
+        [action["name"]]
+        if isinstance(action, dict) and isinstance(action.get("name"), str)
+        else []
     )
     return list(dict.fromkeys([*own, *_final_names(action)]))
 

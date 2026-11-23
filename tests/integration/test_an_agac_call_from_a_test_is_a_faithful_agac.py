@@ -271,7 +271,9 @@ def test_a_dead_warm_process_fails_the_call_that_finds_it_and_the_next_call_star
 def test_a_call_with_its_own_interpreter_settings_gets_a_fresh_interpreter(tmp_path):
     site = tmp_path / "site"
     site.mkdir()
-    (site / "sitecustomize.py").write_text("import sys\nsys.stderr.write('sitecustomize ran\\n')\n")
+    (site / "sitecustomize.py").write_text(
+        "import sys\nsys.stderr.write('sitecustomize ran\\n')\n"
+    )
 
     fresh = run_agac(tmp_path, "--help", env={"PYTHONPATH": str(site)})
     warm = run_agac(tmp_path, "--help")

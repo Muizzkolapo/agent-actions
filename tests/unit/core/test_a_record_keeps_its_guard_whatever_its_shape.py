@@ -91,7 +91,9 @@ def _record(namespace):
 
 
 def _verdict(udf, record, context=None):
-    return GuardEvaluator().evaluate(record, None, context=context, conditional_clause=udf.__name__)
+    return GuardEvaluator().evaluate(
+        record, None, context=context, conditional_clause=udf.__name__
+    )
 
 
 SHAPES = {

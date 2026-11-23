@@ -22,7 +22,9 @@ INSTANCE = {"_include": {"instance": "c2", "names": NAMES}}
 
 def _reads(prompt: str, action: dict | None = None) -> list[tuple[str, str]]:
     config = {"name": "x", "prompt": prompt, **(INSTANCE if action is None else action)}
-    return [(r.source_agent, r.field_path) for r in ReferenceExtractor().extract_from_agent(config)]
+    return [
+        (r.source_agent, r.field_path) for r in ReferenceExtractor().extract_from_agent(config)
+    ]
 
 
 class TestTheHeader:

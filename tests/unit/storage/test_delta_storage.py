@@ -749,7 +749,8 @@ class TestFileToolExpansionDelta:
         assert "delta" in modes, f"Expected delta mode for downstream, got: {modes}"
 
     def test_downstream_reconstruction_uses_expansion_boundary(self, backend):
-        """Records downstream of expansion reconstruct from the expansion point, not from the start.
+        """Records downstream of expansion reconstruct from the expansion point, not from the
+        start.
 
         The expansion (flatten) creates new GUIDs. Actions before the expansion
         (summarize, extract) have the old GUIDs. Reconstruction for actions after
@@ -942,7 +943,7 @@ class TestForceFullParameter:
 # ---------------------------------------------------------------------------
 
 
-class TestIssue2_ParallelPeers:
+class TestIssue2ParallelPeers:
     """Parallel actions at the same level must NOT appear in each other's upstream."""
 
     @pytest.fixture
@@ -1095,7 +1096,7 @@ class TestIssue2_ParallelPeers:
         assert "merge_action" in result[0]["content"]
 
 
-class TestIssue3_VersionedActions:
+class TestIssue3VersionedActions:
     """Versioned actions (action_1, action_2, action_3) must be in the dep graph."""
 
     @pytest.fixture
@@ -1160,8 +1161,9 @@ class TestIssue3_VersionedActions:
                     )
 
 
-class TestIssue6_MissingSourceGuid:
-    """Records without source_guid must be stored as full — can't reconstruct without a join key."""
+class TestIssue6MissingSourceGuid:
+    """Records without source_guid must be stored as full — can't reconstruct without a join
+    key."""
 
     @pytest.fixture
     def backend(self, tmp_path):
@@ -1203,7 +1205,7 @@ class TestIssue6_MissingSourceGuid:
         assert "a2" in result[0]["content"]
 
 
-class TestIssue7_PartitionedPipeline:
+class TestIssue7PartitionedPipeline:
     """Diamond DAG where branches process different guids — no false incomplete flags."""
 
     @pytest.fixture
@@ -1309,7 +1311,7 @@ class TestIssue7_PartitionedPipeline:
             assert "merge" in r["content"]
 
 
-class TestIssue8_FilesystemLeak:
+class TestIssue8FilesystemLeak:
     """_delta_mode must not appear in filesystem target files."""
 
     def test_write_target_does_not_create_disk_file(self, tmp_path):
@@ -1350,7 +1352,7 @@ class TestIssue8_FilesystemLeak:
         backend.close()
 
 
-class TestIssue9_CorruptMetadata:
+class TestIssue9CorruptMetadata:
     """Corrupt metadata must degrade gracefully, not crash."""
 
     @pytest.fixture
@@ -1402,7 +1404,7 @@ class TestIssue9_CorruptMetadata:
         assert "a1" in result[0]["content"]
 
 
-class TestIssue11_FallbackWarning:
+class TestIssue11FallbackWarning:
     """Action not in dep graph should warn and fall back to flat order."""
 
     @pytest.fixture

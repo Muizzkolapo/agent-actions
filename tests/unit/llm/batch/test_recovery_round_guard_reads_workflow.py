@@ -7,7 +7,12 @@ versioned, with a prompt that reads nothing from the run: the guard alone
 depends on it.
 """
 
-from .test_recovery_preparation_parity import METADATA, _chain_config, _failing, world  # noqa: F401
+from .test_recovery_preparation_parity import (  # noqa: F401
+    METADATA,
+    _chain_config,
+    _failing,
+    world,
+)
 
 GUARD = {"clause": 'workflow.name == "wf"', "behavior": "filter"}
 

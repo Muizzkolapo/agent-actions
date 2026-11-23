@@ -474,7 +474,9 @@ class FakeDataGenerator:
 
         def number(key: str) -> int | float | None:
             value = schema.get(key)
-            return value if isinstance(value, int | float) and not isinstance(value, bool) else None
+            return (
+                value if isinstance(value, int | float) and not isinstance(value, bool) else None
+            )
 
         low, low_open = number("minimum"), False
         exclusive_low = number("exclusiveMinimum")
@@ -518,7 +520,8 @@ class FakeDataGenerator:
 
     @staticmethod
     def _cut_at_word(text: str, shortest: int, longest: int) -> str:
-        """*text* cut to at most *longest* characters, at a word boundary when that keeps *shortest*."""
+        """*text* cut to at most *longest* characters, at a word boundary when that keeps
+        *shortest*."""
         if len(text) <= longest:
             return text
         space = text.rfind(" ", 0, longest + 1)
@@ -570,7 +573,8 @@ class FakeDataGenerator:
             if any(x in field_lower for x in ["date", "time", "created", "updated", "timestamp"]):
                 month = rng.randint(1, 12)
                 day = rng.randint(1, 28)
-                return f"2024-{month:02d}-{day:02d}T{rng.randint(0, 23):02d}:{rng.randint(0, 59):02d}:00Z"
+                hour, minute = rng.randint(0, 23), rng.randint(0, 59)
+                return f"2024-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:00Z"
 
             # Title/subject fields
             if any(x in field_lower for x in ["title", "subject", "heading", "header"]):
@@ -667,11 +671,21 @@ class FakeDataGenerator:
             "uri": f"https://{rng.choice(cls.DOMAINS)}/{rng.choice(cls.NOUNS)}/{attempt}",
             "url": f"https://{rng.choice(cls.DOMAINS)}/{rng.choice(cls.NOUNS)}/{attempt}",
             "date": f"2024-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}",
-            "date-time": f"2024-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}T{rng.randint(0, 23):02d}:{rng.randint(0, 59):02d}:00Z",
+            "date-time": (
+                f"2024-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}"
+                f"T{rng.randint(0, 23):02d}:{rng.randint(0, 59):02d}:00Z"
+            ),
             "time": f"{rng.randint(0, 23):02d}:{rng.randint(0, 59):02d}:{rng.randint(0, 59):02d}",
-            "uuid": f"{rng.randint(0, 0xFFFFFFFF):08x}-{rng.randint(0, 0xFFFF):04x}-{rng.randint(0, 0xFFFF):04x}-{rng.randint(0, 0xFFFF):04x}-{rng.randint(0, 0xFFFFFFFFFFFF):012x}",
+            "uuid": (
+                f"{rng.randint(0, 0xFFFFFFFF):08x}-{rng.randint(0, 0xFFFF):04x}-"
+                f"{rng.randint(0, 0xFFFF):04x}-{rng.randint(0, 0xFFFF):04x}-"
+                f"{rng.randint(0, 0xFFFFFFFFFFFF):012x}"
+            ),
             "hostname": f"{rng.choice(cls.NOUNS)}{attempt}.{rng.choice(cls.DOMAINS)}",
-            "ipv4": f"{rng.randint(1, 254)}.{rng.randint(0, 255)}.{rng.randint(0, 255)}.{rng.randint(1, 254)}",
+            "ipv4": (
+                f"{rng.randint(1, 254)}.{rng.randint(0, 255)}."
+                f"{rng.randint(0, 255)}.{rng.randint(1, 254)}"
+            ),
             "ipv6": f"2001:db8::{rng.randint(0, 0xFFFF):04x}:{rng.randint(0, 0xFFFF):04x}",
         }
         return formats.get(format_type, cls._generate_sentence(attempt, rng))
@@ -798,7 +812,9 @@ class FakeDataGenerator:
 
         # Context-aware: certain fields tend to be true/false
         if field_lower:
-            if any(x in field_lower for x in ["enabled", "active", "valid", "success", "verified"]):
+            if any(
+                x in field_lower for x in ["enabled", "active", "valid", "success", "verified"]
+            ):
                 return attempt >= 2  # True on later attempts
             if any(x in field_lower for x in ["disabled", "deleted", "failed", "error"]):
                 return attempt < 2  # False on later attempts
@@ -1029,7 +1045,8 @@ class FakeDataGenerator:
 
     @staticmethod
     def offered_answer_shapes(prompt: str) -> list[dict[str, Any]] | None:
-        """The JSON objects a prompt's last line offers as its answer: two or more, joined by ` or `.
+        """The JSON objects a prompt's last line offers as its answer: two or more, joined by ` or
+        `.
 
         None when that line holds anything else. A single object is not an offer, so a prompt
         that ends with a rendered record still gets prose.

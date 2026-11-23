@@ -230,7 +230,9 @@ def test_defaulted_expect_with_a_clean_schema_suite_reports_no_defects(tmp_path)
 
 
 def test_defaulted_expect_on_a_schema_without_expectations_block_is_reported(tmp_path):
-    write_schema_file(tmp_path, "write_q_schema", {"fields": [{"id": "options", "type": "string"}]})
+    write_schema_file(
+        tmp_path, "write_q_schema", {"fields": [{"id": "options", "type": "string"}]}
+    )
     defects = find_expectation_defects(
         default_config(schema_name="write_q_schema"), FIELDS, project_root=tmp_path
     )
@@ -376,7 +378,10 @@ def test_llm_judge_context_ref_to_unknown_field_is_a_defect():
                         "id": "r",
                         "type": "llm_judge",
                         "field": "options",
-                        "params": {"rule": "x", "context": ["extract_quote_context.missing_field"]},
+                        "params": {
+                            "rule": "x",
+                            "context": ["extract_quote_context.missing_field"],
+                        },
                     }
                 ]
             }
@@ -396,7 +401,9 @@ def _expr_defects(entry, fields=EXPR_FIELDS):
 
 def test_valid_expression_entry_has_no_defects():
     assert (
-        _expr_defects({"id": "floor", "type": "expression", "params": {"condition": "score >= 80"}})
+        _expr_defects(
+            {"id": "floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        )
         == []
     )
 
@@ -490,13 +497,16 @@ def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
         "scenario",
         [{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}],
     )
-    defects = find_expectation_defects(suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path)
+    defects = find_expectation_defects(
+        suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path
+    )
     assert any("does not produce field 'points'" in d for d in defects["write_q"])
 
 
 def test_expression_schema_cross_check_skips_when_the_action_has_no_known_fields():
     defects = find_expectation_defects(
-        config([{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}]), {}
+        config([{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}]),
+        {},
     ).get("write_q", [])
     assert defects == []
 

@@ -43,7 +43,8 @@ class TestSourceGuidNoneCoercion:
     """source_guid=None must coerce to '' in events but stay None in ProcessingResult."""
 
     def test_events_receive_empty_string_when_source_guid_is_none(self):
-        """All events emitted during process_record() get source_guid='' when prepared.source_guid is None."""
+        """All events emitted during process_record() get source_guid='' when prepared.source_guid
+        is None."""
         fired_events = []
         collector = lambda e: fired_events.append(e)  # noqa: E731
 

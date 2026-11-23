@@ -39,7 +39,9 @@ class TestTransitionBasic:
 
     def test_history_entry_shape(self):
         rec = _active_record()
-        RecordEnvelope.transition(rec, RecordState.PROCESSED, "my_action", "completed", detail="ok")
+        RecordEnvelope.transition(
+            rec, RecordState.PROCESSED, "my_action", "completed", detail="ok"
+        )
         entry = rec["_state_history"][0]
         assert entry["from"] == "active"
         assert entry["to"] == "processed"

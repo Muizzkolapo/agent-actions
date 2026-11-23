@@ -172,7 +172,8 @@ class ActionCompleteEvent(BaseEvent):
         idx_str = f"{self.action_index + 1}/{self.total_actions}"
         total_tokens = self.tokens.get("total_tokens", 0)
         self.message = (
-            f"{idx_str} OK {self.action_name} in {self.execution_time:.2f}s ({total_tokens} tokens)"
+            f"{idx_str} OK {self.action_name} in {self.execution_time:.2f}s "
+            f"({total_tokens} tokens)"
         )
         self.data = {
             "action_name": self.action_name,

@@ -4,12 +4,12 @@ import json
 import logging
 import re
 
-logger = logging.getLogger(__name__)
-
 from lsprotocol import types as lsp
 
 from ..rendering.data_card import render_card_markdown
 from .models import ProjectIndex, ReferenceType
+
+logger = logging.getLogger(__name__)
 
 SEMANTIC_TOKEN_TYPES = [
     "namespace",
@@ -53,7 +53,10 @@ def build_hover_content(reference, index: ProjectIndex, current_file=None) -> st
             if schema.fields:
                 field_lines = "\n".join(f"- `{field}`" for field in schema.fields[:8])
                 fields_preview = f"\n\n**Fields**\n{field_lines}"
-            return f"**Schema**: `{reference.value}`\n\nFile: `{schema.location.file_path}`{fields_preview}"
+            return (
+                f"**Schema**: `{reference.value}`\n\nFile: "
+                f"`{schema.location.file_path}`{fields_preview}"
+            )
 
     elif reference.type == ReferenceType.ACTION:
         meta = index.get_action_metadata(reference.value, current_file)
@@ -239,7 +242,9 @@ def build_semantic_tokens(references) -> list[int]:
         if not token_type_name:
             continue
         if token_type_name not in legend:
-            logger.warning("Token type %r not in semantic tokens legend; skipping", token_type_name)
+            logger.warning(
+                "Token type %r not in semantic tokens legend; skipping", token_type_name
+            )
             continue
         token_type_index = legend.index(token_type_name)
         line = reference.location.line

@@ -79,7 +79,9 @@ class TestEveryForm:
             "review.verdict",
         ]
         location = fields[1].location
-        assert lines[location.line][location.column : location.end_column] == "review.rejected_text"
+        assert (
+            lines[location.line][location.column : location.end_column] == "review.rejected_text"
+        )
 
     def test_nothing_is_reported_unresolved(self, tmp_path, form):
         index, yaml_file = _indexed(tmp_path, _ENTRIES[form])

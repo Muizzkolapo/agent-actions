@@ -515,7 +515,8 @@ class TestLoopCorrelatorWithSequentialMode:
 
 
 class TestVersionCorrelationFailureError:
-    """Test that version correlation failure raises ConfigurationError instead of silent fallback."""
+    """Test that version correlation failure raises ConfigurationError instead of silent
+    fallback."""
 
     def test_version_correlation_failure_raises_error(self):
         """Records present but uncorrelatable raises loudly — not a silent None."""

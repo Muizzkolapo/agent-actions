@@ -110,7 +110,8 @@ class TestProcessAgentOutputBackend:
     def test_disposition_queries_filter_by_node_level_record_id(
         self, tmp_path, make_manager, mock_storage_backend
     ):
-        """Disposition queries must filter by NODE_LEVEL_RECORD_ID to avoid picking up per-record rows."""
+        """Disposition queries must filter by NODE_LEVEL_RECORD_ID to avoid picking up per-record
+        rows."""
         mock_storage_backend.list_target_files.return_value = []
         mock_storage_backend.get_disposition.return_value = []
 

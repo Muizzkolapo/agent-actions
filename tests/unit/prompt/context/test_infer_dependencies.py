@@ -28,7 +28,11 @@ class TestExtractActionNamesFromContextScope:
 
         result = extract_action_names_from_context_scope(context_scope)
 
-        assert result == {"add_answer_text", "suggest_distractor_counts", "write_scenario_question"}
+        assert result == {
+            "add_answer_text",
+            "suggest_distractor_counts",
+            "write_scenario_question",
+        }
 
     def test_extracts_action_names_from_passthrough(self):
         """Test extraction from passthrough fields."""
@@ -131,7 +135,9 @@ class TestInferDependencies:
         }
         workflow_actions = ["action_A", "action_B"]
 
-        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
+        input_sources, context_sources = infer_dependencies(
+            action_config, workflow_actions, "test"
+        )
 
         assert input_sources == ["action_A"]
         assert context_sources == ["action_B"]
@@ -153,7 +159,9 @@ class TestInferDependencies:
         action_config = {"dependencies": [], "context_scope": {"observe": ["action_A.*"]}}
         workflow_actions = ["action_A"]
 
-        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
+        input_sources, context_sources = infer_dependencies(
+            action_config, workflow_actions, "test"
+        )
 
         assert input_sources == []
         assert context_sources == ["action_A"]
@@ -163,7 +171,9 @@ class TestInferDependencies:
         action_config = {"dependencies": "action_A"}
         workflow_actions = ["action_A"]
 
-        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
+        input_sources, context_sources = infer_dependencies(
+            action_config, workflow_actions, "test"
+        )
 
         assert input_sources == ["action_A"]
         assert context_sources == []  # Nothing in context_scope to infer
@@ -268,7 +278,8 @@ class TestInferDependencies:
 
 
 class TestBuildFieldContextRequiresAgentIndices:
-    """Test that build_field_context_with_history requires agent_indices when dependencies exist."""
+    """Test that build_field_context_with_history requires agent_indices when dependencies
+    exist."""
 
     def test_raises_error_when_dependencies_without_agent_indices(self):
         """Test that ConfigurationError is raised when dependencies exist but no agent_indices."""
@@ -426,7 +437,9 @@ class TestInferDependenciesEdgeCases:
         }
         workflow_actions = ["action_A", "action_B"]
 
-        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
+        input_sources, context_sources = infer_dependencies(
+            action_config, workflow_actions, "test"
+        )
 
         assert input_sources == ["action_A"]
         assert context_sources == ["action_B"]
@@ -442,7 +455,9 @@ class TestInferDependenciesEdgeCases:
         }
         workflow_actions = ["action_A", "action_B"]
 
-        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
+        input_sources, context_sources = infer_dependencies(
+            action_config, workflow_actions, "test"
+        )
 
         assert input_sources == ["action_A"]
         assert context_sources == ["action_B"]  # Only one entry, not duplicated

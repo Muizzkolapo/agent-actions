@@ -136,7 +136,9 @@ class TestADeepRecordHashesAsTheJsonEncoderWould:
         depth = 1500
         record = {"z": payload, "deep": _nested_list(depth, payload), "a": 1}
         inner = json.dumps(payload, sort_keys=True, default=str)
-        expected = '{"a": 1, "deep": ' + "[" * depth + inner + "]" * depth + ', "z": ' + inner + "}"
+        expected = (
+            '{"a": 1, "deep": ' + "[" * depth + inner + "]" * depth + ', "z": ' + inner + "}"
+        )
 
         assert IDGenerator.generate_content_hash(record) == str(
             uuid.uuid5(uuid.NAMESPACE_OID, expected)

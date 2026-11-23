@@ -83,7 +83,10 @@ class TemplateVariableError(TemplateRenderingError):
             ctx["field_context_metadata"] = field_context_metadata
         if storage_hints:
             ctx["storage_hints"] = storage_hints
-        msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
+        msg = (
+            f"Template for '{agent_name}' references undefined variables: "
+            f"{', '.join(missing_variables)}"
+        )
         if detail:
             msg += f" — {detail}"
         if null_namespace_hints:

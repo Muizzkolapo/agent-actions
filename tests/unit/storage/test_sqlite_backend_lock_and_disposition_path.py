@@ -1,4 +1,5 @@
-"""SQLiteBackend guards its connection with a reentrant lock and validates a disposition's relative_path."""
+"""SQLiteBackend guards its connection with a reentrant lock and validates a disposition's
+relative_path."""
 
 import threading
 from pathlib import Path

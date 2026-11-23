@@ -119,7 +119,8 @@ class TestSchemaPreValidationErrors:
 
 
 class TestWorkflowLevelValidation:
-    """Workflow-level invariants (duplicates, dangling deps, cycles) caught via get_user_agents()."""
+    """Workflow-level invariants (duplicates, dangling deps, cycles) caught via
+    get_user_agents()."""
 
     def test_duplicate_action_names_raises(self):
         """Duplicate action names are caught at config load time."""

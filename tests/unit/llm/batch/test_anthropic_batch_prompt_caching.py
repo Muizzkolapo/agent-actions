@@ -1,4 +1,5 @@
-"""An action's `enable_prompt_caching` reaches each Anthropic batch request, as it reaches online."""
+"""An action's `enable_prompt_caching` reaches each Anthropic batch request, as it reaches
+online."""
 
 from __future__ import annotations
 

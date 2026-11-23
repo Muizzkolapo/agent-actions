@@ -181,7 +181,9 @@ def two_files(tmp_path):
     (staging / "pages.json").unlink()
     for name in ("a_pages.json", "b_pages.json"):
         staging.joinpath(name).write_text(
-            json.dumps([{"page_id": f"{name}{i}", "page_content": f"{name} {i}"} for i in range(2)])
+            json.dumps(
+                [{"page_id": f"{name}{i}", "page_content": f"{name} {i}"} for i in range(2)]
+            )
         )
     _cycle(root, "run", "-a", WORKFLOW, "--fresh", ends_with=EXIT_SUCCESS)
     return root
@@ -324,7 +326,13 @@ class TestAFileTheRepairNeverNamed:
         _set_disposition(two_files, unnamed, "exhausted")
 
         _cycle(
-            two_files, "retry", "-a", WORKFLOW, "--record", selected, ends_with=EXIT_RECORD_FAILURES
+            two_files,
+            "retry",
+            "-a",
+            WORKFLOW,
+            "--record",
+            selected,
+            ends_with=EXIT_RECORD_FAILURES,
         )
 
         assert _dispositions(two_files)[unnamed] == "exhausted"

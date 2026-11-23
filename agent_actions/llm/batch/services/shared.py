@@ -133,7 +133,10 @@ def settle_unanswered(batch_results: list[BatchResult], *, json_mode: bool) -> N
         if not result.success or result.parse_error is None:
             continue
         if json_mode:
-            result.content = {"raw_response": result.text or "", "_parse_error": result.parse_error}
+            result.content = {
+                "raw_response": result.text or "",
+                "_parse_error": result.parse_error,
+            }
             result.error = None
             result.retriable = None
         elif result.content is None and result.error is None:
@@ -147,7 +150,8 @@ def recovery_preparator(
     action_indices: dict[str, int],
     dependency_configs: dict[str, dict],
 ) -> "BatchTaskPreparator":
-    """The preparator a retry or repair round rebuilds its prompts with, built as the first submission's was.
+    """The preparator a retry or repair round rebuilds its prompts with, built as the first
+    submission's was.
 
     A versioned action's prompt and guard read `version.*`, which only the
     pipeline context carries.

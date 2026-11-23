@@ -93,13 +93,17 @@ class TestARecordNestedDeeply:
 
         ran = _run_to_completion()
 
-        assert all(r.exit_code in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [r.output for r in ran]
+        assert all(r.exit_code in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [
+            r.output for r in ran
+        ]
         assert sorted(_record_dispositions(root).values()) == ["success", "success"]
 
     def test_a_run_after_it_still_completes(self, tmp_path, monkeypatch):
         root = _project(tmp_path, monkeypatch, 600)
         ran = _run_to_completion()
-        assert all(r.exit_code in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [r.output for r in ran]
+        assert all(r.exit_code in (EXIT_SUCCESS, EXIT_PAUSED) for r in ran), [
+            r.output for r in ran
+        ]
 
         again = _invoke("run", "-a", WORKFLOW)
 

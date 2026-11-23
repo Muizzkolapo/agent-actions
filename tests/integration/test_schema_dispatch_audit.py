@@ -214,7 +214,8 @@ class TestVendorCompilation:
     """Tests that each vendor receives its correct format."""
 
     def test_openai_json_schema_format(self):
-        """OpenAI gets {name, schema: {type: object, properties, required, additionalProperties}}."""
+        """OpenAI gets {name, schema: {type: object, properties, required,
+        additionalProperties}}."""
         compiled = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "openai")
         assert isinstance(compiled, dict)
         assert compiled["name"] == "test_schema"

@@ -177,7 +177,9 @@ class TestTheReopenIsWhatMakesTheRemovalDurable:
             "act", {"record_limit": 8}, ActionStatus.COMPLETED
         )
 
-        executor.deps.action_runner.storage_backend.clear_disposition.assert_called_once_with("act")
+        executor.deps.action_runner.storage_backend.clear_disposition.assert_called_once_with(
+            "act"
+        )
 
 
 class TestAnActionThatWasNeverCapped:

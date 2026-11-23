@@ -1,4 +1,5 @@
-"""A templates/ file imported or included with context reads its importer's names, then the folder's."""
+"""A templates/ file imported or included with context reads its importer's names, then the
+folder's."""
 
 from pathlib import Path
 
@@ -30,7 +31,9 @@ DEFINER = pytest.mark.parametrize("definer", ["a_d.j2", "z_d.j2"])
 
 
 @DEFINER
-def test_a_prompt_in_a_file_imported_with_context_renders_a_later_files_variable(tmp_path, definer):
+def test_a_prompt_in_a_file_imported_with_context_renders_a_later_files_variable(
+    tmp_path, definer
+):
     templates = {
         "m_r.j2": "{% set mine = 1 %}{% import 'lib/b.j2' as b with context %}"
         "{% macro act(n) %}{{ b.act(n) }}{% endmacro %}\n",
@@ -51,7 +54,8 @@ def test_a_scoped_block_in_a_file_included_with_context_reads_a_later_files_vari
 ):
     templates = {
         "m_r.j2": "{% set mine = 1 %}{% macro show() %}{% include 'lib/p.j2' %}{% endmacro %}\n",
-        "lib/p.j2": "{% set own = 1 %}{{ mine }}{% block b scoped %}{{ style }}{% endblock %}{{ own }}",
+        "lib/p.j2": "{% set own = 1 %}{{ mine }}{% block b scoped %}{{ style }}{% "
+        "endblock %}{{ own }}",
         definer: "{% set style = 'formal' %}\n",
     }
 

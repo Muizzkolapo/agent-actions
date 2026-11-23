@@ -34,7 +34,9 @@ class ModelPrice(BaseModel):
     output: float = Field(strict=True, ge=0, allow_inf_nan=False)
     cache_read: float | None = Field(default=None, strict=True, ge=0, allow_inf_nan=False)
     cache_write: float | None = Field(default=None, strict=True, ge=0, allow_inf_nan=False)
-    batch_discount: float | None = Field(default=None, strict=True, ge=0, le=1, allow_inf_nan=False)
+    batch_discount: float | None = Field(
+        default=None, strict=True, ge=0, le=1, allow_inf_nan=False
+    )
 
     def missing_for(self, usage: Mapping[str, Any]) -> str | None:
         """The first key *usage* needs a value for and this entry leaves out, or None."""

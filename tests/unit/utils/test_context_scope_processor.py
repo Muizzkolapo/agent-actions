@@ -366,7 +366,8 @@ class TestNestedDictFieldResolution:
 
         # The nested value should be extracted into llm_context under namespace
         assert (
-            llm_context["suggest_distractor_counts"]["target_word_counts.correct_answer_words"] == 8
+            llm_context["suggest_distractor_counts"]["target_word_counts.correct_answer_words"]
+            == 8
         )
         # prompt_context should have the observed namespace with its fields
         assert "suggest_distractor_counts" in prompt_context

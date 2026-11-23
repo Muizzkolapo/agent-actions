@@ -183,12 +183,15 @@ ignore_errors = true
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+# PEP 8's limit for a team that agrees on longer lines.
+line-length = 99
 
 [tool.ruff.lint]
 select = [
+    "E",    # pycodestyle errors (PEP 8)
     "F",    # pyflakes
     "I",    # isort
+    "N",    # pep8-naming
     "W",    # pycodestyle warnings
     "B",    # bugbear
     "UP",   # pyupgrade
@@ -199,7 +202,12 @@ select = [
 ]
 ignore = [
     "G004",  # Allow f-strings in logging (project standard)
+    "N818",  # Exception names are public API; renaming them to end in Error would break callers
 ]
+
+[tool.ruff.lint.pep8-naming]
+# ast.NodeVisitor and Jinja visitors dispatch on the node class name.
+extend-ignore-names = ["visit_*"]
 
 [tool.ruff.lint.mccabe]
 # Functions already above this carry `# noqa: C901`; the gate blocks new ones.

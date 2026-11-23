@@ -710,7 +710,10 @@ class TestToolPassthroughCrossCheck:
         return {
             "kind": "tool",
             "impl": impl,
-            "json_output_schema": {"type": "object", "additionalProperties": additional_properties},
+            "json_output_schema": {
+                "type": "object",
+                "additionalProperties": additional_properties,
+            },
         }
 
     def _emit_warnings(self, cfgs: dict, caplog) -> list[str]:
@@ -768,7 +771,9 @@ class TestToolPassthroughCrossCheck:
 
     def test_passthrough_tool_under_strict_schema_is_flagged(self):
         from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
-        from agent_actions.validation.udf_passthrough_validator import find_passthrough_schema_risks
+        from agent_actions.validation.udf_passthrough_validator import (
+            find_passthrough_schema_risks,
+        )
 
         clear_registry()
         udf_tool(_passthrough_tool)
@@ -782,7 +787,9 @@ class TestToolPassthroughCrossCheck:
 
     def test_additionalproperties_true_tool_not_flagged(self):
         from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
-        from agent_actions.validation.udf_passthrough_validator import find_passthrough_schema_risks
+        from agent_actions.validation.udf_passthrough_validator import (
+            find_passthrough_schema_risks,
+        )
 
         clear_registry()
         udf_tool(_passthrough_tool)
@@ -797,7 +804,9 @@ class TestToolPassthroughCrossCheck:
 
     def test_constructed_tool_not_flagged(self):
         from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
-        from agent_actions.validation.udf_passthrough_validator import find_passthrough_schema_risks
+        from agent_actions.validation.udf_passthrough_validator import (
+            find_passthrough_schema_risks,
+        )
 
         clear_registry()
         udf_tool(_constructed_tool)

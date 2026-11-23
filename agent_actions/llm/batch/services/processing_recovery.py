@@ -240,12 +240,14 @@ def handle_retry_recovery(
     context_map: dict[str, Any],
 ) -> str | None:
     """Handle retry recovery batch completion."""
-    merged, still_missing, updated_counts, _ = context.service._retry_service.process_retry_results(
-        results=recovery_results,
-        accumulated_results=accumulated,
-        context_map=context_map,
-        record_failure_counts=state.record_failure_counts,
-        missing_ids=set(state.missing_ids),
+    merged, still_missing, updated_counts, _ = (
+        context.service._retry_service.process_retry_results(
+            results=recovery_results,
+            accumulated_results=accumulated,
+            context_map=context_map,
+            record_failure_counts=state.record_failure_counts,
+            missing_ids=set(state.missing_ids),
+        )
     )
     still_missing = BatchResultReconciler.resendable_ids(
         BatchResultReconciler.retriable_ids(still_missing, merged), context_map
@@ -539,7 +541,10 @@ def _exhaust(
     attempts: int,
 ) -> None:
     """End the loop for *exhausted*, applying the action's on_exhausted."""
-    from agent_actions.llm.batch.services.repair_ops import apply_exhaustion_policy, stamp_exhausted
+    from agent_actions.llm.batch.services.repair_ops import (
+        apply_exhaustion_policy,
+        stamp_exhausted,
+    )
 
     if not exhausted:
         return
@@ -1036,7 +1041,8 @@ def handle_side_recovery(
     accumulated: list[BatchResult],
     context_map: dict[str, Any],
 ) -> str | None:
-    """Hand a returned side batch's replies to its requester, then run the step that waited on it."""
+    """Hand a returned side batch's replies to its requester, then run the step that waited on
+    it."""
     from agent_actions.llm.batch.services.side_batch import read_side_batch, side_requester
 
     kind = state.side_kind or ""

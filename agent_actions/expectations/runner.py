@@ -98,7 +98,9 @@ def _run_one(
             return outcome(False, f"check raised {type(exc).__name__}: {exc}")
         return outcome(passed, detail)
 
-    params_without_condition = {k: v for k, v in expectation.params.items() if k != "row_condition"}
+    params_without_condition = {
+        k: v for k, v in expectation.params.items() if k != "row_condition"
+    }
 
     if etype.scope == "record":
         try:

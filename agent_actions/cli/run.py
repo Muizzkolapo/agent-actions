@@ -340,7 +340,8 @@ class RunCommand:
     "--verify-keys",
     is_flag=True,
     default=False,
-    help="Verify API keys by probing vendor endpoints, and declared endpoints with one structured-output request, before execution",
+    help="Verify API keys by probing vendor endpoints, and declared endpoints with one "
+    "structured-output request, before execution",
 )
 @click.option(
     "--wait",

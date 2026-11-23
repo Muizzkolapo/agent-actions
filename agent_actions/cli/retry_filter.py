@@ -87,7 +87,9 @@ class RetryFilterCommand:
 
         listing = "\n".join(f"  {action} / {record_id}" for action, record_id in targets)
         if self.args.dry_run:
-            self.console.print(f"[yellow]Dry run — would filter {len(targets)} record(s):[/yellow]")
+            self.console.print(
+                f"[yellow]Dry run — would filter {len(targets)} record(s):[/yellow]"
+            )
             self.console.print(listing, markup=False, highlight=False)
             return
 
@@ -172,7 +174,9 @@ class RetryFilterCommand:
             )
 
     @staticmethod
-    def _held(backend, action: str, record_id: str, restoring: list[dict]) -> dict[str, Any] | None:
+    def _held(
+        backend, action: str, record_id: str, restoring: list[dict]
+    ) -> dict[str, Any] | None:
         """The disposition *record_id* holds at *action*, read as a restore would leave it."""
         for row in restoring:
             if (row["action_name"], row["record_id"]) == (action, record_id):

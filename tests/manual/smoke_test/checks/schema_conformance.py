@@ -83,7 +83,8 @@ class SchemaConformance(Check):
             skipped_actions = {
                 r[0]
                 for r in conn.execute(
-                    "SELECT DISTINCT action_name FROM record_disposition WHERE disposition IN (?, ?, ?)",
+                    "SELECT DISTINCT action_name FROM record_disposition WHERE "
+                    "disposition IN (?, ?, ?)",
                     (DISPOSITION_PASSTHROUGH, DISPOSITION_SKIPPED, DISPOSITION_UNPROCESSED),
                 ).fetchall()
             }

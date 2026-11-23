@@ -50,7 +50,8 @@ logger = logging.getLogger(__name__)
 
 
 def _finish_reason(ollama_response: dict | object) -> str:
-    """Why the model stopped, from ``done_reason`` (``stop``, ``length``, ...) as online reads it."""
+    """Why the model stopped, from ``done_reason`` (``stop``, ``length``, ...) as online reads
+    it."""
     if isinstance(ollama_response, dict):
         done_reason = ollama_response.get("done_reason")
         done = ollama_response.get("done")
@@ -87,7 +88,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         self._max_workers = max_workers
 
         if cloud:
-            self.base_url = base_url or os.getenv("OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL)
+            self.base_url = base_url or os.getenv(
+                "OLLAMA_CLOUD_HOST", OllamaCloudDefaults.BASE_URL
+            )
             if not api_key:
                 raise ConfigurationError(
                     "ollama_cloud batch requires an API key",
@@ -311,7 +314,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         max_workers = self._get_max_workers()
         results: list[dict[str, Any]] = []
 
-        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="ollama_batch") as pool:
+        with ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="ollama_batch"
+        ) as pool:
             futures: dict[Future[dict[str, Any] | None], str] = {
                 pool.submit(
                     contextvars.copy_context().run, self._process_single_task, task, idx, total
@@ -366,7 +371,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return f"{batch_id}_results.jsonl"
 
     def _parse_json_content(self, content_str: str) -> Any:
-        """Read a reply with the online client's ``read_json_reply``; text it refuses stays text."""
+        """Read a reply with the online client's ``read_json_reply``; text it refuses stays
+        text."""
         parsed = read_json_reply(content_str)
         return content_str if parsed is None else parsed
 

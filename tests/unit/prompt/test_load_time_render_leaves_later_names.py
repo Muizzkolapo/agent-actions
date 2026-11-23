@@ -511,7 +511,8 @@ def test_a_record_name_tested_at_load_fails_the_load(tmp_path, workflow, name):
 def test_a_version_variable_tested_outside_a_versioned_action_answers_no(tmp_path):
     data = _load(
         tmp_path,
-        'actions:\n  - name: a\n    model_name: "{% if i is defined %}m{{ i }}{% else %}m{% endif %}"\n',
+        'actions:\n  - name: a\n    model_name: "{% if i is defined %}m{{ i }}{% else '
+        '%}m{% endif %}"\n',
     )
 
     assert _actions(data)["a"]["model_name"] == "m"
@@ -691,7 +692,8 @@ actions:
             id="plain-value-on-the-lines-below-the-key",
         ),
         pytest.param(
-            'actions:\n  - name: a\n    prompt:  # one line\n\n      "Summarise {{ source.page_id }}\n'
+            'actions:\n  - name: a\n    prompt:  # one line\n\n      "Summarise {{ '
+            "source.page_id }}\n"
             '      in one line."\n',
             "Summarise {{ source.page_id }} in one line.",
             id="quoted-value-below-a-comment",
@@ -708,7 +710,8 @@ actions:
             id="flow-mapping",
         ),
         pytest.param(
-            'actions:\n  - {name: a,  # the summary\n     prompt: "Summarize {{ source.text }}"}\n',
+            'actions:\n  - {name: a,  # the summary\n     prompt: "Summarize {{ '
+            'source.text }}"}\n',
             "Summarize {{ source.text }}",
             id="flow-mapping-over-several-lines",
         ),
@@ -782,7 +785,9 @@ def test_a_prompt_reading_an_action_the_file_names_by_a_tag_renders_per_record(t
         '    prompt: "Validate these facts: {{ extract_facts.facts }}"\n',
     )
 
-    assert _actions(data)["validate"]["prompt"] == "Validate these facts: {{ extract_facts.facts }}"
+    assert (
+        _actions(data)["validate"]["prompt"] == "Validate these facts: {{ extract_facts.facts }}"
+    )
 
 
 def test_a_prompt_reading_a_name_that_is_no_action_still_fails_the_load(tmp_path):

@@ -86,7 +86,8 @@ class TestLineageEnricherSourceMapping:
         assert "node_b" in enriched.data[1]["lineage"]
 
     def test_many_to_one_mapping_uses_lineage_tracking_from_sources(self):
-        """3 inputs merged into 1 output -> output gets lineage_sources with all 3 parent node_ids."""
+        """3 inputs merged into 1 output -> output gets lineage_sources with all 3 parent
+        node_ids."""
         source_data = [
             _make_source_item("guid-a", "input_0"),
             _make_source_item("guid-b", "input_1"),

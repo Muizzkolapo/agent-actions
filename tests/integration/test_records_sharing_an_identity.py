@@ -116,7 +116,8 @@ class TestARetryChangesNothing:
 
 
 class TestTheSameContentInTwoFiles:
-    """The same collision `TestARunKeepsEveryStagedRecord` covers within one file, spread across two.
+    """The same collision `TestARunKeepsEveryStagedRecord` covers within one file, spread across
+    two.
 
     Content-derived identity has no path, and the same-file fix's occurrence
     counter reset for every new file, so identical content in two files still
@@ -221,7 +222,9 @@ class TestRetryingEitherSideOfACollision:
     row carries no repeat_of_source_guid — only the OTHER file's row points back at
     it — so the original side needs its own case, not just the mirror."""
 
-    @pytest.mark.parametrize("prefix", ["b_pages", "a_pages"], ids=["repeat-side", "original-side"])
+    @pytest.mark.parametrize(
+        "prefix", ["b_pages", "a_pages"], ids=["repeat-side", "original-side"]
+    )
     def test_retry_does_not_drop_the_other_files_record(self, tmp_path, monkeypatch, prefix):
         root = _stage_two_colliding_files(tmp_path, monkeypatch)
         before = _counts(root)

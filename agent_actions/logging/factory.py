@@ -220,7 +220,8 @@ class LoggerFactory:
 
     @classmethod
     def _apply_logger_levels(cls, config: LoggingConfig) -> None:
-        """Clamp noisy loggers + apply module_levels; restore prior level for loggers no longer managed."""
+        """Clamp noisy loggers + apply module_levels; restore prior level for loggers no longer
+        managed."""
         new_managed: dict[str, str] = {name: "WARNING" for name in _THIRD_PARTY_NOISY_LOGGERS}
 
         new_managed.update(valid_module_levels(config.module_levels))

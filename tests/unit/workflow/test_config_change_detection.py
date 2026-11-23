@@ -128,7 +128,8 @@ class TestConfigChangeInvalidation:
             )
         assert result == ActionStatus.COMPLETED
         assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
-            "action_a was edited since it completed (action config (prompt/schema/guard/routing)): "
+            "action_a was edited since it completed (action config "
+            "(prompt/schema/guard/routing)): "
             "its answers stand, and only records it has not answered use the edit. Run again "
             "with --rerun action_a to answer every record under the edit"
         ]
@@ -308,7 +309,8 @@ class TestAResetActionCanSubmitItsBatchAgain:
 
 
 class TestAResetReachesEveryActionThatReadsWhatItWrites:
-    """A reset action (``--rerun``, or a limit change) writes new output. What was computed from the old output is stale:
+    """A reset action (``--rerun``, or a limit change) writes new output. What was computed from
+    the old output is stale:
     left complete, it holds answers for records that are gone and none for the new ones."""
 
     PROMPT = {"prompt": "X", "model": "m"}
@@ -476,9 +478,9 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         assert {name: state_mgr.get_status(name) for name in self.CONFIGS} == dict.fromkeys(
             self.CONFIGS, ActionStatus.COMPLETED
         )
-        assert {name: len(backend.get_disposition(name)) for name in self.CONFIGS} == dict.fromkeys(
-            self.CONFIGS, 1
-        )
+        assert {
+            name: len(backend.get_disposition(name)) for name in self.CONFIGS
+        } == dict.fromkeys(self.CONFIGS, 1)
 
     def test_a_repair_that_finds_output_gone_leaves_the_readers_as_they_are(self, tmp_path):
         executor, state_mgr, backend = self._workflow(tmp_path)
@@ -626,7 +628,8 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
 
         assert status == ActionStatus.COMPLETED
         assert [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING] == [
-            "split was edited since it completed (action config (prompt/schema/guard/routing)). A retry "
+            "split was edited since it completed (action config "
+            "(prompt/schema/guard/routing)). A retry "
             "answers only the records it names and leaves the rest as they are: run again with "
             "--rerun split to answer every record under the edit"
         ]

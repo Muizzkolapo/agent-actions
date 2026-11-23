@@ -121,12 +121,14 @@ class GuardResult:
             # DATA/TIMEOUT errors respect passthrough_on_error (existing behavior)
             if passthrough_on_error:
                 logger.debug(
-                    "Guard: condition evaluation failed, proceeding (passthrough_on_error=True): %s",
+                    "Guard: condition evaluation failed, proceeding "
+                    "(passthrough_on_error=True): %s",
                     filter_result.error,
                 )
                 return cls.passed()
             logger.warning(
-                "Guard: condition evaluation failed, applying behavior '%s' (passthrough_on_error=False): %s",
+                "Guard: condition evaluation failed, applying behavior '%s' "
+                "(passthrough_on_error=False): %s",
                 behavior,
                 filter_result.error,
             )
@@ -268,7 +270,8 @@ class GuardEvaluator:
     def _evaluate_conditional_clause(
         self, context: Any, conditional_clause: str, passthrough_on_error: bool = True
     ) -> GuardResult | None:
-        """Evaluate legacy UDF conditional clause; returns None if passed, GuardResult.skipped() if failed."""
+        """Evaluate legacy UDF conditional clause; returns None if passed, GuardResult.skipped() if
+        failed."""
         clause = (conditional_clause or "").lower()
         if not clause:
             return None

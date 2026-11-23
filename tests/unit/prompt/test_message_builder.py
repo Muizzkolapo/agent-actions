@@ -36,43 +36,77 @@ SCHEMA_DICT = {"properties": {"sentiment": {"type": "string"}}, "type": "object"
 
 def _original_anthropic(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Anthropic client.py _call_api line 143."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>: {prompt_config} "
+        ":<|end_of_user_instruction|>\n            <|begin_of_text|>: "
+        f"{context_data_str!s} :<|end_of_text|>\n        "
+    )
     return dedent(prompt)
 
 
 def _original_openai_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce OpenAI client.py call_json line 80."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            RULES: ALWAYS READ INPUT AS STRING\n        "
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>: {prompt_config} "
+        ":<|end_of_user_instruction|>\n            <|begin_of_text|>: "
+        f"{context_data_str!s} :<|end_of_text|>\n\n            RULES: YOU CANNOT "
+        "RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            RULES: "
+        "ALWAYS READ INPUT AS STRING\n        "
+    )
     return dedent(prompt)
 
 
 def _original_openai_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce OpenAI client.py call_non_json line 201."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>: {prompt_config} "
+        ":<|end_of_user_instruction|>\n            <|begin_of_text|>: "
+        f"{context_data_str!s} :<|end_of_text|>\n        "
+    )
     return dedent(prompt)
 
 
 def _original_gemini_json(prompt_config: str, context_data_str: str, schema) -> str:
     """Reproduce Gemini client.py call_json line 102."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>: {prompt_config} "
+        ":<|end_of_user_instruction|>\n            <|begin_of_text|>: "
+        f"{context_data_str!s} :<|end_of_text|>\n            "
+        f"<|begin_of_output_schema|> : list of this [{schema}] : "
+        "<|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN "
+        "PROVIDED SCHEMA LIST\n        "
+    )
     return dedent(prompt)
 
 
 def _original_gemini_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Gemini client.py call_non_json line 189."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>: {prompt_config} "
+        ":<|end_of_user_instruction|>\n            <|begin_of_text|>: "
+        f"{context_data_str!s} :<|end_of_text|>\n        "
+    )
     return dedent(prompt)
 
 
 def _original_groq_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Groq client.py call_json line 78."""
-    prompt = f"\n            <|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>\n\n            <|begin_of_text|>:: {context_data_str} :<|end_of_text|>\n        "
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>:{prompt_config} "
+        ":<|end_of_user_instruction|>\n\n            <|begin_of_text|>:: "
+        f"{context_data_str} :<|end_of_text|>\n        "
+    )
     return dedent(prompt)
 
 
 def _original_groq_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Groq client.py call_non_json line 170."""
-    prompt = f"\n                Instructions: {prompt_config}\n                Input Text: {context_data_str!s}\n                \n                Please provide a direct response without any JSON formatting.\n                Begin your response here:\n            "
+    prompt = (
+        f"\n                Instructions: {prompt_config}\n                Input "
+        f"Text: {context_data_str!s}\n                \n                Please "
+        "provide a direct response without any JSON formatting.\n                "
+        "Begin your response here:\n            "
+    )
     return dedent(prompt).strip()
 
 
@@ -80,13 +114,24 @@ def _original_cohere_json(
     prompt_config: str, context_data_str: str, schema_instruction: str
 ) -> str:
     """Reproduce Cohere client.py call_json line 115."""
-    prompt = f"""\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            {schema_instruction}\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            """
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>: {prompt_config} "
+        ":<|end_of_user_instruction|>"
+        f"\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>"
+        f"\n            {schema_instruction}"
+        "\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT"
+        "\n            "
+    )
     return dedent(prompt)
 
 
 def _original_cohere_non_json(prompt_config: str, context_data_str: str) -> str:
     """Reproduce Cohere client.py call_non_json line 214."""
-    prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str!s} :<|end_of_text|>\n        "
+    prompt = (
+        f"\n            <|begin_of_user_instruction|>: {prompt_config} "
+        ":<|end_of_user_instruction|>\n            <|begin_of_text|>: "
+        f"{context_data_str!s} :<|end_of_text|>\n        "
+    )
     return dedent(prompt)
 
 
@@ -154,7 +199,10 @@ class TestStringEquivalence:
     def test_cohere_json_with_schema(self):
         # Reproduce original schema_instruction for Cohere
         fields_str = ", ".join([f"'{f}'" for f in SCHEMA_DICT["properties"].keys()])
-        schema_instruction = f"<|begin_of_output_schema|> : GENERATE JSON with the fields {fields_str} : <|end_of_output_schema|>"
+        schema_instruction = (
+            "<|begin_of_output_schema|> : GENERATE JSON with the fields "
+            f"{fields_str} : <|end_of_output_schema|>"
+        )
         expected = _original_cohere_json(PROMPT, CONTEXT_STR, schema_instruction)
         env = MessageBuilder.build(
             "cohere", PROMPT, CONTEXT_STR, json_mode=True, schema=SCHEMA_DICT
@@ -162,7 +210,9 @@ class TestStringEquivalence:
         assert env.messages[0].content == expected
 
     def test_cohere_json_no_schema(self):
-        schema_instruction = "<|begin_of_output_schema|> : GENERATE JSON : <|end_of_output_schema|>"
+        schema_instruction = (
+            "<|begin_of_output_schema|> : GENERATE JSON : <|end_of_output_schema|>"
+        )
         expected = _original_cohere_json(PROMPT, CONTEXT_STR, schema_instruction)
         env = MessageBuilder.build("cohere", PROMPT, CONTEXT_STR, json_mode=True, schema=None)
         assert env.messages[0].content == expected
@@ -356,7 +406,9 @@ class TestBatchBuilder:
         env = MessageBuilder.build("anthropic", PROMPT, CONTEXT_STR, json_mode=False)
         assert isinstance(env, LLMMessageEnvelope)
         assert env.messages == [
-            LLMMessage(role="user", content=self.TAGGED, static_len=len(self.OPENING) + len(PROMPT))
+            LLMMessage(
+                role="user", content=self.TAGGED, static_len=len(self.OPENING) + len(PROMPT)
+            )
         ]
 
     def test_batch_prompt_body_is_the_tagged_body(self):

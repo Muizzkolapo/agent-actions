@@ -59,9 +59,13 @@ def test_an_edit_to_the_project_file_is_seen_by_the_next_record(tmp_path, settle
     agent_config = {"workflow_config_path": config_path}
     scope = {"seed": {"refs": "$file:refs.json"}}
 
-    assert PromptPreparationService.load_seed_data(agent_config, scope, "act") == {"refs": {"v": 1}}
+    assert PromptPreparationService.load_seed_data(agent_config, scope, "act") == {
+        "refs": {"v": 1}
+    }
     (tmp_path / "agent_actions.yml").write_text("seed_data_path: seed_bbbb\n")
-    assert PromptPreparationService.load_seed_data(agent_config, scope, "act") == {"refs": {"v": 2}}
+    assert PromptPreparationService.load_seed_data(agent_config, scope, "act") == {
+        "refs": {"v": 2}
+    }
 
 
 def test_a_new_seed_folder_named_by_an_edit_is_seen_by_the_next_record(tmp_path, settled):

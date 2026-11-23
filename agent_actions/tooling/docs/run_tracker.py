@@ -12,13 +12,12 @@ from typing import Any
 
 import portalocker
 
-from agent_actions.config.path_config import resolve_project_root
-
-logger = logging.getLogger(__name__)
-
 from agent_actions.config.defaults import LockDefaults
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.providers.usage_tracker import USAGE_FIELDS, totals
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+
+logger = logging.getLogger(__name__)
 
 
 def _empty_runs_data(*, extended: bool = False) -> dict[str, Any]:
@@ -370,7 +369,8 @@ class RunTracker:
         usage: dict[str, Any],
         tokens: dict[str, int] | None,
     ) -> None:
-        """Set what the action's model calls used in the run, and the run's totals from every action's.
+        """Set what the action's model calls used in the run, and the run's totals from every
+        action's.
 
         *usage* replaces what the run held for the action, so the caller passes the
         action's whole sum each time. ``total_tokens`` and the run's ``usage`` are
@@ -384,7 +384,9 @@ class RunTracker:
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
             flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
-            runs_data = self._load_or_repair(f, context=f"cannot record the usage of {action_name}")
+            runs_data = self._load_or_repair(
+                f, context=f"cannot record the usage of {action_name}"
+            )
 
             for run in runs_data["executions"]:
                 if run["id"] != run_id or action_name not in run.get("actions", {}):

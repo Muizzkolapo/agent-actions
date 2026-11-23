@@ -18,6 +18,7 @@ from agent_actions.expectations.fields import referenced_names
 from agent_actions.expectations.types import Expectation
 from agent_actions.llm.config.vendor import runs_in_batch
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
+from agent_actions.utils.constants import VERDICT_KEY as _VERDICT_KEY
 
 EXPECTATIONS_REMEDY = (
     "Fix the expect: block — each defect names its correction. For "
@@ -25,8 +26,6 @@ EXPECTATIONS_REMEDY = (
     "defect lists the registered ones), put the type's arguments under params:, "
     "and target a field the action's schema produces."
 )
-
-from agent_actions.utils.constants import VERDICT_KEY as _VERDICT_KEY
 
 
 def find_expectation_defects(
@@ -213,7 +212,9 @@ def _own_schema_entries(
     ]
 
 
-def _named_suite_entries(suite_name: str, project_root: Path | None) -> tuple[list[Any], list[str]]:
+def _named_suite_entries(
+    suite_name: str, project_root: Path | None
+) -> tuple[list[Any], list[str]]:
     """The rules of a named suite, or the one error that stopped it loading."""
     from agent_actions.expectations.loader import SuiteLoadError, load_schema_rules
 
@@ -256,7 +257,8 @@ def _entry_defects(
             # Pydantic reports this as one message per union branch, naming
             # neither the shape wanted nor the type found.
             messages.append(
-                f"{label}: field must be a string or list of strings, got {type(selector).__name__}"
+                f"{label}: field must be a string or list of strings, got "
+                f"{type(selector).__name__}"
             )
             messages.extend(_argument_defects(label, etype, entry.get("params")))
             continue

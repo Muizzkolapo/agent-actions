@@ -16,7 +16,9 @@ from agent_actions.validation.preflight.resolution_service import WorkflowResolu
 
 LOCAL = "http://localhost:8080/v1"
 
-REFUSAL = "Action 'classify_local': vendor 'openai' with base_url does not support run_mode: batch."
+REFUSAL = (
+    "Action 'classify_local': vendor 'openai' with base_url does not support run_mode: batch."
+)
 
 
 @pytest.fixture(autouse=True)

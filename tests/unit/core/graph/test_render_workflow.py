@@ -98,7 +98,9 @@ class TestRenderPipelineIntegration:
         """Test that Jinja2 variable substitution works with normalization."""
         yaml_file = Path(self.temp_dir) / "workflow.yml"
         yaml_file.write_text(
-            "\n      {% set workflow_name = 'combined_test' %}\n      name: {{ workflow_name }}\n      version: 1.0\n      actions:\n        - name: action1\n          kind: action\n"
+            "\n      {% set workflow_name = 'combined_test' %}\n      name: {{ "
+            "workflow_name }}\n      version: 1.0\n      actions:\n        - name: "
+            "action1\n          kind: action\n"
         )
         result = render_pipeline_with_templates(
             yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
@@ -112,7 +114,8 @@ class TestRenderPipelineIntegration:
         """Test that correctly formatted templates still work."""
         yaml_file = Path(self.temp_dir) / "workflow.yml"
         yaml_file.write_text(
-            "\nname: test_workflow\nversion: 1.0\nactions:\n  - name: test_action\n    kind: action\n    inputs:\n      param1: value1\n"
+            "\nname: test_workflow\nversion: 1.0\nactions:\n  - name: test_action\n    "
+            "kind: action\n    inputs:\n      param1: value1\n"
         )
         result = render_pipeline_with_templates(
             yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)

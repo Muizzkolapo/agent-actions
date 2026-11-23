@@ -77,7 +77,10 @@ class TestGuardContextParity:
         # Enveloped, as every writer produces: a pool row without content.source is
         # refused, because which of a flat row's keys are the user's is a guess (1130).
         source_data = [
-            {"source_guid": "sg-001", "content": {"source": {"name": "test_source", "id": "src-1"}}}
+            {
+                "source_guid": "sg-001",
+                "content": {"source": {"name": "test_source", "id": "src-1"}},
+            }
         ]
         guard_config = {
             "clause": "source.name == 'test_source'",

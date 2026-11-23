@@ -102,7 +102,9 @@ class BaseVendorConfig(BaseModel):
         ..., description="Environment variable the API key is read from; None when it takes none"
     )
     model_name: str = Field(..., description="Model name to use")
-    default_timeout: int = Field(default=60, ge=1, description="Default request timeout in seconds")
+    default_timeout: int = Field(
+        default=60, ge=1, description="Default request timeout in seconds"
+    )
     json_mode: bool = Field(default=True, description="Enable JSON mode by default")
     max_tokens: int | None = Field(default=None, ge=1, description="Maximum tokens in response")
     temperature: float | None = Field(
@@ -187,7 +189,8 @@ class OllamaCloudConfig(BaseVendorConfig):
 
 
 class ToolVendorConfig(BaseVendorConfig):
-    """Configuration for tool-based vendors (non-LLM); a tool runs local Python and takes no key."""
+    """Configuration for tool-based vendors (non-LLM); a tool runs local Python and takes no
+    key."""
 
     vendor_type: Literal[VendorType.TOOL] = VendorType.TOOL
     api_key_env_name: None = None
@@ -196,7 +199,8 @@ class ToolVendorConfig(BaseVendorConfig):
 
 
 class HitlVendorConfig(BaseVendorConfig):
-    """Configuration for HITL workflow vendor (non-LLM); it calls no external API and takes no key."""
+    """Configuration for HITL workflow vendor (non-LLM); it calls no external API and takes no
+    key."""
 
     vendor_type: Literal[VendorType.HITL] = VendorType.HITL
     api_key_env_name: None = None

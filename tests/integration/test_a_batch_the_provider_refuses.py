@@ -252,7 +252,9 @@ class TestAFileRefusedBesideOneThatIsSent:
         refused = _agac(project, "--fresh", REFUSE="a_pages.json")
         sent_beside = _batch_ids(project)
         then = [_agac(project), _agac(project)]
-        return SimpleNamespace(project=project, refused=refused, sent_beside=sent_beside, then=then)
+        return SimpleNamespace(
+            project=project, refused=refused, sent_beside=sent_beside, then=then
+        )
 
     def test_the_run_fails_rather_than_waiting_on_the_batch_beside_it(self, runs):
         assert runs.refused.code != 0, runs.refused.output

@@ -70,7 +70,8 @@ class SQLitePayloadCodecMixin(SQLiteHost):
 
     @staticmethod
     def _forget_dictionary(cursor: sqlite3.Cursor, scope: str, key: str) -> None:
-        """Drop a dictionary once the last row it served is gone, so the next write makes a new one."""
+        """Drop a dictionary once the last row it served is gone, so the next write makes a new
+        one."""
         cursor.execute(
             "DELETE FROM prompt_trace_dictionary WHERE action_name = ? AND column_name = ?",
             (scope, key),

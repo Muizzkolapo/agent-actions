@@ -37,7 +37,9 @@ ON_TOPIC = {
 
 
 def _model_call(model: str, prompt: int, completion: int) -> None:
-    response = SimpleNamespace(usage=SimpleNamespace(input_tokens=prompt, output_tokens=completion))
+    response = SimpleNamespace(
+        usage=SimpleNamespace(input_tokens=prompt, output_tokens=completion)
+    )
     ResponseBuilder.record_usage_and_event(response, "anthropic", model, 1.0, "request")
 
 
@@ -90,7 +92,8 @@ def _answer_one_record(monkeypatch, backend, expect: dict[str, Any], responses: 
 
 
 def test_the_votes_of_a_judged_rule_are_counted_as_judge_calls(monkeypatch, backend):
-    """Verification 7.2: an action with `votes: 5` judge rules reports its judge calls as `judge`."""
+    """Verification 7.2: an action with `votes: 5` judge rules reports its judge calls as
+    `judge`."""
     by_kind, judge_calls = _answer_one_record(
         monkeypatch,
         backend,

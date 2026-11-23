@@ -1,4 +1,5 @@
-"""The first row is read the way the run will, whatever the file type, before anything renders it."""
+"""The first row is read the way the run will, whatever the file type, before anything renders
+it."""
 
 import json
 

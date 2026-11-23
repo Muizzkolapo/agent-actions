@@ -196,7 +196,10 @@ def test_a_name_behind_a_version_merge_further_up_passes():
         "ground": {"context_scope": {"observe": ["source.page"]}},
         "vote_1": {"dependencies": ["ground"], "context_scope": {"observe": ["ground.x"]}},
         "vote_2": {"dependencies": ["ground"], "context_scope": {"observe": ["ground.x"]}},
-        "tally": {"dependencies": ["vote"], "context_scope": {"observe": ["vote_1.*", "vote_2.*"]}},
+        "tally": {
+            "dependencies": ["vote"],
+            "context_scope": {"observe": ["vote_1.*", "vote_2.*"]},
+        },
         "report": {
             "dependencies": ["tally"],
             "context_scope": {"observe": ["tally.x", "vote_1.x", "ground.x"]},

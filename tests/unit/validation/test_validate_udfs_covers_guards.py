@@ -89,7 +89,11 @@ class TestImplIsStillChecked:
         """Both are collected, so a valid guard beside a bad impl still fails."""
         with pytest.raises(FunctionNotFoundError, match="no_such_tool"):
             validate_udf_references(
-                {"wf": {"actions": [{"name": "a", "impl": "no_such_tool", "guard": "udf:ug_keep"}]}}
+                {
+                    "wf": {
+                        "actions": [{"name": "a", "impl": "no_such_tool", "guard": "udf:ug_keep"}]
+                    }
+                }
             )
 
 

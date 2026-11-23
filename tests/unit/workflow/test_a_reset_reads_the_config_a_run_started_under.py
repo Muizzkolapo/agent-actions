@@ -196,7 +196,9 @@ def test_a_stopped_action_edited_since_its_run_started_keeps_what_it_finished_an
 def test_rerun_of_a_stopped_edited_action_keeps_nothing(tmp_path, backend, stop):
     _stopped(tmp_path, backend, stop)
 
-    state = _next_run_resets(tmp_path, backend, _edited(prompt="Define it briefly"), rerun="define")
+    state = _next_run_resets(
+        tmp_path, backend, _edited(prompt="Define it briefly"), rerun="define"
+    )
 
     assert _held(backend) == {}
     assert state.get_status("define") == ActionStatus.PENDING

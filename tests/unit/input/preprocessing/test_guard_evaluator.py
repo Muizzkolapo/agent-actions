@@ -57,7 +57,9 @@ class TestGuardResult:
 
     def test_from_filter_result_failure_no_passthrough(self):
         filter_result = FilterResult(success=False, matched=False, error="parse error")
-        result = GuardResult.from_filter_result(filter_result, "filter", passthrough_on_error=False)
+        result = GuardResult.from_filter_result(
+            filter_result, "filter", passthrough_on_error=False
+        )
         assert result.should_execute is False
         assert result.behavior == "filter"
 
@@ -286,7 +288,8 @@ class TestOutputFieldPromotionInTaskPreparer:
     """Tests for output_field promotion logic in TaskPreparer._load_full_context."""
 
     def test_promote_output_field_to_top_level(self):
-        """output_field values from dependency_configs are promoted to top-level in field_context."""
+        """output_field values from dependency_configs are promoted to top-level in
+        field_context."""
         from unittest.mock import patch
 
         from agent_actions.processing.prepared_task import PreparationContext
@@ -364,7 +367,8 @@ class TestOutputFieldPromotionInTaskPreparer:
         assert result["severity"] == "existing_value"
 
     def test_promote_output_field_from_list_dep_data(self):
-        """output_field promotion works when dep_data is a single-item list (common storage shape)."""
+        """output_field promotion works when dep_data is a single-item list (common storage
+        shape)."""
         from unittest.mock import patch
 
         from agent_actions.processing.prepared_task import PreparationContext

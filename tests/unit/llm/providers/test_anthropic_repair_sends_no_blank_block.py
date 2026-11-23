@@ -1,4 +1,5 @@
-"""No Anthropic repair request carries a blank text block, and a repair keeps a per-record schema unmarked."""
+"""No Anthropic repair request carries a blank text block, and a repair keeps a per-record schema
+unmarked."""
 
 from __future__ import annotations
 
@@ -177,7 +178,8 @@ class TestLaterRounds:
 
 
 def _online_dispatched(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Send one record of a per-record-schema action through the repair loop; return both bodies."""
+    """Send one record of a per-record-schema action through the repair loop; return both
+    bodies."""
     sent: list[dict[str, Any]] = []
     prepared = PromptPreparationService.prepare_prompt_with_field_context(
         config, "summarize", {}, field_context={"source": {"page_content": "alpha"}}

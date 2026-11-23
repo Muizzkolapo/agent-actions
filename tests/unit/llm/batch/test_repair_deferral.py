@@ -315,7 +315,12 @@ class TestTheBudgetBoundsTheRunNotTheRound:
 
     JUDGED = [
         {"id": "enough", "type": "item_count", "field": "options", "params": {"min": 2}},
-        {"id": "on_topic", "type": "llm_judge", "field": "options", "params": {"rule": "on topic"}},
+        {
+            "id": "on_topic",
+            "type": "llm_judge",
+            "field": "options",
+            "params": {"rule": "on topic"},
+        },
     ]
 
     def _judged_config(self, **expect):
@@ -391,7 +396,9 @@ class TestANonTerminalRoundKeepsWhatItCannotResubmit:
 
     def test_the_error_message_survives_being_pooled(self):
         failing = BatchResult(custom_id="r1", content=FAILING, success=True)
-        api_error = BatchResult(custom_id="e1", content=None, success=False, error="429 rate limit")
+        api_error = BatchResult(
+            custom_id="e1", content=None, success=False, error="429 rate limit"
+        )
         _out, state = self._resume_continuing([failing, api_error])
         pooled = {r.get("custom_id"): r for r in state.graduated_results}
         assert pooled["e1"].get("error") == "429 rate limit"
@@ -653,7 +660,8 @@ class TestTheOriginalBatchFinaliserAlsoRaises:
             ),
             patch.object(
                 __import__(
-                    "agent_actions.llm.batch.services.processing", fromlist=["RecoveryStateManager"]
+                    "agent_actions.llm.batch.services.processing",
+                    fromlist=["RecoveryStateManager"],
                 ).RecoveryStateManager,
                 "delete",
             ),
@@ -729,7 +737,8 @@ class TestAnUnrelatedFailureIsNotReportedAsAHalt:
             ExpectationsExhaustedError(ACTION, ["enough"], 1), OSError("No space left on device")
         )
         assert isinstance(raised, OSError), (
-            f"the write failure was reported as {type(raised).__name__}; the outer loop then takes "
+            f"the write failure was reported as {type(raised).__name__}; the outer loop "
+            "then takes "
             "the RuntimeError branch and never tombstones the abandoned records"
         )
         assert "No space left on device" in str(raised), (
@@ -868,7 +877,8 @@ class TestARecordIsNeverBothPooledAndInFlight:
         pooled_ids = [r.get("custom_id") for r in state.graduated_results]
         assert "r1" in state.repair_submitted_ids
         assert "r1" not in pooled_ids, (
-            f"r1 is in flight and still pooled as finished ({pooled_ids}); finalisation merges the "
+            f"r1 is in flight and still pooled as finished ({pooled_ids}); finalisation "
+            "merges the "
             "pool with the returning record and ships it twice, one copy unverdicted"
         )
 
@@ -1071,13 +1081,17 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
             "results were already paid for and are now unprocessed"
         )
         assert written == ["/out/good.json"]
-        assert tombstone.call_count == 1, "its records still need tombstoning for the retry command"
+        assert tombstone.call_count == 1, (
+            "its records still need tombstoning for the retry command"
+        )
 
     def test_a_per_file_failure_still_only_costs_that_file(self):
         raised, written, tombstone = self._run_two_files(ValueError("one bad convert"))
         assert raised is None, "a single bad file must not take the whole run down"
         assert written == ["/out/good.json"]
-        assert tombstone.call_count == 1, "its records still need tombstoning for the retry command"
+        assert tombstone.call_count == 1, (
+            "its records still need tombstoning for the retry command"
+        )
 
 
 class TestAResumeDoesNotShipThePreRepairResults:
@@ -1466,7 +1480,9 @@ class TestParkingNothingNeverClearsADecidedHalt:
                 context,
                 _identity(),
                 state,
-                recovery_results=[BatchResult(custom_id="r1", content=dict(FAILING), success=True)],
+                recovery_results=[
+                    BatchResult(custom_id="r1", content=dict(FAILING), success=True)
+                ],
                 accumulated=[],
                 context_map=_context_map("r1"),
             )

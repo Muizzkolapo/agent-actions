@@ -56,7 +56,9 @@ class TestLspIndexerReadError:
 
         index = ProjectIndex(root=tmp_path)
 
-        with patch("agent_actions.tooling.lsp.indexer.Path.read_text", side_effect=OSError("perm")):
+        with patch(
+            "agent_actions.tooling.lsp.indexer.Path.read_text", side_effect=OSError("perm")
+        ):
             # Must not raise; bad file is skipped with a warning
             indexer_module._index_prompts(index, tmp_path)
 

@@ -344,7 +344,9 @@ def _deep_item() -> dict:
 
 
 def _evaluate(udf, item, context):
-    return GuardEvaluator().evaluate(item, _GUARD, context=context, conditional_clause=udf.__name__)
+    return GuardEvaluator().evaluate(
+        item, _GUARD, context=context, conditional_clause=udf.__name__
+    )
 
 
 class TestAMutatingUdfCannotReachTheRecord:
@@ -464,7 +466,9 @@ class TestEveryRouteOutOfTheViewHandsOverReadOnlyNamespaces:
         ],
         ids=lambda udf: udf.__name__.removeprefix("guard_probe_"),
     )
-    def test_a_write_several_levels_down_is_refused_and_the_record_is_untouched(self, udf, context):
+    def test_a_write_several_levels_down_is_refused_and_the_record_is_untouched(
+        self, udf, context
+    ):
         item = _deep_item()
 
         _evaluate(udf, item, context)
@@ -530,7 +534,10 @@ class TestACopyOfTheViewIsAWritableDictThatSharesNothing:
         ids=["copy_method", "copy_copy", "copy_deepcopy"],
     )
     def test_the_copy_is_deep_so_a_nested_write_stays_on_the_copy(self, udf, context):
-        item: dict = {"source_guid": "g1", "content": {"a1": {"tier": "keep", "items": [{"n": 1}]}}}
+        item: dict = {
+            "source_guid": "g1",
+            "content": {"a1": {"tier": "keep", "items": [{"n": 1}]}},
+        }
 
         _evaluate(udf, item, context)
 

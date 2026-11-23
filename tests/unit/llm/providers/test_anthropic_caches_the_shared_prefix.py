@@ -1,4 +1,5 @@
-"""With caching on, an Anthropic request marks the end of the text its records share, online and in batch."""
+"""With caching on, an Anthropic request marks the end of the text its records share, online and in
+batch."""
 
 from __future__ import annotations
 

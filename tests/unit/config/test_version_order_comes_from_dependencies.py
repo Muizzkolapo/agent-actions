@@ -74,7 +74,9 @@ def _agents(rendered):
 
 def _says_why(message):
     for phrase in GUIDANCE:
-        assert phrase in message, f"the refusal does not say why or what to do instead: {message!r}"
+        assert phrase in message, (
+            f"the refusal does not say why or what to do instead: {message!r}"
+        )
 
 
 class TestTheVersionsBlockIsRefusedWhereItIsRead:

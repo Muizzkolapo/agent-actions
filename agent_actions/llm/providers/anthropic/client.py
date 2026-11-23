@@ -92,7 +92,11 @@ def no_answer(stop_reason: Any, *, only_text: bool, model_name: str, operation: 
     return NoAnswer(
         parse_error=parse_error,
         error=empty_response_error(
-            "Anthropic", stop_reason, model_name=model_name, vendor="anthropic", operation=operation
+            "Anthropic",
+            stop_reason,
+            model_name=model_name,
+            vendor="anthropic",
+            operation=operation,
         ),
     )
 
@@ -237,7 +241,9 @@ class AnthropicClient(BaseClient):
             and not _sends_interleaved_thinking(vendor_params)
         ):
             named = limit if number(max_tokens) else f"{limit}, the default"
-            problems.append(f"thinking.budget_tokens ({budget}) must be below max_tokens ({named})")
+            problems.append(
+                f"thinking.budget_tokens ({budget}) must be below max_tokens ({named})"
+            )
         return problems
 
     @staticmethod

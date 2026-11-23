@@ -94,7 +94,9 @@ class ActionLevelOrchestrator:
         deps_map = {}
         for action in self.execution_order:
             raw_deps = [
-                d for d in self.action_configs[action].get("dependencies", []) if isinstance(d, str)
+                d
+                for d in self.action_configs[action].get("dependencies", [])
+                if isinstance(d, str)
             ]
             expanded_deps = self._expand_version_dependencies(raw_deps, version_base_map)
             # Filter out dependencies not in execution_order (e.g. version base names)
@@ -174,7 +176,9 @@ class ActionLevelOrchestrator:
         levels = self.compute_execution_levels()
         return any(len(level) > 1 for level in levels)
 
-    async def _execute_single_action(self, action_name: str, action_indices: dict, action_executor):
+    async def _execute_single_action(
+        self, action_name: str, action_indices: dict, action_executor
+    ):
         """Execute a single action asynchronously."""
         original_idx = action_indices[action_name]
         action_config = self.action_configs[action_name]
@@ -380,7 +384,9 @@ class ActionLevelOrchestrator:
         pending_actions = params.state_manager.get_pending_actions(params.level_actions)
         self.in_flight = list(pending_actions)
 
-        fire_step_start(params.level_idx, params.total_steps, params.level_actions, pending_actions)
+        fire_step_start(
+            params.level_idx, params.total_steps, params.level_actions, pending_actions
+        )
 
         # A step that opened must close, or every consumer pairing the two is
         # left unbalanced by an action that raised or a Ctrl-C.

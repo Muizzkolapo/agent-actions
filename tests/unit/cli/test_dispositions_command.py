@@ -279,7 +279,11 @@ class TestFailedChecksHaveTheirOwnColumn:
         backend = make_mock_backend(
             {
                 "a": [
-                    {"record_id": "r1", "disposition": "success", "reason": "consumed_into_output"},
+                    {
+                        "record_id": "r1",
+                        "disposition": "success",
+                        "reason": "consumed_into_output",
+                    },
                     {"record_id": "r2", "disposition": "success", "reason": "expectations_failed"},
                     {"record_id": "r3", "disposition": "failed", "reason": "expectations_failed"},
                 ],

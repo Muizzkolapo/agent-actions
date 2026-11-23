@@ -70,4 +70,6 @@ def test_a_hitl_action_stays_at_file_under_record_defaults():
 
 
 def test_an_llm_action_that_sets_record_under_file_defaults_keeps_it():
-    assert _granularity({"name": "a", "granularity": "record"}, {"granularity": "File"}) == "Record"
+    assert (
+        _granularity({"name": "a", "granularity": "record"}, {"granularity": "File"}) == "Record"
+    )

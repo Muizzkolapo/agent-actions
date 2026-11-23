@@ -420,7 +420,9 @@ class BatchTaskPreparator:
                 context_map_builder[custom_id], FilterStatus.FILTERED
             )
             if sends_elsewhere(prep_context.agent_config):
-                BatchContextMetadata.set_skip_reason(context_map_builder[custom_id], SENT_ELSEWHERE)
+                BatchContextMetadata.set_skip_reason(
+                    context_map_builder[custom_id], SENT_ELSEWHERE
+                )
                 stats.sent_elsewhere_items += 1
             else:
                 stats.filtered_items += 1

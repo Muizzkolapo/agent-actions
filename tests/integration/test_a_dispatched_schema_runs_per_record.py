@@ -154,7 +154,8 @@ def test_a_dispatch_inside_a_named_schema_file_is_refused(tmp_path):
         .replace("    schema_options: [topic_answer, verdict_answer]\n", "")
     )
     (root / "schema" / "field_dispatch.yml").write_text(
-        "name: field_dispatch\nfields:\n  - id: topic\n    type: dispatch_task('dsp_pick_schema')\n"
+        "name: field_dispatch\nfields:\n  - id: topic\n    type: "
+        "dispatch_task('dsp_pick_schema')\n"
     )
 
     result = run_agac(root, "inspect", "-a", "w", env={"COLUMNS": "400"})

@@ -353,7 +353,12 @@ class TestTheTalliesAreReal:
         )
 
         data = _of_type(captured, "StepCompleteEvent")[0].data
-        assert (data["completed"], data["partial"], data["skipped"], data["failed"]) == (1, 1, 1, 1)
+        assert (data["completed"], data["partial"], data["skipped"], data["failed"]) == (
+            1,
+            1,
+            1,
+            1,
+        )
         assert data["unfinished"] == 0
 
     def test_an_action_in_no_terminal_state_is_counted_unfinished(self, captured):

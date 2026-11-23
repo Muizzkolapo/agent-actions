@@ -110,7 +110,8 @@ def _guarded_calls(func) -> set[str]:
         if not isinstance(node, ast.With):
             continue
         opens = {
-            getattr(item.context_expr.func, "id", "") or getattr(item.context_expr.func, "attr", "")
+            getattr(item.context_expr.func, "id", "")
+            or getattr(item.context_expr.func, "attr", "")
             for item in node.items
             if isinstance(item.context_expr, ast.Call)
         }

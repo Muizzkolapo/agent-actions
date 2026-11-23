@@ -107,10 +107,12 @@ class SQLiteBackend(
         CREATE INDEX IF NOT EXISTS idx_disp_action ON record_disposition(action_name)
     """
     DISPOSITION_INDEX_ACTION_DISP_SQL = """
-        CREATE INDEX IF NOT EXISTS idx_disp_action_disp ON record_disposition(action_name, disposition)
+        CREATE INDEX IF NOT EXISTS idx_disp_action_disp
+            ON record_disposition(action_name, disposition)
     """
     DISPOSITION_INDEX_ACTION_RECORD_SQL = """
-        CREATE INDEX IF NOT EXISTS idx_disp_action_record ON record_disposition(action_name, record_id)
+        CREATE INDEX IF NOT EXISTS idx_disp_action_record
+            ON record_disposition(action_name, record_id)
     """
 
     PROMPT_TRACE_TABLE_SQL = """
@@ -118,7 +120,8 @@ class SQLiteBackend(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             action_name TEXT NOT NULL,
             record_id TEXT NOT NULL,      -- prepare-time target_id (re-minted per run)
-            source_guid TEXT,             -- durable input identity; joins record_disposition.record_id
+            -- durable input identity; joins record_disposition.record_id
+            source_guid TEXT,
             run_id TEXT,                  -- workflow run that wrote this row
             attempt INTEGER NOT NULL DEFAULT 0,
             compiled_prompt TEXT NOT NULL,
@@ -135,7 +138,8 @@ class SQLiteBackend(
             UNIQUE(action_name, record_id, attempt)
         )
     """
-    # Rows are insert-only and committed ids never reused, so a trace's dictionary cannot change under it.
+    # Rows are insert-only and committed ids never reused, so a trace's dictionary cannot change
+    # under it.
     TRACE_DICTIONARY_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS prompt_trace_dictionary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -152,7 +156,8 @@ class SQLiteBackend(
         CREATE INDEX IF NOT EXISTS idx_trace_action_record ON prompt_trace(action_name, record_id)
     """
     TRACE_INDEX_ACTION_SOURCE_SQL = """
-        CREATE INDEX IF NOT EXISTS idx_trace_action_source ON prompt_trace(action_name, source_guid)
+        CREATE INDEX IF NOT EXISTS idx_trace_action_source
+            ON prompt_trace(action_name, source_guid)
     """
 
     CHECKPOINT_TABLE_SQL = """

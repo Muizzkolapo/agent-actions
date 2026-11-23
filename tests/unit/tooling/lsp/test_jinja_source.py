@@ -1,4 +1,5 @@
-"""The editor's render of a workflow: same Jinja step as `agac`, each action mapped to its source line."""
+"""The editor's render of a workflow: same Jinja step as `agac`, each action mapped to its source
+line."""
 
 import textwrap
 from pathlib import Path

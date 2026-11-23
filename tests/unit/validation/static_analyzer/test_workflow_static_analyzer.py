@@ -631,7 +631,8 @@ class TestContextScopeValidation:
         assert len(context_errors) == 0
 
     def test_context_scope_infers_dependency(self):
-        """Test that context_scope references infer dependencies (no explicit dependencies needed)."""
+        """Test that context_scope references infer dependencies (no explicit dependencies
+        needed)."""
         workflow_config = {
             "actions": [
                 {

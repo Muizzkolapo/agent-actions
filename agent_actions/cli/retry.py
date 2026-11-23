@@ -572,7 +572,9 @@ class RetryCommand:
         runner_backend = workflow.services.core.action_runner.storage_backend
 
         def settled(action: str) -> set[str]:
-            decided = {row["record_id"] for row in backend.get_disposition(action, snapshots=False)}
+            decided = {
+                row["record_id"] for row in backend.get_disposition(action, snapshots=False)
+            }
             return decided | answered_by_repair(runner_backend, action)
 
         never_answered = cleared_ids - settled(from_action) - {NODE_LEVEL_RECORD_ID}
@@ -906,7 +908,11 @@ class RetryCommand:
         # What a collect pass leaves: stopped, failed, or, in an earlier version, completed
         # past a file it skipped.
         # A run stopped while submitting cannot be told from one stopped collecting.
-        left_by_collecting = {ActionStatus.CHECKING_BATCH, ActionStatus.FAILED, *COMPLETED_STATUSES}
+        left_by_collecting = {
+            ActionStatus.CHECKING_BATCH,
+            ActionStatus.FAILED,
+            *COMPLETED_STATUSES,
+        }
         unfinished = [f"{action} (halted)" for action in halted]
         for action in actions:
             if action in halted:

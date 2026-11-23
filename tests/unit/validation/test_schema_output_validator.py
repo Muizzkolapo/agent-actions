@@ -421,7 +421,8 @@ class TestNamespacedKeyHint:
     """Regression: detect action-namespaced output from tool UDFs."""
 
     def test_namespaced_output_produces_hint(self):
-        """When output has dict-valued extra keys and missing required fields, hint at namespacing."""
+        """When output has dict-valued extra keys and missing required fields, hint at
+        namespacing."""
         schema = {
             "name": "flatten_schema",
             "fields": [

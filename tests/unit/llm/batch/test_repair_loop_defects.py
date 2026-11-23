@@ -199,7 +199,9 @@ class TestTheGraduatedPoolIsASet:
         first_try = BatchResult(custom_id="r1", content={"score": -1}, success=True)
         repaired = BatchResult(custom_id="r1", content={"score": 9}, success=True)
         first = carry_forward(None, repair_attempt=1, repair_max_attempts=2, graduated=[first_try])
-        second = carry_forward(first, repair_attempt=2, repair_max_attempts=2, graduated=[repaired])
+        second = carry_forward(
+            first, repair_attempt=2, repair_max_attempts=2, graduated=[repaired]
+        )
         assert len(second.graduated_results) == 1
         assert second.graduated_results[0]["content"]["score"] == 9
 
@@ -324,7 +326,9 @@ class TestTheSentinelMatchesWhatProvidersEmit:
         from agent_actions.llm.providers.batch_base import UNIDENTIFIED_RECORD
         from agent_actions.llm.providers.gemini.batch_client import GeminiBatchClient
 
-        assert GeminiBatchClient.__dict__["_extract_custom_id"](object(), {}) == UNIDENTIFIED_RECORD
+        assert (
+            GeminiBatchClient.__dict__["_extract_custom_id"](object(), {}) == UNIDENTIFIED_RECORD
+        )
 
 
 class TestTheSentinelDoesNotCollideWithUserData:

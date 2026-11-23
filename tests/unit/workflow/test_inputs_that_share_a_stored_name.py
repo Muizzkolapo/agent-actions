@@ -93,7 +93,9 @@ def test_inputs_with_distinct_stored_names_are_all_processed(tmp_path):
 
 
 def test_a_file_the_suffix_filter_leaves_out_does_not_collide(tmp_path):
-    result, error, processed = _walk(tmp_path, ["page.csv", "page.json"], file_type_filter={"json"})
+    result, error, processed = _walk(
+        tmp_path, ["page.csv", "page.json"], file_type_filter={"json"}
+    )
 
     assert error is None
     assert result[1] == 1

@@ -149,9 +149,9 @@ def test_the_scan_finds_the_reads_it_is_supposed_to_follow(reads):
     for key, _line, file in reads:
         files_by_key.setdefault(key, set()).add(file)
 
-    assert any(f.endswith("expander_validation.py") for f in files_by_key.get("granularity", ())), (
-        "the expander's own `defaults.get(...)` reads were not followed"
-    )
+    assert any(
+        f.endswith("expander_validation.py") for f in files_by_key.get("granularity", ())
+    ), "the expander's own `defaults.get(...)` reads were not followed"
     assert any(
         f.endswith("expander_action_types.py") for f in files_by_key.get("hitl_timeout", ())
     ), "a read through a parameter named `defaults` was not followed"
@@ -187,7 +187,8 @@ MISSED = {
     "held under some other name": 'blk = load()\nblk.get("stray")',
     # `defaults` also names an action's per-field UDF defaults. A module binding
     # it to one of those must not vouch for a key nothing else reads.
-    "the name rebound to another block": 'defaults = action.get("defaults")\ndefaults.get("stray")',
+    "the name rebound to another block": "defaults = "
+    'action.get("defaults")\ndefaults.get("stray")',
 }
 
 

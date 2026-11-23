@@ -37,7 +37,8 @@ def publish_question(data: Any, *args) -> dict:
     checked = data.get("round") or {}
     return {
         "status": "published",
-        "summary": f"{(data.get('spec') or {}).get('topic')}: passed in round {checked.get('tries')}",
+        "summary": f"{(data.get('spec') or {}).get('topic')}: passed in round "
+        f"{checked.get('tries')}",
     }
 
 

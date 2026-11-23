@@ -1,4 +1,5 @@
-"""A `{% cache_point %}` ends an Anthropic text block that carries a cache mark, online and in a batch file.
+"""A `{% cache_point %}` ends an Anthropic text block that carries a cache mark, online and in a
+batch file.
 
 Two records that share the page before the point send that block byte for byte, which is
 what lets the second read the cache entry the first wrote. No test here calls the API:
@@ -135,7 +136,9 @@ def _sdk_client(vendor: str, sent: list[bytes]) -> Any:
         sent.append(request.content)
         if request.url.path.endswith("/batches"):
             return http.Response(200, json=_BATCH_CREATED)
-        return http.Response(200, json=_ANTHROPIC_REPLY if vendor == "anthropic" else _OPENAI_REPLY)
+        return http.Response(
+            200, json=_ANTHROPIC_REPLY if vendor == "anthropic" else _OPENAI_REPLY
+        )
 
     http_client = http.Client(transport=http.MockTransport(handler))
     if vendor == "anthropic":
@@ -452,7 +455,10 @@ class TestWhichCallsMarkThePoints:
     def test_more_boundaries_than_a_request_takes_are_refused_not_dropped(self):
         content = "a b c d e f"
         message = LLMMessage(
-            role="user", content=content, static_len=len(content), cache_boundaries=(2, 4, 6, 8, 10)
+            role="user",
+            content=content,
+            static_len=len(content),
+            cache_boundaries=(2, 4, 6, 8, 10),
         )
 
         with pytest.raises(ValueError, match="at most 4 cache breakpoints"):

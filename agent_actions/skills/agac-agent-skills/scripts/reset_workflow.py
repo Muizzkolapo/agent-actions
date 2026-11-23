@@ -7,7 +7,8 @@ completed in the store are carried forward, not regenerated — use --full for a
 true from-scratch rebuild.
 
 --full: wipes source/, target/, everything in store/ but the run lock file, and
-.agent_status.json, then recreates target/, and reclaims what a provider recorded locally under .agac/ about this
+.agent_status.json, then recreates target/, and reclaims what a provider recorded locally under
+.agac/ about this
 workflow's batches, since the store being removed is what names them. It holds the
 run lock `agac run` takes, so it exits while a run is in progress (without
 the framework and without fcntl, as on Windows, it can only warn).

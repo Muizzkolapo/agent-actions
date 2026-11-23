@@ -56,7 +56,8 @@ class GuardConfig:
             except ValueError as e:
                 raise ConfigValidationError(
                     "on_false",
-                    f"Invalid guard behavior '{on_false}'. Valid values: {[b.value for b in GuardBehavior]}",
+                    f"Invalid guard behavior '{on_false}'. Valid values: "
+                    f"{[b.value for b in GuardBehavior]}",
                     context={"on_false_value": on_false},
                 ) from e
         else:
@@ -116,7 +117,8 @@ class GuardConfig:
         if not isinstance(passthrough_on_error, bool):
             raise ConfigValidationError(
                 "passthrough_on_error",
-                f"passthrough_on_error must be a boolean, got {type(passthrough_on_error).__name__}",
+                "passthrough_on_error must be a boolean, got "
+                f"{type(passthrough_on_error).__name__}",
                 context={
                     "passthrough_on_error_value": repr(passthrough_on_error),
                     "operation": "parse_guard_config",

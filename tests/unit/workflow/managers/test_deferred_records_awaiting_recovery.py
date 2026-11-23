@@ -44,7 +44,9 @@ def backend(tmp_path):
 
 @pytest.fixture
 def lifecycle(backend):
-    return BatchLifecycleManager(job_manager=None, processing_service=None, storage_backend=backend)
+    return BatchLifecycleManager(
+        job_manager=None, processing_service=None, storage_backend=backend
+    )
 
 
 def _defer(backend, *guids: str) -> None:
@@ -146,12 +148,12 @@ def test_a_mix_names_each_failure_the_unanswered_records_and_the_orphans_apart(
     text = _warnings(caplog, lifecycle)
 
     assert (
-        f"1 record(s) wait on retry attempt 2 of 3 after their last attempt failed: {REFUSED}: ['g1']"
-        in text
+        "1 record(s) wait on retry attempt 2 of 3 after their last attempt failed: "
+        f"{REFUSED}: ['g1']" in text
     )
     assert (
-        "1 record(s) wait on retry attempt 2 of 3 after their last attempt failed: rate limited: ['g2']"
-        in text
+        "1 record(s) wait on retry attempt 2 of 3 after their last attempt failed: rate "
+        "limited: ['g2']" in text
     )
     assert (
         "2 record(s) wait on retry attempt 2 of 3: the provider returned no result for them: "
@@ -201,7 +203,9 @@ def test_a_collected_recovery_holds_nothing(backend, lifecycle, caplog):
     assert "wait on" not in text
 
 
-def test_an_unreadable_recovery_state_leaves_the_records_called_orphans(backend, lifecycle, caplog):
+def test_an_unreadable_recovery_state_leaves_the_records_called_orphans(
+    backend, lifecycle, caplog
+):
     _send(backend, "pages.json", "g1")
     _defer(backend, "g1")
     _retry_pending(backend, failed={"g1": REFUSED}, unanswered=[])

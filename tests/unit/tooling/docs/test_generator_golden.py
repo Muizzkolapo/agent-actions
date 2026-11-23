@@ -507,7 +507,9 @@ class TestGenerateDocsGolden:
         _patch_scanners(monkeypatch, _quiet_inputs(project), {"empty": _WORKFLOWS_DATA["empty"]})
 
         assert generate_docs(str(project), elsewhere) is True
-        assert capsys.readouterr().out.endswith(f"\nDone. Documentation compiled to {elsewhere}/\n")
+        assert capsys.readouterr().out.endswith(
+            f"\nDone. Documentation compiled to {elsewhere}/\n"
+        )
 
 
 def test_colliding_log_names_get_suffixes_by_run_name_not_insertion_order():

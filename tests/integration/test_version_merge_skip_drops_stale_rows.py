@@ -89,7 +89,9 @@ def _staging(root):
 def _add_guard(root, impl, guard):
     config = _config(root)
     config.write_text(
-        config.read_text().replace(f"    impl: {impl}\n", f"    impl: {impl}\n    guard: {guard}\n")
+        config.read_text().replace(
+            f"    impl: {impl}\n", f"    impl: {impl}\n    guard: {guard}\n"
+        )
     )
 
 
