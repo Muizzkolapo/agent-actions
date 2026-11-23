@@ -16,6 +16,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+# An extra's driver that is imported under another name than it is distributed under.
+_DISTRIBUTION_OF_AN_EXTRA_S_MODULE = {
+    "databricks": "databricks-sql-connector",
+    "snowflake": "snowflake-connector-python",
+}
+
+
 def _normalise(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -56,7 +63,9 @@ def _undeclared() -> dict[str, set[str]]:
     undeclared = {}
     for module, files in _imported_top_level_modules().items():
         # A module of an optional extra that is not installed maps to no distribution.
-        owners = {_normalise(d) for d in distributions.get(module, [])} or {_normalise(module)}
+        owners = {_normalise(d) for d in distributions.get(module, [])} or {
+            _DISTRIBUTION_OF_AN_EXTRA_S_MODULE.get(module, _normalise(module))
+        }
         if not owners & declared:
             undeclared[module] = files
     return undeclared

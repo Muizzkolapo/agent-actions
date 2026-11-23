@@ -53,7 +53,7 @@ class TestAKeyTheWorkflowDoesNotDeclare:
         assert "did you mean" not in message
         assert (
             "valid workflow keys are actions, batch_preparation_concurrency, defaults, "
-            "description, name, storage, tool_path, version" in message
+            "description, name, outputs, storage, tool_path, version" in message
         )
 
     def test_the_retired_plan_key_is_refused(self):

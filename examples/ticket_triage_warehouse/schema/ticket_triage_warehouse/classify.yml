@@ -1,0 +1,5 @@
+name: classify
+fields:
+  - {id: category, type: string, required: true, enum: [billing, bug, account]}
+  - {id: urgency, type: integer, required: true, minimum: 1, maximum: 5}
+  - {id: summary, type: string, required: true}

@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from agent_actions.config.types import Granularity, RunMode
+from agent_actions.connections.base import WriteMode
 from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardParser, parse_guard_config
 from agent_actions.input.context.normalizer import (
@@ -923,6 +924,41 @@ def refuse_agents_format(data: Any, workflow_file: str) -> None:
     )
 
 
+OUTPUT_IDENTITY_COLUMN = "source_guid"
+
+
+class OutputConfig(BaseModel):
+    """One entry of a workflow's ``outputs:`` block."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(..., description="The action whose records are written")
+    connection: str = Field(..., description="Name of a project connection")
+    table: str = Field(..., description="Table to write, created when absent")
+    mode: WriteMode = Field(default=WriteMode.MERGE, description="append, replace or merge")
+    key: list[str] = Field(
+        default_factory=lambda: [OUTPUT_IDENTITY_COLUMN],
+        min_length=1,
+        description="Columns identifying a row (for mode=merge and mode=append)",
+    )
+    carry: list[str] = Field(
+        default_factory=list, description="Source fields written beside the action's own"
+    )
+
+    @field_validator("carry")
+    @classmethod
+    def _carried_columns_are_distinct(cls, carry: list[str]) -> list[str]:
+        repeated = sorted({name for name in carry if carry.count(name) > 1})
+        if repeated:
+            raise ValueError(f"'carry' names {', '.join(repeated)} more than once")
+        if OUTPUT_IDENTITY_COLUMN in carry:
+            raise ValueError(
+                f"'{OUTPUT_IDENTITY_COLUMN}' is the record's identity and is always "
+                "written; alias the source column in the query to carry it"
+            )
+        return carry
+
+
 class WorkflowConfig(BaseModel):
     """Pydantic schema for user-facing workflow YAML files.
 
@@ -964,6 +1000,9 @@ class WorkflowConfig(BaseModel):
             "The most batch actions of one step that prepare at the same time; online "
             "actions beside them are not counted. Unset: only --concurrency-limit applies"
         ),
+    )
+    outputs: list[OutputConfig] | None = Field(
+        default=None, description="Database tables this workflow's results are written to"
     )
 
     @model_validator(mode="after")
