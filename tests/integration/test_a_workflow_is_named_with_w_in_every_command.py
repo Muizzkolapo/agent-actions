@@ -1,7 +1,8 @@
 """`-w` names the workflow in every command, against a store a real run wrote.
 
 `run`, `retry`, `dispositions` and `status` took the workflow as `-a` alone, while
-`traces`, `records` and `preview` took it as `-w` and read `-a` as the action. Each
+`traces`, `records` and `preview` took it as `-w` and read `-a` as the action. Now
+`-a` names the workflow in every command and `-A` the action. Each
 command here is a real `agac` process against a project in a tmp dir; the model is
 the built-in fake provider.
 """
@@ -120,19 +121,33 @@ def test_a_command_that_takes_a_workflow_takes_it_under_each_name(project, comma
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_records_a_workflow_prints_a_deprecation_warning(project):
+@pytest.mark.parametrize("command", ["traces", "records", "preview"])
+def test_a_names_the_workflow_and_capital_a_the_action(project, command):
+    result = run_agac(project, command, "-a", WORKFLOW, "-A", ACTION)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Page alpha." in result.stdout or "summary" in result.stdout
+    assert "deprecated" not in result.stdout + result.stderr
+
+
+def test_records_a_workflow_prints_the_records(project):
     result = run_agac(project, "records", "-a", WORKFLOW)
 
-    assert result.returncode == 2
-    assert result.stdout == ""
-    assert "-a is deprecated in 'agac records'" in result.stderr
-    assert "-A or --action for the action" in result.stderr
-    assert "-w or --workflow for the workflow" in result.stderr
-    assert "Error: Missing option '-w' / '--workflow' / '--agent'." in result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(json.loads(result.stdout)) == 2
+    assert "deprecated" not in result.stderr
 
 
 def test_a_command_given_no_workflow_names_every_way_to_give_one(project):
     result = run_agac(project, "status")
+
+    assert result.returncode == 2
+    assert "Error: Missing option '-w' / '--workflow' / '-a' / '--agent'." in result.stderr
+
+
+@pytest.mark.parametrize("command", ["records", "preview"])
+def test_records_and_preview_given_no_workflow_name_every_way_to_give_one(project, command):
+    result = run_agac(project, command)
 
     assert result.returncode == 2
     assert "Error: Missing option '-w' / '--workflow' / '-a' / '--agent'." in result.stderr
@@ -143,11 +158,3 @@ def test_traces_given_no_action_names_the_option_it_lacks(project):
 
     assert result.returncode == 2
     assert "Error: Missing option '-A' / '--action'." in result.stderr
-
-
-def test_records_a_action_still_prints_the_records_with_the_warning_on_stderr(project):
-    result = run_agac(project, "records", "-w", WORKFLOW, "-a", ACTION)
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert len(json.loads(result.stdout)) == 2
-    assert "-a is deprecated in 'agac records'" in result.stderr

@@ -18,12 +18,12 @@ The store keeps this text compressed. Thus `sqlite3` shows the `compiled_prompt`
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `--agent` names the same option. |
-| `-A, --action TEXT` | The action whose traces the command prints (required). `-a` also names the action in this command, and prints a warning on stderr. In the other commands, `-a` names the workflow. If you type `-a` and `-A` together, the command stops with exit code 2. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` and `--agent` name the same option. |
+| `-A, --action TEXT` | The action whose traces the command prints (required). |
 | `--record TEXT` | Only the traces of this record. Give its `target_id`, or its `parent_target_id` if an expansion produced the record |
 | `--json` | Print the traces as a JSON list |
 
-Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '--agent'.` Without `-A`, the command stops with exit code 2 and prints `Error: Missing option '-A' / '--action'.` The warning for `-a` comes before the error of an earlier option. It also comes before the help output if `-a` is in front of `--help`. See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
+Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` Without `-A`, the command stops with exit code 2 and prints `Error: Missing option '-A' / '--action'.` See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
 
 ## Examples
 

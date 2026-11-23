@@ -70,15 +70,11 @@ agac traces -w my_workflow -A classify_issue
 agac dispositions -w my_workflow -A classify_issue
 ```
 
-[`traces`](./traces), [`records`](./records) and [`preview`](./preview) are the exception for `-a`. In these three commands, `-a` names the action. In these three commands, `--agent` names the workflow. In a later release, `-a` will name the workflow in these commands too.
+In [`traces`](./traces), [`records`](./records) and [`preview`](./preview), `-a` also names the workflow, and `-A` names the action:
 
-When you type `-a` in one of these three commands, the command prints a warning on stderr. The warning tells you to type `-A` for the action and `-w` for the workflow. This is the warning for `traces`:
-
-```text
-Warning: -a is deprecated in 'agac traces', where it names the action, and will name the workflow as it does in the other commands. Type -A or --action for the action, and -w or --workflow for the workflow.
+```bash
+agac records -a my_workflow -A classify_issue
 ```
-
-The warning names the command that you typed. If `-a` is in front of `--help`, the command prints the warning before the help output. The command also prints the warning before the error of an option that is in front of `-a` on the command line. An example is a bad `-n` value in `agac preview -w my_workflow -n abc -a extract_data`.
 
 ### Errors in the Workflow and the Action
 
@@ -86,10 +82,8 @@ If one of these options is missing or wrong, the command prints an error on stde
 
 | Cause | Error |
 |-------|-------|
-| No workflow option, in a command that needs it (including `inspect action` and `inspect context`), other than `traces`, `records`, `preview` and `inspect` with no subcommand | `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` |
-| No workflow option, in `traces`, `records` or `preview` | `Error: Missing option '-w' / '--workflow' / '--agent'.` |
+| No workflow option, in a command that needs it (including `inspect action` and `inspect context`), other than `inspect` with no subcommand | `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` |
 | No action option, in `traces` | `Error: Missing option '-A' / '--action'.` |
-| `-a` and `-A` together, in `traces`, `records` or `preview` | `Error: -a and -A both name the action: give -A alone.` |
 
 [`agac inspect`](./inspect), with no subcommand, gives its own error for a missing workflow option:
 
