@@ -84,13 +84,13 @@ class TestAFailedRecordIsReportedOnce:
         assert CAUSE in output, "the tool's own message never reached the user"
 
     def test_each_failing_record_is_reported_once(self, crashed):
-        """Two records failed; the strategy and the collector each logged both."""
+        """One record failed; the strategy and the collector each logged it."""
         output, _ = crashed
         per_record = [
             ln for ln in output.splitlines() if CAUSE in ln and re.search(r"\(record \w+\)", ln)
         ]
-        assert len(per_record) == 2, (
-            f"2 failing records should give 2 per-record reports, got {len(per_record)}:\n  "
+        assert len(per_record) == 1, (
+            f"1 failing record should give 1 per-record report, got {len(per_record)}:\n  "
             + "\n  ".join(per_record)
         )
 

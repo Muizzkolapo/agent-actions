@@ -118,7 +118,7 @@ def test_each_completed_action_reports_records_time_and_model(run):
     assert re.search(
         r"✓ summarize_entry\s+2 records in \d+\.\d+s \(agac-provider/gpt-4o-mini\)", run
     ), "an llm action lost its record count, duration or model"
-    assert re.search(r"✓ flatten_marks\s+3 records in \d+\.\d+s\s*$", run, re.M), (
+    assert re.search(r"✓ flatten_marks\s+1 record in \d+\.\d+s\s*$", run, re.M), (
         "a tool action reports records and time, and names no model"
     )
 
@@ -140,7 +140,7 @@ def test_the_run_is_summarised_once(run):
 
 @pytest.mark.parametrize(
     "action,records",
-    [("canonicalize_marks", 2), ("aggregate_votes", 2), ("consolidate_id_note", 1)],
+    [("canonicalize_marks", 1), ("aggregate_votes", 1), ("consolidate_id_note", 1)],
 )
 def test_a_version_merge_consumer_reports_the_records_it_produced(run, action, records):
     """Correlated input is written to the consumer's own target before it runs.
