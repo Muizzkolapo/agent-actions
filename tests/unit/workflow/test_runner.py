@@ -146,7 +146,7 @@ class TestResolveStartNodeDirectories:
         mock_resolve.return_value = mock_result
         result = runner._resolve_start_node_directories(tmp_path, "agent")
         assert result == [staging]
-        mock_resolve.assert_called_once_with(tmp_path, None, "agent")
+        mock_resolve.assert_called_once_with(tmp_path, None, "agent", runner.project_root)
 
 
 # ---------------------------------------------------------------------------
