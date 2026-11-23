@@ -245,7 +245,7 @@ Every action goes through this decision tree before any code runs:
 execute_action_sync(action_name)
     │
     ▼
-Limits changed since last run? (record/file limit, or a recorded cap)
+Limits changed since last run? (record/file limit)
     YES → invalidate COMPLETED, reset to PENDING
           and reset every action that reads its output, in any state,
           directly or through other actions (see below)
@@ -878,8 +878,8 @@ If you change one of these fields and re-run WITHOUT --fresh:
     An action stopped partway is compared at the start of the next run,
     against the `answered_under` its run recorded (_edits_since serves
     both), and resumes under the edit.
-    Limits and a recorded truncation still reset the action and its
-    readers: those change which records exist, not how one is answered.
+    A limit change still resets the action and its readers: it changes
+    which records exist, not how one is answered.
 
 A first stage also stamps `staged_input` (path, size, mtime of each file
 it read, taken as its work began). A different set on a later run puts it

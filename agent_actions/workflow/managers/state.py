@@ -84,13 +84,6 @@ _CORRUPTED_STATUS_FILE_HINT = (
 )
 
 
-def _as_count(value: Any) -> int | None:
-    """*value* as a record count, or None if it is not one."""
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        return None
-    return int(value)
-
-
 class ActionStateManager:
     """Manages action execution state persistence and queries."""
 
@@ -182,40 +175,6 @@ class ActionStateManager:
         """Return full status details for an action."""
         return self.action_status.get(action_name, {"status": ActionStatus.PENDING})
 
-    def adopt_truncation_marker(self, action_name: str) -> bool:
-        """Whether this completion stamp was left by a run capped below its config.
-
-        Such a run stamped the limit its config asked for, which reads as a full run
-        for ever after; the cap it ran under sits beside it under a key nothing else
-        reads. A marker that reports a truncation is left where it is, and ``reopen``
-        removes it in the write that puts the action back to pending: removed here,
-        a crash or any other write to the file in between leaves the stamp completed,
-        carrying the config's limit and no record of the cap. A marker that reports
-        nothing is retired here, since nothing reopens.
-        """
-        with self._lock:
-            details = self.action_status.get(action_name)
-            if not isinstance(details, dict) or "max_records" not in details:
-                return False
-
-            cap = details["max_records"]
-            # A cap is a count, on the terms the limit resolver already sets: a
-            # bool or a number below one never capped anything, and reopening an
-            # action on one would re-run finished work for no reason. The same
-            # test reads the stored limit, which is compared and so must be one
-            # too — a stamp holding anything else reads as no limit at all.
-            usable = _as_count(cap) is not None
-            configured = _as_count(details.get("record_limit"))
-            truncated = (
-                ActionStatus(details.get("status", ActionStatus.PENDING)) in COMPLETED_STATUSES
-                and usable
-                and (configured is None or cap < configured)
-            )
-            if not truncated:
-                del details["max_records"]
-                self._save_status()
-            return truncated
-
     def reopen(self, action_names: Iterable[str]) -> None:
         """Put these actions back to pending, in one write.
 
@@ -227,7 +186,6 @@ class ActionStateManager:
             for name in action_names:
                 details = self.action_status.setdefault(name, {})
                 details["status"] = ActionStatus.PENDING
-                details.pop("max_records", None)
                 details.pop(REPAIRED_BY, None)
                 details.pop(KEPT_ANSWERS_UNDER, None)
                 details.pop(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, None)
