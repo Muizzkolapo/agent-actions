@@ -172,18 +172,20 @@ class Contract:
         suite = Suite(name=f"{self.action}:mock", expectations=self.rules)
         plans = self._plans(fields, echoes)
         best: dict[str, Any] = record
-        best_failed: list[tuple[str, str]] | None = None
+        best_failed: tuple[list[tuple[str, str]], list[tuple[str, str]]] | None = None
         for _ in range(TRIES):
             for name, plan in plans.items():
                 record[name] = self._value(name, fields.get(name, {}), plan, attempt, echoes)
-            failed = self._failures(suite, record, plans, fields)
-            if not failed:
+            refused, failed = self._failures(suite, record, plans, fields)
+            if not refused and not failed:
                 return record
-            if best_failed is None or len(failed) < len(best_failed):
+            # A record the schema refuses is worse than one that fails only rules.
+            rank = (len(refused), len(failed))
+            if best_failed is None or rank < (len(best_failed[0]), len(best_failed[1])):
                 # Each try replaces a field's value whole, so a shallow copy keeps this one.
-                best, best_failed = dict(record), failed
+                best, best_failed = dict(record), (refused, failed)
             record = FakeDataGenerator.generate_from_schema(schema, attempt)
-        self._report(best_failed or [], fields)
+        self._report([*best_failed[0], *best_failed[1]] if best_failed else [], fields)
         return best
 
     def _failures(
@@ -192,20 +194,20 @@ class Contract:
         record: dict[str, Any],
         plans: dict[str, _FieldPlan],
         fields: dict[str, dict[str, Any]],
-    ) -> list[tuple[str, str]]:
-        """``(field, detail)`` for each rule the record fails and each field its schema refuses."""
+    ) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+        """``(field, detail)`` for each field its schema refuses, and for each rule it fails."""
         by_id = {rule.resolved_id: rule for rule in self.rules}
+        refused = [
+            (name, f"schema refuses {record.get(name)!r}")
+            for name in plans
+            if not _conforms(record.get(name), fields.get(name, {}))
+        ]
         failed = [
             (_target(by_id.get(outcome.id)), f"{outcome.id} ({outcome.detail})")
             for outcome in run_suite(suite, record).outcomes
             if not outcome.passed
         ]
-        failed += [
-            (name, f"schema refuses {record.get(name)!r}")
-            for name in plans
-            if not _conforms(record.get(name), fields.get(name, {}))
-        ]
-        return failed
+        return refused, failed
 
     def _echoes(self, fields: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Each output field an observe reference names exactly, with that input's value.
@@ -253,12 +255,16 @@ class Contract:
     ) -> Any:
         if name in echoes and _meets(echoes[name], schema, plan):
             return echoes[name]
-        value = None
+        best: Any = None
+        best_conforms: bool | None = None
         for _ in range(TRIES):
             value = self._candidate(name, schema, plan, attempt)
             if _meets(value, schema, plan):
                 return value
-        return value
+            conforms = _conforms(value, schema)
+            if best_conforms is None or (conforms and not best_conforms):
+                best, best_conforms = value, conforms
+        return best
 
     def _candidate(self, name: str, schema: dict[str, Any], plan: _FieldPlan, attempt: int) -> Any:
         rng = FakeDataGenerator._get_rng()
@@ -274,10 +280,13 @@ class Contract:
             return self._array(name, schema, plan, attempt)
 
         value: Any = None
+        kind = _primary_type(schema)
         bounds = FakeDataGenerator._length_bounds(schema)
         for rule in rules:
             if rule.type == "matches_regex" and not rule.params.get("negate"):
                 value = FakeDataGenerator.from_pattern(str(rule.params["pattern"]), bounds)
+                if kind not in (None, "string"):
+                    value = _as_type(value, kind, schema, rule)
                 if value is not None:
                     break
         words = _word_range(rules)
@@ -357,6 +366,25 @@ def _field_schemas(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if isinstance(fields, list):
         return {f["id"]: f for f in fields if isinstance(f, dict) and isinstance(f.get("id"), str)}
     return {}
+
+
+def _as_type(text: str | None, kind: str, schema: dict[str, Any], rule: Expectation) -> Any:
+    """The number *text* spells, when *schema* accepts it and *rule* still passes.
+
+    The check reads ``str(value)``, so a number can meet a pattern. None for any other type.
+    """
+    if text is None or kind not in ("integer", "number"):
+        return None
+    try:
+        value: int | float = int(text)
+    except ValueError:
+        if kind == "integer":
+            return None
+        try:
+            value = float(text)
+        except ValueError:
+            return None
+    return value if _conforms(value, schema) and _passes(rule, value) else None
 
 
 def _primary_type(schema: dict[str, Any]) -> str | None:

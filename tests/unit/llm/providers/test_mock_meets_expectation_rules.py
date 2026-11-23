@@ -296,3 +296,60 @@ class TestUnsatisfiable:
         _online(self.SCHEMA, self.CONTRADICTION, SEEDS[1])
 
         assert len(self._warnings(caplog)) == 2
+
+
+class TestAPatternOnAFieldThatIsNotAString:
+    """The real check matches against `str(value)`, so a number can meet a pattern."""
+
+    SCHEMA = {
+        "type": "object",
+        "properties": {"year": {"type": "integer", "minimum": 1900, "maximum": 2100}},
+        "additionalProperties": False,
+    }
+    RULES = [{"type": "matches_regex", "field": "year", "params": {"pattern": r"^(19|20)\d{2}$"}}]
+
+    @pytest.mark.parametrize("mode", sorted(ANSWER))
+    def test_the_value_keeps_its_schema_type_and_meets_the_pattern(self, mode, caplog):
+        caplog.set_level(logging.WARNING)
+        for prompt in SEEDS:
+            record = ANSWER[mode](self.SCHEMA, self.RULES, prompt)
+
+            assert checked_validator(self.SCHEMA).is_valid(record), record
+            assert _failures(self.RULES, record) == [], record
+        assert not [r for r in caplog.records if "could not meet" in r.getMessage()]
+
+
+def test_a_record_the_schema_refuses_ranks_below_one_that_fails_rules(monkeypatch):
+    """Of two failing attempts, the one that keeps the schema is returned."""
+    from agent_actions.llm.providers.agac.contract import Contract
+
+    schema = {
+        "type": "object",
+        "properties": {"code": {"type": "string", "maxLength": 3}},
+        "additionalProperties": False,
+    }
+    rules = [
+        {"type": "accepted_values", "field": "code", "params": {"values": ["TOOLONG"]}},
+        {"type": "matches_regex", "field": "code", "params": {"pattern": "^T"}},
+    ]
+    values = iter(["TOOLONG"])
+    monkeypatch.setattr(Contract, "_value", lambda *_args: next(values, "abc"))
+    contract = Contract.for_request(_config(rules), "extract", "{}")
+
+    record = contract.generate(schema, 1)
+
+    assert record == {"code": "abc"}
+
+
+def test_a_field_value_the_schema_refuses_ranks_below_one_that_fails_rules(monkeypatch):
+    from agent_actions.llm.providers.agac.contract import Contract, _FieldPlan
+
+    schema = {"type": "string", "maxLength": 3}
+    rules = [{"type": "accepted_values", "field": "code", "params": {"values": ["TOOLONG"]}}]
+    values = iter(["abc", "TOOLONG"] * 20)
+    monkeypatch.setattr(Contract, "_candidate", lambda *_args: next(values))
+    contract = Contract.for_request(_config(rules), "extract", "{}")
+
+    value = contract._value("code", schema, _FieldPlan(rules=contract.rules), 1, {})
+
+    assert value == "abc"
