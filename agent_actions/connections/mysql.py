@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.connections.base import ColumnType
 from agent_actions.connections.dbapi import DbApiConnector, Dialect
-from agent_actions.connections.settings import read_settings
+from agent_actions.connections.settings import CREDENTIAL, read_settings
 
 
 class MysqlSettings(BaseModel):
@@ -19,7 +19,7 @@ class MysqlSettings(BaseModel):
     port: int = 3306
     database: str
     user: str
-    password: str | None = Field(default=None, json_schema_extra={"secret": True})
+    password: str | None = Field(default=None, json_schema_extra=CREDENTIAL)
     unix_socket: str | None = None
     connect_timeout: int = 10
 

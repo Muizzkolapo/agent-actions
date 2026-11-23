@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.connections.base import ColumnType
 from agent_actions.connections.dbapi import DbApiConnector, Dialect
-from agent_actions.connections.settings import read_settings
+from agent_actions.connections.settings import CREDENTIAL, read_settings
 
 
 class SnowflakeSettings(BaseModel):
@@ -17,9 +17,9 @@ class SnowflakeSettings(BaseModel):
 
     account: str
     user: str
-    password: str | None = Field(default=None, json_schema_extra={"secret": True})
+    password: str | None = Field(default=None, json_schema_extra=CREDENTIAL)
     private_key_file: str | None = None
-    private_key_file_pwd: str | None = Field(default=None, json_schema_extra={"secret": True})
+    private_key_file_pwd: str | None = Field(default=None, json_schema_extra=CREDENTIAL)
     authenticator: str | None = None
     warehouse: str | None = None
     database: str | None = None

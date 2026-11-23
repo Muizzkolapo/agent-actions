@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.connections.dbapi import DbApiConnector
-from agent_actions.connections.settings import read_settings
+from agent_actions.connections.settings import CREDENTIAL, read_settings
 
 
 class PostgresSettings(BaseModel):
@@ -18,7 +18,7 @@ class PostgresSettings(BaseModel):
     port: int = 5432
     dbname: str
     user: str
-    password: str | None = Field(default=None, json_schema_extra={"secret": True})
+    password: str | None = Field(default=None, json_schema_extra=CREDENTIAL)
     sslmode: str | None = None
     connect_timeout: int = 10
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.connections.base import ColumnType
 from agent_actions.connections.dbapi import DbApiConnector, Dialect
-from agent_actions.connections.settings import read_settings
+from agent_actions.connections.settings import CREDENTIAL, read_settings
 
 
 class RedshiftSettings(BaseModel):
@@ -19,7 +19,7 @@ class RedshiftSettings(BaseModel):
     port: int = 5439
     database: str
     user: str | None = None
-    password: str | None = Field(default=None, json_schema_extra={"secret": True})
+    password: str | None = Field(default=None, json_schema_extra=CREDENTIAL)
     # With iam, the driver signs in with the AWS credentials of the environment.
     iam: bool = False
     cluster_identifier: str | None = None

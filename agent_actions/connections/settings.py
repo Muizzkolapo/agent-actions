@@ -17,6 +17,9 @@ _SECRET_WORDS = ("password", "pwd", "token", "secret", "passphrase")
 
 Settings = TypeVar("Settings", bound=BaseModel)
 
+# Marks a settings field as a credential: `Field(json_schema_extra=CREDENTIAL)`.
+CREDENTIAL: dict[str, Any] = {"credential": True}
+
 
 def read_settings(
     name: str,
@@ -78,6 +81,6 @@ def _is_secret(key: str, model: type[BaseModel]) -> bool:
     marked = bool(
         field
         and isinstance(field.json_schema_extra, dict)
-        and field.json_schema_extra.get("secret")
+        and field.json_schema_extra.get("credential")
     )
     return marked or any(word in key.lower() for word in _SECRET_WORDS)
