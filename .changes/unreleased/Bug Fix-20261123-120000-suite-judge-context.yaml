@@ -6,6 +6,8 @@ body: >-
   Before, the run refused the action at preflight with "dependency declared but not referenced",
   or the judge failed with "context reference ... is not present in llm_context", unless you
   listed each reference of the suite in `observe:` yourself. The read check of an `include:`
-  now also reads the references of a suite. A suite that does not load adds no references;
+  now also reads the references of a suite. Inside an `as:` include, a reference in a suite must
+  use the final name, because the include does not rename the rules of a suite. The load refuses
+  a short name in a suite and gives the final name to write. A suite that does not load adds no references;
   preflight and the run report it as before.
 time: 2026-11-23T12:00:00.000000+00:00

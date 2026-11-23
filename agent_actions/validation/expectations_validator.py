@@ -62,7 +62,13 @@ def find_expectation_defects(
         entries = expect.get("expectations")
         suite_name = expect.get("suite")
         resolved: list[Any] = []
-        if isinstance(entries, list):
+        # The run's order: a merged block can hold a suite and a list, and the suite wins.
+        if suite_name is not None:
+            if isinstance(suite_name, str) and project_root is not None:
+                resolved, suite_messages = _named_suite_entries(suite_name, project_root)
+                messages.extend(suite_messages)
+                messages.extend(_entry_defects(resolved, fields, available_fields))
+        elif isinstance(entries, list):
             if not entries:
                 messages.append(
                     "expectations: is an empty list; add entries, or omit the "
@@ -70,11 +76,7 @@ def find_expectation_defects(
                 )
             resolved = entries
             messages.extend(_entry_defects(entries, fields, available_fields))
-        elif isinstance(suite_name, str) and project_root is not None:
-            resolved, suite_messages = _named_suite_entries(suite_name, project_root)
-            messages.extend(suite_messages)
-            messages.extend(_entry_defects(resolved, fields, available_fields))
-        elif entries is None and suite_name is None and _bare_block_checkable(action, project_root):
+        elif entries is None and _bare_block_checkable(action, project_root):
             resolved, schema_messages = _own_schema_entries(
                 action, project_root, rules_optional=expect.get("repair", "auto") != "none"
             )

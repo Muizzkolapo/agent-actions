@@ -640,12 +640,79 @@ class TestARuleInANamedSuiteCountsAsARead:
             "list under outputs. Outputs of 'pair': b2."
         )
 
+    def test_the_suite_is_read_over_an_inherited_inline_list(self, tmp_path):
+        # The merged block has both keys; the run judges with the suite.
+        _suite_judging(tmp_path, "z.text")
+        reader = _with(B2, expect={"suite": "quality"})
+
+        with pytest.raises(ConfigurationError) as caught:
+            _with_defaults(
+                tmp_path, [A, Z, INCLUDE], {"pair": _pair([B1, reader])}, _judged("a.text")
+            )
+
+        assert str(caught.value) == _branch_reads_z("b2")
+
     def test_a_suite_that_does_not_load_is_left_to_preflight(self, tmp_path):
         reader = _with(B2, expect={"suite": "missing"})
 
         rendered = _render(tmp_path, [A, Z, INCLUDE], {"pair": _pair([B1, reader])})
 
         assert _names(rendered) == ["a", "z", "b1", "b2"]
+
+    def test_a_suite_from_the_include_defaults_with_a_rule_on_a_field(self, tmp_path):
+        _field_suite_judging(tmp_path / "bad", "z.text")
+        _field_suite_judging(tmp_path / "good", "z.text")
+        suite_defaults = {"defaults": {"expect": {"suite": "quality"}}}
+
+        message = _refusal(tmp_path / "bad", [A, Z, {**INCLUDE, **suite_defaults}])
+
+        assert message == _branch_reads_z("b1", "'defaults:' of include 'pair'")
+        manager = _manager(
+            tmp_path / "good",
+            [A, Z, {**WITH_Z, **suite_defaults}],
+            {"pair": _declaring_z([B1, B2])},
+        )
+        agents = {agent["name"]: agent for agent in manager.get_user_agents()}
+        assert "z.text" in agents["b1"]["context_scope"]["observe"]
+        manager.merge_agent_configs(list(agents.values()))
+        manager.determine_execution_order()
+        order = manager.execution_order
+        assert order.index("z") < order.index("b1")
+
+    def test_a_removed_action_read_only_through_a_suite(self, tmp_path):
+        _suite_judging(tmp_path, "b1.text")
+        reader = _with(
+            B2,
+            dependencies=["a"],
+            context_scope={"observe": ["a.text"]},
+            expect={"suite": "quality"},
+        )
+
+        message = _refusal(
+            tmp_path, [A, {**INCLUDE, "remove": ["b1"]}], {"pair": _pair([B1, reader])}
+        )
+
+        assert message == (
+            f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), "
+            "but 'b2' still reads it. Remove the readers too, or override them so that they do "
+            "not read it."
+        )
+
+
+def _field_suite_judging(root: Path, ref: str) -> None:
+    rule = {"id": "grounded", "type": "llm_judge", "params": {"context": [ref], "rule": "ok"}}
+    (root / "schema").mkdir(parents=True, exist_ok=True)
+    (root / "schema" / "quality.yml").write_text(
+        yaml.safe_dump({"fields": [{"id": "text", "type": "string", "expectations": [rule]}]})
+    )
+
+
+def _manager(root: Path, actions, branches) -> ConfigManager:
+    workflow = _project(root, actions, branches)
+    manager = ConfigManager(str(workflow), str(root / "agent_actions.yml"), project_root=root)
+    manager.load_configs()
+    manager.validate_agent_name()
+    return manager
 
 
 class TestABranchWithNoOutputsSaysNone:

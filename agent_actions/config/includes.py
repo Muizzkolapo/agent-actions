@@ -430,6 +430,9 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
             if name not in known:
                 if reader is not None and prefixed and name not in SPECIAL_NAMESPACES:
                     via = _scope_origin(action, name, extractor, workflow_file, levels)
+                    suite = _suite_reading(action, name, levels)
+                    if suite is not None and name in reader.names:
+                        _refuse_short_name_in_suite(action, name, reader, suite, via)
                     _refuse_unknown_short_name(action, name, reader, via)
                 continue
             source = owner.get(name)
@@ -522,6 +525,36 @@ def _refuse_unknown_short_name(
         f"{_listed([reader.local(final) for final in actions])}. "
         f"Inputs: {_listed(reader.branch.inputs)}.",
         context=_context(reader, action_name=local),
+    )
+
+
+def _suite_reading(action: dict[str, Any], name: str, levels: _Levels) -> str | None:
+    """The named suite of *action* when its judge contexts read *name*."""
+    expect = _resolved_expect(action, levels.of(action))
+    suite = expect.get("suite") if expect is not None else None
+    if not isinstance(suite, str):
+        return None
+    refs = collect_judge_context_refs(expect, action.get("schema"), levels.root)
+    return suite if name in (ref.split(".", 1)[0] for ref in refs) else None
+
+
+def _refuse_short_name_in_suite(
+    action: dict[str, Any], name: str, reader: Inclusion, suite: str, via: str
+) -> None:
+    """Refuse a short name in a named suite's judge context inside an ``as:`` include.
+
+    The include renames inline and own-schema rules, not a suite's: the suite file
+    serves every instance, and the run reads it as written.
+    """
+    local = action[_ORIGIN_KEY]["local_name"]
+    where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
+    raise ConfigurationError(
+        f"{where}: reads '{name}' in an llm_judge context of suite '{suite}'{via}. An include "
+        "with 'as:' does not rename the rules of a named suite, so a context reference in the "
+        f"suite must use the final name: write '{reader.names[name]}' in place of '{name}'. "
+        "Or move the rule into the schema of the action or into an inline expectations: "
+        "list, where the include renames it.",
+        context=_context(reader, action_name=local, suite=suite),
     )
 
 
@@ -1162,15 +1195,19 @@ def _reads(
     consumption = action.get("version_consumption")
     if isinstance(consumption, dict) and isinstance(consumption.get("source"), str):
         names.append(consumption["source"])
-    own = action.get("expect")
-    expect = adapt_inherited_expect(
-        merge_expect(defaults.get("expect"), own), own, _repair_view(action, defaults)
-    )
+    expect = _resolved_expect(action, defaults)
     if expect is not None:
         for ref in collect_judge_context_refs(expect, action.get("schema"), project_root):
-            if isinstance(ref, str):
-                names.append(ref.split(".", 1)[0])
+            names.append(ref.split(".", 1)[0])
     return list(dict.fromkeys(name for name in names if isinstance(name, str)))
+
+
+def _resolved_expect(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any] | None:
+    """The ``expect`` block the expander gives *action* under *defaults*."""
+    own = action.get("expect")
+    return adapt_inherited_expect(
+        merge_expect(defaults.get("expect"), own), own, _repair_view(action, defaults)
+    )
 
 
 def _single_brace(reference: str) -> bool:

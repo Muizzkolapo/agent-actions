@@ -191,6 +191,25 @@ def test_named_suite_is_skipped_without_project_context():
     assert defects == {}
 
 
+def both_config(name="write_q"):
+    """A suite over an inline list, as a defaults list under an action's suite merges."""
+    inline = [{"type": "not_null", "field": "ghost"}]
+    return {name: {"name": name, "expect": {"suite": "scenario", "expectations": inline}}}
+
+
+def test_a_suite_beside_an_inline_list_is_checked_as_the_run_reads_it(tmp_path):
+    write_suite(tmp_path, "scenario", [{"type": "vibe_check", "field": "options"}])
+    defects = find_expectation_defects(both_config(), FIELDS, project_root=tmp_path)
+    (message,) = defects["write_q"]
+    assert "unknown type 'vibe_check'" in message
+
+
+def test_an_inline_list_under_a_suite_is_not_checked(tmp_path):
+    write_suite(tmp_path, "scenario", [{"type": "not_null", "field": "options"}])
+    assert find_expectation_defects(both_config(), FIELDS, project_root=tmp_path) == {}
+    assert find_expectation_defects(both_config(), FIELDS) == {}
+
+
 def test_named_suite_sharing_its_name_with_another_schema_file_is_reported(tmp_path):
     rules = [{"type": "not_null", "field": "options"}]
     write_suite(tmp_path, "quality", rules)
