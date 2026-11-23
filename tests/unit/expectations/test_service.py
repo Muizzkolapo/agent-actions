@@ -189,7 +189,9 @@ def test_factory_refuses_a_named_suite_without_a_project_root():
 
 
 def test_factory_does_not_treat_an_empty_expect_dict_as_absent():
-    with pytest.raises(ConfigurationError):
+    with pytest.raises(
+        ConfigurationError, match="has a bare expect: block but no schema to read expectations from"
+    ):
         create_expectation_service_from_config({}, action_name="a")
 
 
