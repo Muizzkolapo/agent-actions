@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Collection
 from typing import Any
 
+from agent_actions.errors.processing import SerializationError
 from agent_actions.errors.validation import DataValidationError
 from agent_actions.storage.backends.sqlite.codec import SQLitePayloadCodecMixin
 from agent_actions.storage.backends.sqlite.common import logger
@@ -108,12 +109,19 @@ class SQLiteCheckpointMixin(SQLitePayloadCodecMixin):
             )
             rows: list[dict[str, Any]] = []
             for stored in cursor.fetchall():
-                answer = self.decode_payload(
-                    stored["record_data"],
-                    table="checkpoint_output",
-                    where=f"action '{action_name}' file '{relative_path}'"
-                    f" record '{stored['source_guid']}'",
+                where = (
+                    f"action '{action_name}' file '{relative_path}'"
+                    f" record '{stored['source_guid']}'"
                 )
+                answer = self.decode_payload(
+                    stored["record_data"], table="checkpoint_output", where=where
+                )
+                if not isinstance(answer, list):
+                    raise SerializationError(
+                        f"checkpoint_output for {where} holds {type(answer).__name__}, "
+                        "not the list of rows its record answered with",
+                        context={"table": "checkpoint_output", "where": where},
+                    )
                 rows.extend(answer)
             return rows
 

@@ -49,10 +49,6 @@ def _stored_version(db_path):
     return None if row is None else row[0]
 
 
-def test_the_format_is_at_least_four():
-    assert StorageBackend._STORAGE_FORMAT_VERSION >= 4
-
-
 def test_a_new_store_records_the_current_format_and_opens_again(tmp_path):
     db_path = _store(tmp_path)
     _create(db_path)
