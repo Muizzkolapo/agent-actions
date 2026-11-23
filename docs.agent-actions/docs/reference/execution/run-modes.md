@@ -204,8 +204,6 @@ run cannot keep what it read:
 - An `expect:` block that the run cannot resolve. An example is a `suite:` that the run cannot
   load.
 - A store that fails to write the file.
-- A batch that an earlier version deferred, in a recovery phase that this version does not run.
-  The error tells you to run the action again with `--fresh`.
 
 The action fails, and the next run reads that file again.
 

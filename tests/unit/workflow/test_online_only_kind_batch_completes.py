@@ -22,7 +22,6 @@ def _executor(storage) -> tuple[ActionExecutor, MagicMock]:
     deps.state_manager = MagicMock(spec=ActionStateManager)
     deps.state_manager.get_status.return_value = ActionStatus.PENDING
     deps.state_manager.get_status_details.return_value = {}
-    deps.state_manager.adopt_truncation_marker.return_value = False
     deps.batch_manager = BatchLifecycleManager(
         job_manager=MagicMock(), processing_service=MagicMock(), storage_backend=storage
     )

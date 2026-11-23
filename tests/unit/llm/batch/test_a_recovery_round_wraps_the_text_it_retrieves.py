@@ -1,4 +1,4 @@
-"""A recovery round puts a carried text-mode answer under its output field, as retrieval does."""
+"""A recovery round puts a retrieved text-mode answer under its output field."""
 
 from __future__ import annotations
 
@@ -87,35 +87,3 @@ def test_the_retrieved_round_is_under_the_output_field():
     seen = _run([], VALIDATOR)
 
     assert [r.content for r in seen["recovery"]] == [{"verdicts": PLAIN_TEXT}]
-
-
-def test_a_text_answer_carried_from_a_state_an_earlier_version_wrote_is_wrapped():
-    seen = _run(
-        [{"custom_id": "r0", "success": True, "content": "Q1: FAIL | difficulty 2"}], VALIDATOR
-    )
-
-    assert [r.content for r in seen["accumulated"]] == [{"verdicts": "Q1: FAIL | difficulty 2"}]
-
-
-def test_a_carried_answer_already_under_the_output_field_is_unchanged():
-    row = {"custom_id": "r0", "success": True, "content": {"verdicts": "Q1: PASS"}}
-
-    seen = _run([row], VALIDATOR)
-
-    assert [r.content for r in seen["accumulated"]] == [{"verdicts": "Q1: PASS"}]
-
-
-def test_a_carried_failure_is_unchanged():
-    row = {"custom_id": "r0", "success": False, "content": "provider said no", "error": "boom"}
-
-    seen = _run([row], VALIDATOR)
-
-    assert [(r.content, r.success) for r in seen["accumulated"]] == [("provider said no", False)]
-
-
-def test_a_json_mode_action_keeps_a_carried_string():
-    seen = _run(
-        [{"custom_id": "r0", "success": True, "content": "plain"}], {**VALIDATOR, "json_mode": True}
-    )
-
-    assert [r.content for r in seen["accumulated"]] == ["plain"]

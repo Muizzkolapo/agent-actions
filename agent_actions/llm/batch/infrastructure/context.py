@@ -310,11 +310,10 @@ class BatchContextManager:
     ) -> None:
         """Store the map in parts, then name them under the map's parts key.
 
-        The parts are written first. One transaction then writes the parts key and
-        deletes a map an earlier version saved whole. The parts the key named before
+        The parts are written first, then the parts key. The parts the key named before
         are deleted last. A save that fails leaves the earlier map as it stood. A save
-        that stops after the transaction leaves earlier parts that nothing reads;
-        ``clear_batch_state`` (and ``--fresh``) removes them.
+        that stops after the parts key is written leaves earlier parts that nothing
+        reads; ``clear_batch_state`` (and ``--fresh``) removes them.
         """
         key = BatchContextManager._metadata_key(action_name, batch_name)
         generation = uuid.uuid4().hex[:12]
@@ -326,9 +325,7 @@ class BatchContextManager:
                 backend.save_metadata(part_key, part)
                 written.append(part_key)
             header = {"generation": generation, "parts": len(written)}
-            # One transaction, so the parts key and a map saved whole exist together
-            # only when an earlier version saved that map after this one saved parts.
-            backend.save_and_delete_metadata({_parts_key(key): json.dumps(header)}, [key])
+            backend.save_metadata(_parts_key(key), json.dumps(header))
         except Exception as e:
             for part_key in written:
                 try:
@@ -354,25 +351,16 @@ class BatchContextManager:
     def load_batch_context_map(
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> dict[str, Any]:
-        """The map as saved: as one string by an earlier version, or in parts.
-
-        A map saved whole wins over parts: a save deletes it in the transaction that
-        names its parts, so both exist only when an earlier version saved it later.
-        """
+        """The map the parts key names, or an error that says to rebuild with ``--fresh``."""
         try:
             key = BatchContextManager._metadata_key(action_name, batch_name)
-            raw = backend.load_metadata(key)
-            context_map: dict[str, Any]
-            if raw is not None:
-                context_map = deep_json.loads(raw)
-            else:
-                loaded = _loaded_parts(backend, key)
-                if loaded is None:
-                    raise ProcessingError(
-                        f"Context map not found for {action_name}/{batch_name}",
-                        context={"action_name": action_name, "batch_name": batch_name},
-                    )
-                context_map = loaded
+            context_map = _loaded_parts(backend, key)
+            if context_map is None:
+                raise ProcessingError(
+                    f"Context map not found for {action_name}/{batch_name}. "
+                    "Re-run the action with --fresh to rebuild its batch state.",
+                    context={"action_name": action_name, "batch_name": batch_name},
+                )
             logger.debug(
                 "Loaded context map for %s/%s (%d entries)",
                 action_name,
@@ -402,9 +390,7 @@ class BatchContextManager:
         key = BatchContextManager._metadata_key(action_name, batch_name)
         for part_key in _part_keys(backend, key) or ():
             backend.delete_metadata(part_key)
-        named = backend.delete_metadata(_parts_key(key))
-        whole = backend.delete_metadata(key)  # a map an earlier version saved whole
-        return named or whole
+        return backend.delete_metadata(_parts_key(key))
 
 
 # A context map is stored in parts of about this many characters, so neither a save

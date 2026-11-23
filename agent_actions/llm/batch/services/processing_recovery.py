@@ -12,11 +12,9 @@ Entry points:
     cleanup_recovery() — remove registry entries after finalization
 """
 
-import json
 import logging
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RecoveryType
@@ -36,7 +34,7 @@ from agent_actions.llm.batch.services.retry_serialization import (
     deserialize_results,
     serialize_results,
 )
-from agent_actions.llm.batch.services.shared import retrieve_and_reconcile, wrap_carried_text
+from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
@@ -201,7 +199,6 @@ def process_recovery_batch(
         )
 
     accumulated = deserialize_results(state.accumulated_results)
-    wrap_carried_text(accumulated, agent_config)
 
     # One wrapper for all of them: a halt parked inside any handler must not be
     # lost to an unrelated failure on the way to the finaliser.
@@ -414,12 +411,6 @@ def finalize_batch_output(
         filtered=filtered_inputs(context_map),
         takes_no_input=takes_no_input,
     )
-
-    # A placeholder an earlier version wrote at submission stays on disk when the
-    # output goes to the backend, and a disk reader would take it for a batch still out.
-    output_path = Path(output_file) if not isinstance(output_file, Path) else output_file
-    if service._storage_backend and output_path.exists():
-        _remove_batch_placeholder(output_path)
 
     elapsed_time = time.time() - context.start_time
     total_count = len(batch_results)
@@ -1180,33 +1171,3 @@ def register_recovery_batch(
             manager.remove_batch_job(name)
             if entry.batch_id:
                 release_local_batch_record(entry.batch_id)
-
-
-def _remove_batch_placeholder(output_file: Path) -> None:
-    """Remove a batch placeholder file from disk after results are in the backend.
-
-    Since placeholders are no longer written at submission time, this is a
-    no-op for new runs. Kept as a guard for pre-migration data that may
-    still have placeholder files on disk.
-    """
-    if not output_file.exists():
-        return
-
-    try:
-        with open(output_file, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return
-
-    if (
-        isinstance(data, dict)
-        and "batch_job_id" in data
-        and data.get("status") == BatchStatus.SUBMITTED
-    ):
-        try:
-            output_file.unlink()
-            logger.debug("Removed legacy batch placeholder: %s", output_file)
-        except FileNotFoundError:
-            pass
-        except OSError as e:
-            logger.warning("Failed to remove batch placeholder %s: %s", output_file, e)

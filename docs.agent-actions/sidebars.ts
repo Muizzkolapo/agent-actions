@@ -32,7 +32,6 @@ const sidebars: SidebarsConfig = {
         'guides/design-patterns',
         'guides/custom-tools',
         'guides/human-in-the-loop',
-        'guides/expectations-migration',
         'guides/editor-setup',
         'guides/troubleshooting',
       ],

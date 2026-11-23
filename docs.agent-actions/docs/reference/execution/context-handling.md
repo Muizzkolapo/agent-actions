@@ -113,10 +113,6 @@ The estimate counts every message of the request: the rendered prompt and the co
 
 When `context_window` is not set, Agent Actions takes the window of a model from a fixed list of model names (in `agent_actions/prompt/message_builder.py`). A model name that is not in the list gets 128,000 tokens, also when the model accepts more. If a large record fails with `Estimated prompt size (N tokens) exceeds model context window (M tokens)` and the model reads more, set `context_window`. If the record is larger than the real window, split its longest field with [`chunk_config.field`](../data-io/chunking.md#split-one-field-of-a-record), or observe a shorter field.
 
-:::note
-In the release after 3.0.0, Agent Actions changes the prompt of each online request. This applies to OpenAI, Anthropic, Gemini, Groq and Cohere. Before, the record JSON in the prompt had double braces. Now Agent Actions sends the JSON with no change. Thus an answer can change. The Anthropic prompt cache misses one time after the update.
-:::
-
 ## Best Practices
 
 1. **Always put a namespace on the fields in a template** — `{{ source.field }}`, `{{ seed.field }}`, `{{ upstream_action.field }}`. Never use a bare `{{ field }}`.
