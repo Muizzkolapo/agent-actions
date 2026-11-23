@@ -205,6 +205,9 @@ for each level:
     ├── 1 pending → execute_single_action (no semaphore)
     │   N pending → asyncio.gather(*tasks) with Semaphore
     │               (each task runs in asyncio.to_thread)
+    │               a batch action that prepares also takes a slot of
+    │               batch_preparation_concurrency first, when the
+    │               workflow sets it
     │               an exception a task raised is re-raised once
     │               every task has finished (see below)
     │
@@ -230,7 +233,7 @@ still `running` to failed, recording the run's error on it, and the run exits
 non-zero. `agac retry` writes the node-level failure such an action could not store
 and re-runs it in full, as for any failure of the action's own.
 
-Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. Different actions overlap on their own threads. Within one online LLM action, records run one at a time unless `record_concurrency` is above 1; then `OnlineLLMStrategy` keeps up to that many in flight on a thread pool of its own.
+Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. Different actions overlap on their own threads. Each batch action of a step holds one input file's records while it prepares; the workflow key `batch_preparation_concurrency` limits how many of them prepare at once without holding back the online actions of the step. A store read runs with the cyclic garbage collector paused (`utils.gc_pause`), counted across these threads. Within one online LLM action, records run one at a time unless `record_concurrency` is above 1; then `OnlineLLMStrategy` keeps up to that many in flight on a thread pool of its own.
 
 ---
 
