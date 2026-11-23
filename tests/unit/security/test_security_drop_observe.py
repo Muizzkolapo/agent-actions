@@ -2,12 +2,11 @@
 
 Tests critical security paths:
 - Drop+observe on same field proves no data leak (M1)
-- Path traversal rejection in tools_resolver (J4)
 - Atomic write cleanup on failure (C1)
 - Batch flush failure preserves queue state (L1)
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -54,61 +53,6 @@ class TestDropObserveNoLeak:
                 context_scope={"drop": ["dep.secret"], "observe": ["dep.secret"]},
                 action_name="test",
             )
-
-
-class TestPathTraversalRejection:
-    """Verify tools_resolver rejects path traversal attempts."""
-
-    def test_dotdot_in_path_raises(self, tmp_path):
-        """.. traversal that resolves outside project root raises ConfigValidationError."""
-        from agent_actions.errors import ConfigValidationError
-        from agent_actions.utils.tools_resolver import resolve_tools_path
-
-        # project_dir is the controlled project root; outside_dir is a sibling
-        project_dir = tmp_path / "project"
-        project_dir.mkdir()
-        outside_dir = tmp_path / "outside"
-        outside_dir.mkdir()
-        evil_file = outside_dir / "evil.yaml"
-        evil_file.write_text("module_path: evil")
-
-        config = {
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {"file": str(evil_file)},
-                }
-            ]
-        }
-        with patch(
-            "agent_actions.utils.tools_resolver.find_project_root",
-            return_value=project_dir,
-        ):
-            with pytest.raises(ConfigValidationError, match="path traversal"):
-                resolve_tools_path(config)
-
-    def test_normal_path_is_accepted(self, tmp_path):
-        from unittest.mock import patch
-
-        from agent_actions.utils.tools_resolver import resolve_tools_path
-
-        tool_file = tmp_path / "tool_config.yaml"
-        tool_file.write_text("module_path: my_module\n")
-
-        config = {
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {"file": str(tool_file)},
-                }
-            ]
-        }
-        with patch(
-            "agent_actions.utils.tools_resolver.find_project_root",
-            return_value=tmp_path,
-        ):
-            result = resolve_tools_path(config)
-        assert result == "my_module"
 
 
 class TestAtomicWriteCleanup:

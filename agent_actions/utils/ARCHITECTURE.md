@@ -301,7 +301,7 @@ get_existing_content(record, is_first_stage=False)
 | `file_handler.py` | Recursive file/folder discovery (stdlib only) |
 | `file_utils.py` | Additional file utilities |
 | `project_root.py` | Project root detection (`find_project_root`, `ensure_in_project`) |
-| `tools_resolver.py` | Normalizes `tools` / `tool_path` config syntax |
+| `tools_resolver.py` | Resolves an agent's `tool_path` (string or list) against the project root |
 
 ### Identity and tracking
 | File | Role |
