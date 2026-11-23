@@ -183,12 +183,13 @@ class Contract:
             return record
         fields = _field_schemas(schema)
         echoes = self._echoes(fields)
-        rules = [rule for rule in self.rules if _can_pass(rule)]
         # No record meets these, so no try is spent on them.
+        why = {id(rule): _unmeetable(rule, fields) for rule in self.rules}
+        rules = [rule for rule in self.rules if why[id(rule)] is None]
         unmet = [
-            (_target(rule), f"{rule.resolved_id} (no value can meet it)")
+            (_target(rule), f"{rule.resolved_id} ({why[id(rule)]})")
             for rule in self.rules
-            if not _can_pass(rule)
+            if why[id(rule)] is not None
         ]
         if not rules:
             record.update(echoes)
@@ -496,11 +497,18 @@ def _passes(rule: Expectation, value: Any) -> bool:
         return False
 
 
-def _can_pass(rule: Expectation) -> bool:
-    """False for a rule whose pattern Python cannot compile: its check fails on every value."""
-    if rule.type != "matches_regex":
-        return True
-    return _compiles(str(rule.params.get("pattern")))
+def _unmeetable(rule: Expectation, fields: dict[str, dict[str, Any]]) -> str | None:
+    """Why no record the mock may build meets *rule*; None when one can.
+
+    The mock adds no key the schema does not declare, so a rule on such a field cannot pass.
+    """
+    if rule.type == "matches_regex" and not _compiles(str(rule.params.get("pattern"))):
+        return "Python cannot compile its pattern"
+    selectors = [rule.field] if isinstance(rule.field, str) else rule.field or []
+    undeclared = [s for s in selectors if s.removesuffix(WILDCARD_SUFFIX) not in fields]
+    if undeclared:
+        return f"the schema declares no field {', '.join(map(repr, undeclared))}"
+    return None
 
 
 @functools.lru_cache(maxsize=256)

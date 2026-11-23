@@ -128,4 +128,4 @@ def test_a_rule_pattern_python_cannot_compile_is_named_as_unmeetable(caplog):
 
     _answer_with_rule_pattern(TOO_DEEP_FOR_RE)
 
-    assert any("no value can meet it" in r.getMessage() for r in caplog.records)
+    assert any("Python cannot compile its pattern" in r.getMessage() for r in caplog.records)

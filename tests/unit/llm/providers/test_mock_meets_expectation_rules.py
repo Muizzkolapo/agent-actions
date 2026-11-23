@@ -347,6 +347,21 @@ class TestUnsatisfiable:
         [warning] = self._warnings(caplog)
         assert "maxLength=5" in warning and "word_count_between" in warning
 
+    @pytest.mark.parametrize("mode", sorted(ANSWER))
+    @pytest.mark.parametrize("selector", ["nested.x", "nested[*]", "undeclared"])
+    def test_a_rule_on_a_field_the_schema_does_not_declare_adds_no_key(
+        self, mode, selector, caplog
+    ):
+        caplog.set_level(logging.WARNING)
+        rules = [{"type": "not_null", "field": selector}]
+
+        record = ANSWER[mode](SCHEMA, rules, SEEDS[0])
+
+        assert set(record) <= set(SCHEMA["properties"]), record
+        assert checked_validator(SCHEMA).is_valid(record), record
+        [warning] = self._warnings(caplog)
+        assert f"'{selector.removesuffix('[*]')}'" in warning
+
     def test_a_reset_logs_it_again(self, caplog):
         caplog.set_level(logging.WARNING)
         _online(self.SCHEMA, self.CONTRADICTION, SEEDS[0])
