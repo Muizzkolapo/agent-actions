@@ -195,6 +195,24 @@ def test_named_suite_is_skipped_without_project_context():
     assert defects == {}
 
 
+def test_named_suite_sharing_its_name_with_another_schema_file_is_reported(tmp_path):
+    rules = [{"type": "not_null", "field": "options"}]
+    write_suite(tmp_path, "quality", rules)
+    (tmp_path / "schema" / "sub").mkdir()
+    (tmp_path / "schema" / "sub" / "quality.yml").write_text(
+        yaml.safe_dump({"expectations": rules})
+    )
+    defects = find_expectation_defects(suite_config("quality"), FIELDS, project_root=tmp_path)
+    (message,) = defects["write_q"]
+    assert message.startswith(
+        "suite 'quality' could not be loaded: Schema 'quality' is ambiguous — found in "
+        "2 locations (names must be globally unique):"
+    )
+    assert f"{tmp_path / 'schema' / 'quality.yml'}\n" in message
+    assert f"{tmp_path / 'schema' / 'sub' / 'quality.yml'}\n" in message
+    assert "Hint: Rename the colliding files so every schema name is unique." in message
+
+
 def test_named_suite_without_an_expectations_block_is_reported(tmp_path):
     write_schema_file(tmp_path, "scenario", {"fields": [{"id": "options", "type": "string"}]})
     defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)

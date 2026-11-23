@@ -60,6 +60,21 @@ def test_load_named_suite_missing_schema_is_one_named_error(tmp_path):
         load_named_suite("nothing_here", project_root=root)
 
 
+def test_load_named_suite_refuses_a_name_two_schema_files_share(tmp_path):
+    root = project(tmp_path, {"expectations": EXPECTATIONS}, name="quality")
+    project(tmp_path, {"expectations": EXPECTATIONS}, name="quality", where="schema/sub")
+    with pytest.raises(loader.SuiteLoadError) as caught:
+        load_named_suite("quality", project_root=root)
+    message = str(caught.value)
+    assert message.startswith(
+        "suite 'quality' could not be loaded: Schema 'quality' is ambiguous — found in "
+        "2 locations (names must be globally unique):"
+    )
+    assert f"{root / 'schema' / 'quality.yml'}\n" in message
+    assert f"{root / 'schema' / 'sub' / 'quality.yml'}\n" in message
+    assert "Hint: Rename the colliding files so every schema name is unique." in message
+
+
 def test_load_named_suite_without_expectations_block_is_an_error(tmp_path):
     root = project(tmp_path, {"fields": SCHEMA_FIELDS})
     with pytest.raises(loader.SuiteLoadError, match="no expectations"):
