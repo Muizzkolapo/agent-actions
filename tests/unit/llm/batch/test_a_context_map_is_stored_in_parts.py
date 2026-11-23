@@ -4,8 +4,6 @@ The map keeps each submitted record's input row, which collection rebuilds the o
 from. It was saved as one JSON string: a temporary copy about the size of the file's
 input, the largest part of the batch step's peak memory (#1865). Each part now holds
 the entries of a few megabytes, and the map reads back exactly as one string read back.
-A map saved whole by an earlier version still reads, so a batch submitted before an
-upgrade still collects.
 """
 
 from __future__ import annotations
@@ -94,11 +92,9 @@ def test_saving_a_map_never_holds_one_string_of_it(backend, monkeypatch):
     assert BatchContextManager.load_batch_context_map(backend, ACTION, FILE) == context_map
 
 
-def test_a_map_an_earlier_version_saved_whole_still_reads(backend):
-    context_map = _context_map(5)
-    backend.save_metadata(KEY, deep_json.dumps(context_map, ensure_ascii=False))
-
-    assert BatchContextManager.load_batch_context_map(backend, ACTION, FILE) == context_map
+def test_a_map_that_was_never_saved_is_not_found_and_the_error_names_fresh(backend):
+    with pytest.raises(ProcessingError, match=r"Context map not found.*--fresh"):
+        BatchContextManager.load_batch_context_map(backend, ACTION, FILE)
 
 
 def test_saving_again_leaves_nothing_of_the_last_save(backend, monkeypatch):
@@ -110,36 +106,6 @@ def test_saving_again_leaves_nothing_of_the_last_save(backend, monkeypatch):
 
     assert BatchContextManager.load_batch_context_map(backend, ACTION, FILE) == smaller
     assert len(_keys(backend)) == 2, _keys(backend)  # the key naming the parts, and one part
-
-
-def test_saving_over_a_map_saved_whole_replaces_it(backend):
-    backend.save_metadata(KEY, deep_json.dumps(_context_map(5), ensure_ascii=False))
-
-    BatchContextManager.save_batch_context_map(backend, ACTION, _context_map(2), FILE)
-
-    assert BatchContextManager.load_batch_context_map(backend, ACTION, FILE) == _context_map(2)
-    assert backend.load_metadata(KEY) is None
-
-
-def test_saving_over_a_map_saved_whole_never_reads_it(backend):
-    backend.save_metadata(KEY, deep_json.dumps(_context_map(600, text=20_000)))
-    gc.collect()
-    tracemalloc.start()
-    try:
-        start = tracemalloc.get_traced_memory()[0]
-        BatchContextManager.save_batch_context_map(backend, ACTION, _context_map(2), FILE)
-        peak = tracemalloc.get_traced_memory()[1] - start
-    finally:
-        tracemalloc.stop()
-
-    assert peak < 1_000_000, peak
-
-
-def test_deleting_a_map_saved_whole_removes_it(backend):
-    backend.save_metadata(KEY, deep_json.dumps(_context_map(5)))
-
-    assert BatchContextManager.delete_batch_context_map(backend, ACTION, FILE) is True
-    assert _keys(backend) == []
 
 
 def test_deleting_a_map_or_the_batch_state_removes_every_part(backend, monkeypatch):
@@ -202,3 +168,23 @@ def test_a_part_that_is_gone_is_named(backend, monkeypatch):
 
     with pytest.raises(ProcessingError, match="part"):
         BatchContextManager.load_batch_context_map(backend, ACTION, FILE)
+
+
+def test_a_save_that_fails_to_name_its_parts_leaves_the_last_map_whole(backend, monkeypatch):
+    monkeypatch.setattr(context_module, "_PART_CHARS", 10_000)
+    earlier = _context_map(10)
+    BatchContextManager.save_batch_context_map(backend, ACTION, earlier, FILE)
+    keys_before = _keys(backend)
+    newer = _context_map(40)
+    parts = len(list(context_module._encoded_parts(newer)))
+
+    with pytest.raises(ProcessingError, match="Failed to save context map"):
+        BatchContextManager.save_batch_context_map(
+            _FailsAfter(backend, writes=parts),  # type: ignore[arg-type]
+            ACTION,
+            newer,
+            FILE,
+        )
+
+    assert BatchContextManager.load_batch_context_map(backend, ACTION, FILE) == earlier
+    assert _keys(backend) == keys_before
