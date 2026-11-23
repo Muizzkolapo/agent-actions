@@ -298,6 +298,25 @@ def test_defaulted_expect_is_skipped_without_project_context():
     assert defects == {}
 
 
+def test_defaulted_expect_reads_an_inlined_schema_without_project_context():
+    action = {
+        "name": "write_q",
+        "expect": {},
+        "schema": {
+            "fields": [{"id": "options", "type": "string"}],
+            "expectations": [{"type": "no_such_type", "field": "options"}],
+        },
+    }
+    defects = find_expectation_defects({"write_q": action}, FIELDS)
+    (message,) = defects["write_q"]
+    assert "unknown type 'no_such_type'" in message
+
+
+def test_defaulted_expect_with_no_schema_is_reported_without_project_context():
+    defects = find_expectation_defects(default_config(), FIELDS)
+    assert "no schema" in defects["write_q"][0]
+
+
 @pytest.mark.parametrize(
     ("params", "fragment"),
     [

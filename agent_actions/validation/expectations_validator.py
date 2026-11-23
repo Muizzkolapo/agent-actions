@@ -39,8 +39,9 @@ def find_expectation_defects(
 
     Validates every form of ``expect:``: an inline ``expectations:`` list, a
     named ``suite:`` reference, and a bare block that defaults to the action's
-    own schema. The named and bare forms are only checked when *project_root*
-    is given.
+    own schema. Only the forms that read a file by name need *project_root*:
+    a named suite, and a bare block whose schema was not inlined. Without it,
+    they are not checked.
     """
     defects: dict[str, list[str]] = {}
 
@@ -73,7 +74,7 @@ def find_expectation_defects(
             resolved, suite_messages = _named_suite_entries(suite_name, project_root)
             messages.extend(suite_messages)
             messages.extend(_entry_defects(resolved, fields, available_fields))
-        elif entries is None and suite_name is None and project_root is not None:
+        elif entries is None and suite_name is None:
             resolved, schema_messages = _own_schema_entries(
                 action, project_root, rules_optional=expect.get("repair", "auto") != "none"
             )
@@ -199,6 +200,8 @@ def _own_schema_entries(
         return entries, defects
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
+        if project_root is None:
+            return [], []
         return _named_suite_entries(schema_name, project_root)
     if schema_dispatch_function(schema_data):
         return [], [
