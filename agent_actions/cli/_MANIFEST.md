@@ -42,6 +42,7 @@
 | `example` | Function | Example command group. | - |
 | `example_list` | Function | List available example projects from GitHub. | - |
 | `example_install` | Function | Install an example project. | - |
+| `export.py` | Module | `agac export`: write the outputs a workflow declares to their database tables from what the store holds, calling no model. `-A` writes one action's output. | `cli`, `connections`, `config` |
 | `expect.py` | Module | Inspect the expectation rules an action would run, and report the verdicts a run stored. The report heading names each `warn`/`info` rule that failed (failed/checked), since only `error` rules gate the records-passed rate; JSON is unchanged. The heading is printed as its own line above a title-less table (`soft_wrap`), because Rich wraps a table title at the table's width. The report's per-rule table is printed at its full width (`renderers.whole_table.print_whole`), so a rule id or type is not cut short on a narrow terminal. | `cli`, `expectations`, `storage`, `validation` |
 | `ExpectListCommand` | Class | Implementation of the expect list command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Resolve each action's suite through the runner's own loader and print it. | - |

@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: 'A workflow can read its input from a database and write its results back to one. `agent_actions.yml` takes a `connections:` block of named connections; `data_source: {type: database, connection: <name>, sql: <query>}` reads the query once into a snapshot the first action stages, and a snapshot that is deleted is read again, answering only the rows added or changed. A workflow-level `outputs:` block names an action, a connection and a table (`mode: append | replace | merge`, `key`, `carry`); the table is written when a run finishes, and `agac export` writes it again without calling a model. One connection type ships: `sqlite`.'
+time: 2026-11-23T09:00:00.000000000+00:00

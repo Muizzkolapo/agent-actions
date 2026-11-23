@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from agent_actions.config.types import Granularity, RunMode
+from agent_actions.connections.base import WriteMode
 from agent_actions.errors import ConfigurationError
 from agent_actions.guards import GuardParser, parse_guard_config
 from agent_actions.input.context.normalizer import (
@@ -988,6 +989,27 @@ class StorageConfig(BaseModel):
     )
 
 
+OUTPUT_IDENTITY_COLUMN = "source_guid"
+
+
+class OutputConfig(BaseModel):
+    """One entry of a workflow's ``outputs:`` block."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: str = Field(..., description="The action whose records are written")
+    connection: str = Field(..., description="Name of a project connection")
+    table: str = Field(..., description="Table to write, created when absent")
+    mode: WriteMode = Field(default=WriteMode.MERGE, description="append, replace or merge")
+    key: list[str] = Field(
+        default_factory=lambda: [OUTPUT_IDENTITY_COLUMN],
+        description="Columns identifying a row (for mode=merge)",
+    )
+    carry: list[str] = Field(
+        default_factory=list, description="Source fields written beside the action's own"
+    )
+
+
 class WorkflowConfig(BaseModel):
     """Pydantic schema for user-facing workflow YAML files.
 
@@ -1022,6 +1044,9 @@ class WorkflowConfig(BaseModel):
     )
     storage: StorageConfig | None = Field(
         default=None, description="Storage maintenance settings for this workflow"
+    )
+    outputs: list[OutputConfig] | None = Field(
+        default=None, description="Database tables this workflow's results are written to"
     )
 
     @model_validator(mode="after")

@@ -68,6 +68,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     ),
     "docs": ("agent_actions.cli.docs:docs", "Build and serve workflow documentation."),
     "example": ("agent_actions.cli.example:example", "Browse and install example projects."),
+    "export": (
+        "agent_actions.cli.export:export",
+        "Write a workflow's declared outputs to their database tables.",
+    ),
     "expect": ("agent_actions.cli.expect:expect", "Inspect expectation rules and verdicts."),
     "skills": (
         "agent_actions.cli.skills:skills",

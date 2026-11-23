@@ -284,7 +284,8 @@ class ActionRunner:
         """The input files a first stage reads, or None for an action reading another.
 
         None for an API source too: resolving one can fetch, and this is asked on every
-        skip check.
+        skip check. A database source is resolved here: its snapshot is the input, and
+        one that was dropped has to be read again before the check can compare it.
         """
         if action_config.get("dependencies") or is_api_data_source(self.data_source_config):
             return None
