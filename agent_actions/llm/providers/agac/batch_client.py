@@ -8,6 +8,7 @@ Auto-completes after configurable time (default 5 seconds).
 """
 
 import glob
+import hashlib
 import json
 import logging
 import time
@@ -30,6 +31,19 @@ logger = logging.getLogger(__name__)
 # short enough that a record abandoned by a killed process is reclaimed by
 # the next run rather than the one after it.
 _ABANDONED_WRITE_SECONDS = 60.0
+
+
+def _shared_contracts(tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    """Each distinct rule set the tasks carry, by key; each task then holds only its key."""
+    contracts: dict[str, Any] = {}
+    for task in tasks:
+        spec = task.get("contract")
+        if isinstance(spec, dict):
+            text = json.dumps(spec, sort_keys=True, default=str)
+            key = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+            contracts[key] = spec
+            task["contract"] = key
+    return contracts
 
 
 @dataclass
@@ -66,6 +80,8 @@ class AgacBatchClient(BaseBatchClient):
     # that is a new process with an empty cache.
     _batches: dict[str, MockBatchState] = {}
     _tasks_by_batch: dict[str, list[dict[str, Any]]] = {}
+    # The rules a batch's tasks name by key, kept once for the batch.
+    _contracts_by_batch: dict[str, dict[str, Any]] = {}
 
     def __init__(
         self,
@@ -120,6 +136,7 @@ class AgacBatchClient(BaseBatchClient):
             rules=rules_for(agent_config, action),
             context={},
             observe=observed_refs(agent_config),
+            workflow_session_id=agent_config.get("workflow_session_id"),
         ).to_task()
         for task in tasks:
             task["contract"] = spec
@@ -155,7 +172,12 @@ class AgacBatchClient(BaseBatchClient):
         return get_path_manager().get_project_root() / ".agac" / "batch_state"
 
     @classmethod
-    def _write_state(cls, state: MockBatchState, tasks: list[dict[str, Any]]) -> None:
+    def _write_state(
+        cls,
+        state: MockBatchState,
+        tasks: list[dict[str, Any]],
+        contracts: dict[str, Any] | None = None,
+    ) -> None:
         """Record a submitted batch where the next run can find it.
 
         Written atomically: a truncated file reads back as no batch at all, which
@@ -178,6 +200,7 @@ class AgacBatchClient(BaseBatchClient):
                 "created_at": state.created_at,
                 "complete_after_seconds": state.complete_after_seconds,
                 "tasks": tasks,
+                "contracts": contracts or {},
             },
             fsync=False,
         )
@@ -205,6 +228,7 @@ class AgacBatchClient(BaseBatchClient):
             partial.unlink(missing_ok=True)
         cls._batches.pop(batch_id, None)
         cls._tasks_by_batch.pop(batch_id, None)
+        cls._contracts_by_batch.pop(batch_id, None)
 
     @classmethod
     def discard_partial_writes(cls) -> None:
@@ -247,11 +271,13 @@ class AgacBatchClient(BaseBatchClient):
                 complete_after_seconds=stored["complete_after_seconds"],
             )
             tasks = stored["tasks"]
+            contracts = stored.get("contracts") or {}
         except (OSError, json.JSONDecodeError, KeyError, TypeError, PathManagerError):
             logger.debug("No readable batch record for %s", batch_id)
             return None
         cls._batches[batch_id] = state
         cls._tasks_by_batch[batch_id] = tasks
+        cls._contracts_by_batch[batch_id] = contracts if isinstance(contracts, dict) else {}
         return state
 
     @classmethod
@@ -298,7 +324,7 @@ class AgacBatchClient(BaseBatchClient):
         # threshold — each run polls once and there are two runs by design.
         tasks = self._tasks_by_batch.get(batch_id)
         if tasks is not None:
-            self._write_state(state, tasks)
+            self._write_state(state, tasks, self._contracts_by_batch.get(batch_id))
         return state.status
 
     def _normalize_status(self, raw_status: str) -> str:
@@ -318,6 +344,7 @@ class AgacBatchClient(BaseBatchClient):
         from agent_actions.llm.providers.agac.contract import Contract
 
         tasks = self._tasks_by_batch.get(batch_id, [])
+        contracts = self._contracts_by_batch.get(batch_id) or {}
         lines = []
 
         for task in tasks:
@@ -326,13 +353,17 @@ class AgacBatchClient(BaseBatchClient):
             # Track attempt for this custom_id (for recovery testing)
             attempt = self._get_attempt_for_custom_id(custom_id)
 
+            # A submitted task names its batch's rules by key; a prepared one holds them.
+            spec = task.get("contract")
+            if isinstance(spec, str):
+                spec = contracts.get(spec)
             # Straight off the task this client wrote, which holds both.
             openai_response = FakeDataGenerator.generate_openai_response(
                 custom_id,
                 task.get("schema"),
                 task.get("prompt"),
                 attempt,
-                contract=Contract.from_task(task.get("contract"), task.get("user_content")),
+                contract=Contract.from_task(spec, task.get("user_content")),
             )
             # A text-mode request that ends by offering its answer's shapes, as a side
             # call's may (a judge's does), gets one of them, seeded by the request alone.
@@ -413,9 +444,11 @@ class AgacBatchClient(BaseBatchClient):
             polls_until_complete=self.polls_until_complete,  # type: ignore[arg-type]
             complete_after_seconds=self.complete_after_seconds,  # type: ignore[arg-type]
         )
+        contracts = _shared_contracts(tasks)
         self._batches[batch_id] = state
         self._tasks_by_batch[batch_id] = tasks
-        self._write_state(state, tasks)
+        self._contracts_by_batch[batch_id] = contracts
+        self._write_state(state, tasks, contracts)
 
         logger.info(
             "Mock batch %s submitted: %d tasks",
@@ -471,6 +504,7 @@ class AgacBatchClient(BaseBatchClient):
         """Reset all mock batch state. Useful between tests."""
         cls._batches.clear()
         cls._tasks_by_batch.clear()
+        cls._contracts_by_batch.clear()
         for stale in cls._state_dir().glob("*.json"):
             stale.unlink(missing_ok=True)
         cls.discard_partial_writes()
