@@ -419,15 +419,20 @@ The lock is an `RLock` (reentrant) because the `connection` property may be call
 ## Storage Format
 
 `StorageBackend._STORAGE_FORMAT_VERSION` (4) is the one storage format this version
-reads and writes. `SQLiteBackend.initialize()` runs in one `BEGIN IMMEDIATE`
+reads and writes. `SQLiteBackend.initialize()` only reads a store that has tables,
+so a read-only command never waits for the write lock a run holds. It takes
+`BEGIN IMMEDIATE` only to create a store, and checks for tables again inside that
 transaction, so another process never sees the tables without the format:
 
 ```
-No table in the file   → create every table, record storage_format_version = 4
-                          in workflow_metadata
 Any table in the file  → read storage_format_version; any other value, or none,
                           raises StoreFormatError and closes the connection
+No table in the file   → BEGIN IMMEDIATE; if still no table, create every table
+                          and record storage_format_version = 4 in workflow_metadata
 ```
+
+`create_readonly()` applies the same check to a file that has tables. A file with
+no tables is a store not yet created, so it is not refused.
 
 `create_readonly()` applies the same check. The check comes before any read or write,
 so a store of another format is never changed. The error names the store file and tells

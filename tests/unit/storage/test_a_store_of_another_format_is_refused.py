@@ -147,3 +147,23 @@ def test_the_cli_message_carries_the_clean_hint_and_no_generic_advice(tmp_path):
 
     assert "agac clean -a wf --all" in message
     assert "Check your configuration" not in message
+
+
+def test_a_store_made_between_the_two_table_checks_is_still_refused(tmp_path, monkeypatch):
+    """Another process can create the store after the first check; the second one sees it."""
+    db_path = _store(tmp_path)
+    _create(db_path)
+    _set_version(db_path, "3")
+    real = SQLiteBackend._has_tables
+    calls = []
+
+    def first_sees_no_tables(cursor):
+        calls.append(cursor)
+        return False if len(calls) == 1 else real(cursor)
+
+    monkeypatch.setattr(SQLiteBackend, "_has_tables", staticmethod(first_sees_no_tables))
+
+    with pytest.raises(ConfigurationError, match="storage format 3"):
+        SQLiteBackend(str(db_path), "wf").initialize()
+
+    assert _stored_version(db_path) == "3"
