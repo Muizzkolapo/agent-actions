@@ -64,7 +64,7 @@ A `path` or `keyfile` is relative to the project. `bigquery` without a
 |------|----------------------------|-------|
 | `sqlite`, `duckdb`, `postgres`, `redshift` | Yes, table creation included | |
 | `mysql`, `snowflake` | Rows yes; a `CREATE TABLE` commits at once | A first write that fails leaves the new table behind, empty |
-| `bigquery`, `databricks` | No | Rows are added by a load job on `bigquery`. A write that stops partway is put right by writing again, except an `append` |
+| `bigquery`, `databricks` | No | Rows are added by a load job on `bigquery`. A write that stops partway is put right by writing again |
 
 `snowflake` names are quoted in upper case, the name Snowflake gives an
 unquoted one, so a table made by hand is found and a column named like a
@@ -94,7 +94,7 @@ defaults:
 |-----|---------|---------|
 | `connection` | required | A name from the project's `connections:` block |
 | `sql` | required | The query to read; each row becomes one record |
-| `files` | `8` | How many snapshot files the rows are spread over |
+| `files` | `8` | How many snapshot files the rows are spread over, at most 256. Each row goes to the file its content picks, so the query's `ORDER BY` is kept only with `files: 1` |
 
 Every column of a row is a field of `source`, so a prompt reads `{{ source.title }}`.
 
@@ -103,8 +103,9 @@ Every column of a row is a field of `source`, so a prompt reads `{{ source.title
 The rows are written to `agent_io/_remote_cache/database/` the first time the
 workflow runs, and every later run reads that snapshot. A run that pauses for a
 batch and resumes a day later therefore sees the rows it started with. A
-snapshot belongs to the query and to the connection's settings as written, so
-editing either one reads the query again.
+snapshot belongs to the query and to the connection's settings, a `${NAME}`
+setting by the value it reads, so editing the query, a setting or a variable it
+reads reads the query again. A credential counts by its name, not its value.
 
 To read the query again:
 
@@ -147,7 +148,7 @@ outputs:
 | `connection` | required | A name from the project's `connections:` block |
 | `table` | required | The table to write; created when it does not exist |
 | `mode` | `merge` | `append`, `replace` or `merge` |
-| `key` | `[source_guid]` | The columns that identify a row, for `merge` |
+| `key` | `[source_guid]` | The columns that identify a row, for `merge` and `append` |
 | `carry` | `[]` | Source fields to write beside the action's own |
 
 Each record the action answered becomes one row: `source_guid`, the carried
@@ -168,7 +169,7 @@ more often a misspelling than a column of nulls.
 
 | Mode | What the table holds afterwards |
 |------|---------------------------------|
-| `append` | What it held, plus every row written. Writing twice doubles the rows. |
+| `append` | What it held, plus each row whose `key` it does not hold yet. Writing twice changes nothing; a source row that changed is added beside the old one. |
 | `replace` | Exactly the rows the store holds now. |
 | `merge` | What it held, with each row sharing a `key` replaced. Writing twice changes nothing. |
 

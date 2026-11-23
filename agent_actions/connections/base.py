@@ -68,9 +68,10 @@ class Connector(ABC):
 
         The table is created when it does not exist and there are rows to write,
         each column of the type *types* gives it.
-        ``MERGE`` replaces the rows sharing a *key* with an incoming row, so
-        writing the same rows twice leaves the table as writing them once did;
-        it removes no other row, and refuses a row whose key is null.
+        ``APPEND`` given a *key* adds only the rows whose key the table does not
+        hold yet. ``MERGE`` replaces the rows sharing a *key* with an incoming
+        row and refuses a row whose key is null. Either way, writing the same
+        rows twice leaves the table as writing them once did.
         """
 
     @abstractmethod

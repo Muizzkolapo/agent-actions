@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from agent_actions.connections.sqlite import SqliteConnector
 from agent_actions.errors import ConfigurationError
@@ -149,3 +150,44 @@ def test_a_connection_pointed_at_another_database_is_read_again(project):
 
     assert second != first
     assert _staged(second) == [{"id": 99, "topic": "elsewhere"}]
+
+
+def test_one_snapshot_file_keeps_the_order_the_query_returns(project):
+    snapshot = _resolve(project, sql="SELECT id, topic FROM topics ORDER BY id DESC", files=1)
+
+    assert [row["id"] for row in _documents(snapshot)["part-00000.json"]] == [4, 3, 2, 1, 0]
+
+
+def test_more_snapshot_files_than_the_limit_are_refused(project):
+    with pytest.raises(ValidationError, match="less than or equal to 256"):
+        _resolve(project, files=257)
+
+
+def _with_settings(project: Path, settings: str) -> None:
+    (project / "agent_actions.yml").write_text(
+        f"connections:\n  warehouse:\n    type: sqlite\n{settings}", encoding="utf-8"
+    )
+
+
+def test_a_setting_read_from_the_environment_names_the_snapshot_by_its_value(project, monkeypatch):
+    _with_settings(project, "    path: ${WAREHOUSE_FILE}\n")
+    monkeypatch.setenv("WAREHOUSE_FILE", "warehouse.db")
+    first = _resolve(project)
+    with sqlite3.connect(project / "other.db") as raw:
+        raw.execute("CREATE TABLE topics (id INTEGER, topic TEXT)")
+
+    monkeypatch.setenv("WAREHOUSE_FILE", "other.db")
+
+    assert _resolve(project) != first
+
+
+def test_a_credential_names_the_snapshot_by_its_reference_not_its_value():
+    from agent_actions.connections.settings import settings_as_resolved
+
+    raw = {"host": "${DB_HOST}", "password": "${DB_PASSWORD}"}
+    environ = {"DB_HOST": "db.internal", "DB_PASSWORD": "s3cret-value"}
+
+    assert settings_as_resolved(raw, environ) == {
+        "host": "db.internal",
+        "password": "${DB_PASSWORD}",
+    }

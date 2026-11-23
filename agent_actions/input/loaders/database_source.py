@@ -27,8 +27,8 @@ _SNAPSHOT_LOCK = threading.Lock()
 def snapshot_fingerprint(connection: str, query: str, settings: Mapping[str, Any]) -> str:
     """What names a snapshot: the same query through the same connection settings.
 
-    *settings* are the connection's entry as the project file writes it, so a
-    credential is hashed as its ``${NAME}`` reference, never as its value.
+    *settings* are the connection's entry with its ``${NAME}`` values read in,
+    except a credential, which is hashed as its reference, never as its value.
     """
     written = json.dumps(dict(settings), sort_keys=True, default=str)
     return hashlib.sha256(f"{connection}\n{query}\n{written}".encode()).hexdigest()[:12]

@@ -288,3 +288,18 @@ def test_a_workflow_runs_from_a_query_to_a_table_on_this_database(settings, tmp_
 def test_a_query_returning_a_column_name_twice_is_refused(connector):
     with pytest.raises(ConfigurationError, match="returns id more than once; give each column"):
         list(connector.read("SELECT 1 AS id, 2 AS id"))
+
+
+def test_an_append_with_a_key_adds_only_the_rows_the_table_does_not_hold(connector, table):
+    _write(connector, table, [(1, "a"), (2, "b")], mode=WriteMode.APPEND, key=["id"])
+
+    assert _write(connector, table, [(2, "b"), (3, "c")], mode=WriteMode.APPEND, key=["id"]) == 1
+    assert _held(connector, table) == [(1, "a"), (2, "b"), (3, "c")]
+
+
+def test_a_merge_larger_than_one_statement_on_two_columns_replaces_each_row(connector, table):
+    rows = [(n, f"row {n}") for n in range(1200)]
+    _write(connector, table, rows, mode=WriteMode.MERGE, key=COLUMNS)
+    _write(connector, table, rows, mode=WriteMode.MERGE, key=COLUMNS)
+
+    assert _held(connector, table) == sorted(rows)

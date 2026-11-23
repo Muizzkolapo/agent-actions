@@ -49,6 +49,8 @@ class Dialect:
     # Quote each name upper-cased: the name a database that folds unquoted names
     # stores, still quoted, so a reserved word is a name and not a keyword.
     fold_upper: bool = False
+    # The most values one statement binds; a batch is split to stay under it.
+    max_params: int = 2000
     types: Mapping[ColumnType, str] = field(default_factory=lambda: _STANDARD_TYPES)
     # The type of a column given none; None declares the column with no type.
     untyped: str | None = "TEXT"
@@ -110,13 +112,19 @@ class DbApiConnector(Connector):
         return name
 
     def _insert(self, cursor: Any, table: str, columns: Sequence[str], rows: list[Any]) -> None:
-        """Add *rows*; a database with a faster path than INSERT overrides this."""
-        names = ", ".join(self.dialect.identifier(column) for column in columns)
-        markers = ", ".join(self.dialect.markers(len(columns)))
-        target = self.dialect.identifier(table)
-        # Names are validated identifiers and every value is bound.
-        statement = f"INSERT INTO {target} ({names}) VALUES ({markers})"  # nosec B608
-        cursor.executemany(statement, [self.dialect.bound(row) for row in rows])
+        """Add *rows*, many to a statement; a database with a faster path overrides this.
+
+        One INSERT a row is one round trip, and on a warehouse one job, a row.
+        """
+        dialect = self.dialect
+        names = ", ".join(dialect.identifier(column) for column in columns)
+        target = dialect.identifier(table)
+        for chunk in _statement_chunks(rows, len(columns), dialect.max_params):
+            markers = iter(dialect.markers(len(chunk) * len(columns)))
+            values = ", ".join("(" + ", ".join(next(markers) for _ in columns) + ")" for _ in chunk)
+            # Names are validated identifiers and every value is bound.
+            statement = f"INSERT INTO {target} ({names}) VALUES {values}"  # nosec B608
+            cursor.execute(statement, dialect.bound([value for row in chunk for value in row]))
 
     def _open(self) -> Any:
         if self._connection is None:
@@ -187,6 +195,8 @@ class DbApiConnector(Connector):
             raise ConfigurationError(
                 "A merge needs the key columns that identify a row", context={"table": table}
             )
+        if mode is WriteMode.APPEND and key:
+            rows = self._not_held(table, columns, rows, key)
         dialect = self.dialect
         target = dialect.identifier(table)
         key_positions = [columns.index(column) for column in key]
@@ -242,12 +252,39 @@ class DbApiConnector(Connector):
                 context={"table": table, "key": list(key)},
             )
         dialect = self.dialect
-        match = " AND ".join(
-            f"{dialect.identifier(column)} = {marker}"
-            for column, marker in zip(key, dialect.markers(len(key)), strict=True)
-        )
-        statement = f"DELETE FROM {dialect.identifier(table)} WHERE {match}"  # nosec B608
-        cursor.executemany(statement, [dialect.bound(values) for values in keys])
+        names = [dialect.identifier(column) for column in key]
+        for chunk in _statement_chunks(keys, len(key), dialect.max_params):
+            markers = iter(dialect.markers(len(chunk) * len(key)))
+            if len(key) == 1:
+                match = f"{names[0]} IN ({', '.join(next(markers) for _ in chunk)})"
+            else:
+                match = " OR ".join(
+                    "(" + " AND ".join(f"{name} = {next(markers)}" for name in names) + ")"
+                    for _ in chunk
+                )
+            statement = f"DELETE FROM {dialect.identifier(table)} WHERE {match}"  # nosec B608
+            cursor.execute(
+                statement, dialect.bound([value for values in chunk for value in values])
+            )
+
+    def _not_held(
+        self,
+        table: str,
+        columns: Sequence[str],
+        rows: Iterable[Sequence[Any]],
+        key: Sequence[str],
+    ) -> list[Sequence[Any]]:
+        positions = [columns.index(column) for column in key]
+        held = self.held_keys(table, key)
+        return [row for row in rows if tuple(row[p] for p in positions) not in held]
+
+    def held_keys(self, table: str, key: Sequence[str]) -> set[tuple[Any, ...]]:
+        """The *key* values *table* holds; none when there is no such table."""
+        if self._held_columns(self._open(), table) is None:
+            return set()
+        names = ", ".join(self.dialect.identifier(column) for column in key)
+        query = f"SELECT {names} FROM {self.dialect.identifier(table)}"  # nosec B608
+        return {tuple(row.values()) for row in self.read(query)}
 
     def _held_columns(self, connection: Any, table: str) -> list[str] | None:
         """The columns *table* has, or None when the database has no such table."""
@@ -306,6 +343,15 @@ def _refuse_missing_columns(
             f"Table {table} has no column {', '.join(missing)}; add it, or write to a new table",
             context={"table": table, "missing": missing},
         )
+
+
+def _statement_chunks(
+    rows: Sequence[Sequence[Any]], width: int, max_params: int
+) -> Iterator[Sequence[Sequence[Any]]]:
+    """*rows* in runs short enough that one statement binds at most *max_params* values."""
+    size = max(1, max_params // max(1, width))
+    for start in range(0, len(rows), size):
+        yield rows[start : start + size]
 
 
 def _batches(rows: Iterable[Sequence[Any]], size: int) -> Iterator[list[Sequence[Any]]]:

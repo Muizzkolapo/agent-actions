@@ -84,3 +84,20 @@ def _is_secret(key: str, model: type[BaseModel]) -> bool:
         and field.json_schema_extra.get("credential")
     )
     return marked or any(word in key.lower() for word in _SECRET_WORDS)
+
+
+def settings_as_resolved(
+    raw: Mapping[str, Any], environ: Mapping[str, str] = os.environ
+) -> dict[str, Any]:
+    """*raw* with each non-credential ``${NAME}`` read from *environ*; a credential stays a name.
+
+    What tells one connection from another without holding a secret's value.
+    """
+    resolved: dict[str, Any] = {}
+    for key, value in raw.items():
+        reference = _WHOLE_ENV_VAR.fullmatch(value) if isinstance(value, str) else None
+        secret = any(word in str(key).lower() for word in _SECRET_WORDS)
+        resolved[str(key)] = (
+            environ.get(reference.group(1), "") if reference and not secret else value
+        )
+    return resolved

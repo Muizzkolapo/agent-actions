@@ -177,19 +177,19 @@ def test_the_driver_is_handed_the_connection_s_settings(
         (
             "redshift",
             'CREATE TABLE IF NOT EXISTS "out"."labels" ("id" BIGINT, "label" VARCHAR(65535))',
-            'DELETE FROM "out"."labels" WHERE "id" = %s',
+            'DELETE FROM "out"."labels" WHERE "id" IN (%s)',
             'INSERT INTO "out"."labels" ("id", "label") VALUES (%s, %s)',
         ),
         (
             "snowflake",
             'CREATE TABLE IF NOT EXISTS "OUT"."LABELS" ("ID" NUMBER(38, 0), "LABEL" VARCHAR)',
-            'DELETE FROM "OUT"."LABELS" WHERE "ID" = %s',
+            'DELETE FROM "OUT"."LABELS" WHERE "ID" IN (%s)',
             'INSERT INTO "OUT"."LABELS" ("ID", "LABEL") VALUES (%s, %s)',
         ),
         (
             "databricks",
             "CREATE TABLE IF NOT EXISTS `out`.`labels` (`id` BIGINT, `label` STRING)",
-            "DELETE FROM `out`.`labels` WHERE `id` = :p0",
+            "DELETE FROM `out`.`labels` WHERE `id` IN (:p0)",
             "INSERT INTO `out`.`labels` (`id`, `label`) VALUES (:p0, :p1)",
         ),
     ],
@@ -207,7 +207,7 @@ def test_a_merge_is_sent_in_the_database_s_own_words(
         [] if kind == "databricks" else ["COMMIT"]
     )
     bound = driver.log[3][1]
-    assert bound == ([{"p0": 1, "p1": "a"}] if kind == "databricks" else [(1, "a")])
+    assert bound == ({"p0": 1, "p1": "a"} if kind == "databricks" else (1, "a"))
 
 
 def test_bigquery_adds_rows_by_a_load_job_into_the_full_table_name(driver, tmp_path, monkeypatch):
@@ -257,3 +257,18 @@ def test_a_table_the_database_will_not_show_is_refused_not_taken_as_absent(
             connector.write("labels", COLUMNS, [], mode=WriteMode.REPLACE)
 
     assert not any(statement.startswith(("CREATE", "DELETE")) for statement in driver.statements)
+
+
+@pytest.mark.parametrize("kind", ["redshift", "snowflake", "databricks"])
+def test_a_merge_sends_one_delete_and_one_insert_a_batch_not_one_a_row(
+    kind, driver, tmp_path, monkeypatch
+):
+    rows = [(n, f"row {n}") for n in range(40)]
+
+    with _open(kind, tmp_path, monkeypatch) as connector:
+        connector.write("labels", COLUMNS, rows, mode=WriteMode.MERGE, key=["id"], types=TYPES)
+
+    deletes = [s for s in driver.statements if s.startswith("DELETE")]
+    inserts = [s for s in driver.statements if s.startswith("INSERT")]
+    assert (len(deletes), len(inserts)) == (1, 1)
+    assert inserts[0].count("),") == 39

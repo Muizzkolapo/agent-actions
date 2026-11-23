@@ -34,6 +34,8 @@ class SqliteConnector(DbApiConnector):
         },
         # A column with no type holds a value as written; TEXT would turn 1 into '1'.
         untyped=None,
+        # The limit of a SQLite built before 3.32.
+        max_params=999,
     )
 
     def __init__(self, path: Path) -> None:

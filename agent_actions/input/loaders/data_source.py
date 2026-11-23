@@ -57,7 +57,7 @@ class DataSourceConfig(BaseModel):
     files: int = Field(
         default=DEFAULT_SNAPSHOT_FILES,
         ge=1,
-        le=1024,
+        le=256,
         description="Files the rows are spread over (for type=database)",
     )
 
@@ -338,8 +338,8 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourceResolutionResult:
     """Resolve a database data source -- read the query once and keep its rows on disk.
 
-    A snapshot is kept per query and connection settings, so a changed setting
-    reads again. ``agac run --refresh-input`` drops it, so the query is read again.
+    A snapshot is kept per query and connection settings (a ``${NAME}`` setting by
+    its value, a credential by its name), so a changed setting reads again. ``agac run --refresh-input`` drops it, so the query is read again.
     """
     if not config.connection or not config.sql or not config.sql.strip():
         raise ConfigurationError(
@@ -351,9 +351,10 @@ def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourc
         )
 
     from agent_actions.connections import connection_settings, open_connection
+    from agent_actions.connections.settings import settings_as_resolved
 
     project_root = find_project_root(str(agent_folder)) or agent_folder.resolve().parent
-    settings = connection_settings(config.connection, project_root)
+    settings = settings_as_resolved(connection_settings(config.connection, project_root))
     fingerprint = snapshot_fingerprint(config.connection, config.sql, settings)
     snapshot_dir = agent_folder / _REMOTE_CACHE_DIR / "database" / fingerprint / "data"
     if snapshot_dir.exists():

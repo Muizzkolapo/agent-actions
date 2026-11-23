@@ -42,6 +42,7 @@ class DatabricksConnector(DbApiConnector):
             ColumnType.BOOLEAN: "BOOLEAN",
         },
         untyped="STRING",
+        max_params=250,
     )
 
     def __init__(self, settings: DatabricksSettings) -> None:

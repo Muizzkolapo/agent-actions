@@ -206,3 +206,15 @@ def test_writing_one_action_s_output_when_none_writes_it_is_refused(tmp_path):
 
     with pytest.raises(ConfigurationError, match="No output writes grad; the actions with outputs"):
         write_outputs(_Stored([]), declared, tmp_path, actions=["grade"], only_action="grad")
+
+
+def test_an_append_output_written_twice_adds_each_record_once(connector):
+    store = _Stored([_record("g1", {"score": 4}), _record("g2", {"score": 2})])
+
+    assert write_output(store, _output(mode=WriteMode.APPEND), connector) == 2
+    assert write_output(store, _output(mode=WriteMode.APPEND), connector) == 0
+    assert len(_held(connector)) == 2
+
+    store = _Stored([_record("g1", {"score": 4}), _record("g3", {"score": 5})])
+    assert write_output(store, _output(mode=WriteMode.APPEND), connector) == 1
+    assert len(_held(connector)) == 3
