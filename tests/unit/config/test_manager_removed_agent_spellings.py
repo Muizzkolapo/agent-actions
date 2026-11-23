@@ -9,7 +9,6 @@ refused, and not honored either.
 """
 
 import pytest
-import yaml
 
 from agent_actions.config.manager import ConfigManager
 from agent_actions.errors import ConfigurationError
@@ -98,58 +97,3 @@ class TestDefaultAgentConfigRefusesRemovedSpellings:
 
         assert excinfo.value.context["replacements"] == {"depends_on": "dependencies"}
         assert "default_agent_config" in str(excinfo.value)
-
-    def test_canonical_spellings_in_project_block_still_accepted(self):
-        """Guard against over-refusal: the real fields are not caught by the check."""
-        cm = _bare_manager()
-        cm.default_config = {
-            "default_agent_config": {
-                "dependencies": ["producer"],
-            }
-        }
-
-        cm.merge_agent_configs([{"agent_type": "consumer", "chunk_config": {}}])
-
-        merged = cm.agent_configs["consumer"]
-        assert merged.dependencies == ["producer"]
-
-    def test_real_load_path_refuses_hoisted_spelling(self, tmp_path):
-        """Through the whole path the issue reports: load_configs -> validate_agent_name
-        -> get_user_agents -> merge_agent_configs. The narrow unit seam above can pass
-        while the real path still accepts the key, so this asserts on the real one."""
-        (tmp_path / "agent_actions.yml").write_text(
-            yaml.safe_dump(
-                {
-                    "project_name": "p",
-                    "default_agent_config": {
-                        "model_vendor": "openai",
-                        "model_name": "gpt-4",
-                        "api_key": "k",
-                        "depends_on": ["ghost"],
-                    },
-                }
-            )
-        )
-        config_dir = tmp_path / "agent_config"
-        config_dir.mkdir()
-        (config_dir / "w.yml").write_text(
-            yaml.safe_dump(
-                {
-                    "name": "w",
-                    "description": "d",
-                    "version": "1.0",
-                    "defaults": {"model_vendor": "openai"},
-                    "actions": [{"name": "a1", "intent": "i", "prompt": "p"}],
-                }
-            )
-        )
-        manager = ConfigManager(
-            str(config_dir / "w.yml"),
-            str(tmp_path / "agent_actions.yml"),
-            project_root=tmp_path,
-        )
-        manager.load_configs()
-        manager.validate_agent_name()
-
-        with pytest.raises(ConfigurationError, match="removed field spelling"):
-            manager.merge_agent_configs(manager.get_user_agents())

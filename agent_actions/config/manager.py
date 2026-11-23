@@ -138,6 +138,7 @@ def project_action_defaults(project_config: dict[str, Any]) -> dict[str, Any]:
     """The project's ``default_agent_config`` as the defaults each workflow's sit over."""
     project_defaults = project_config.get("default_agent_config", {})
     _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
+    _refuse_undeclared_or_raise(project_defaults, "load_project_defaults")
     project_defaults = _flatten_project_chunk_block(project_defaults)
     project_defaults = _validate_project_expect_block(project_defaults)
     _refuse_blank_project_output_field(project_defaults)
@@ -189,6 +190,18 @@ def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
     """Raise the framework's own error for a misplaced context_scope directive."""
     try:
         refuse_context_scope_siblings(block, surface)
+    except ValueError as e:
+        raise ConfigurationError(str(e), context={"operation": operation}) from e
+
+
+def _refuse_undeclared_or_raise(project_defaults: Any, operation: str) -> None:
+    """Raise the framework's own error for a `default_agent_config:` key nothing takes."""
+    from agent_actions.output.response.config_schema import (
+        refuse_undeclared_default_agent_keys,
+    )
+
+    try:
+        refuse_undeclared_default_agent_keys(project_defaults)
     except ValueError as e:
         raise ConfigurationError(str(e), context={"operation": operation}) from e
 

@@ -2,9 +2,14 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
-from agent_actions.config.schema import ChunkConfig
+from agent_actions.config.schema import (
+    ChunkConfig,
+    DefaultsConfig,
+    refuse_retired_keys,
+    refuse_undeclared_keys,
+)
 from agent_actions.config.types import RunMode
 from agent_actions.llm.config.vendor import canonical_vendor, vendor_names
 
@@ -17,6 +22,16 @@ class DefaultAgentConfig(BaseModel):
     For pre-expansion defaults validation, see ``DefaultsConfig`` in
     ``agent_actions.config.schema``.
     """
+
+    # The block is merged under each workflow's `defaults:`, so it takes the keys that
+    # block takes. Extras are kept: a key declared there and not here, such as
+    # `model_vendor`, still has to reach each agent.
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _no_undeclared_keys(cls, data: Any) -> Any:
+        return refuse_undeclared_default_agent_keys(data)
 
     api_key: SecretStr | None = None
     model_name: str | None = None
@@ -37,7 +52,13 @@ class DefaultAgentConfig(BaseModel):
     vendor_params: dict[str, Any] | None = Field(
         default=None, description="Default request parameters passed to the vendor SDK"
     )
-    model_config = ConfigDict(extra="allow")
+
+
+def refuse_undeclared_default_agent_keys(data: Any) -> Any:
+    """Refuse a `default_agent_config:` key that a `defaults:` block does not take."""
+    return refuse_undeclared_keys(
+        refuse_retired_keys(data, "default_agent_config"), DefaultsConfig, "default_agent_config"
+    )
 
 
 class AgentConfig(BaseModel):
@@ -126,4 +147,5 @@ class AgentConfig(BaseModel):
 __all__ = [
     "DefaultAgentConfig",
     "AgentConfig",
+    "refuse_undeclared_default_agent_keys",
 ]

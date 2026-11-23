@@ -186,7 +186,7 @@ def refuse_blank_output_field(data: Any, surface: str) -> Any:
     return data
 
 
-def _refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
+def refuse_undeclared_keys(data: Any, model: type[BaseModel], surface: str) -> Any:
     """Name every undeclared key, what each resembles, and the keys *surface* takes.
 
     The list is unconditional: a guess is a string-distance match, so it lands on
@@ -251,7 +251,7 @@ class VersionConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        return _refuse_undeclared_keys(_refuse_retired_version_keys(data), cls, "versions")
+        return refuse_undeclared_keys(_refuse_retired_version_keys(data), cls, "versions")
 
     param: str = Field(default="i", description="Parameter name for version variable")
     range: list[int | str] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
@@ -361,7 +361,7 @@ class ChunkConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        return _refuse_undeclared_keys(data, cls, "chunk_config")
+        return refuse_undeclared_keys(data, cls, "chunk_config")
 
     @staticmethod
     def retired_spellings() -> dict[str, str]:
@@ -816,7 +816,7 @@ class DefaultsConfig(_RetryValidators):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        return _refuse_undeclared_keys(
+        return refuse_undeclared_keys(
             refuse_blank_output_field(
                 refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
                 "defaults",
@@ -954,7 +954,7 @@ class StorageConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        data = _refuse_undeclared_keys(data, cls, "storage")
+        data = refuse_undeclared_keys(data, cls, "storage")
         if isinstance(data, dict):
             blank = sorted(str(key) for key, value in data.items() if value is None)
             if blank:
@@ -1017,7 +1017,7 @@ class WorkflowConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        data = _refuse_undeclared_keys(data, cls, "workflow")
+        data = refuse_undeclared_keys(data, cls, "workflow")
         if isinstance(data, dict) and "storage" in data and data["storage"] is None:
             # `storage:` left empty is None, not {}, and the consumer reads the raw
             # dict — `get("storage", {})` returns that None and then `.get` on it.
@@ -1147,6 +1147,7 @@ __all__ = [
     "ChunkConfig",
     "refuse_context_scope_siblings",
     "refuse_retired_keys",
+    "refuse_undeclared_keys",
     "Granularity",
     "HitlConfig",
     "VersionConfig",

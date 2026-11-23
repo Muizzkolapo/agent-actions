@@ -64,7 +64,7 @@ logging:
 
 | Field | Description |
 |-------|-------------|
-| `default_agent_config` | The default settings that all actions inherit, including `chunk_config`. See [Chunking](../data-io/chunking). Only the keys nested here reach an action. Nothing reads a `chunk_config:` at the top level of the file |
+| `default_agent_config` | The default settings that all actions inherit, including `chunk_config`. See [Chunking](../data-io/chunking). Only the keys nested here reach an action. Nothing reads a `chunk_config:` at the top level of the file. This block takes the keys that a workflow `defaults:` block takes (see [Defaults](./defaults)). The load refuses any other key. The error names the key, the valid key that it resembles, and all of the valid keys |
 | `schema_path` | The directory that contains the output schemas. Required: if it is not set, the load of a schema fails. `agac init` writes `schema_path: schema` |
 | `tool_path` | The directories to scan for custom tools |
 | `seed_data_path` | The directory for static reference data (default: `seed_data`) |
