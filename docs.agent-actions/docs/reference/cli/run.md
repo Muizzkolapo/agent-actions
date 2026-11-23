@@ -402,6 +402,8 @@ keep the `deferred` mark that they got at submission. The next run settles them 
 The default concurrency limit is 5 actions. The maximum is 50.
 :::
 
+The limit applies to every action, an online action too. To limit only the batch actions of a step that prepare at the same time, set [`batch_preparation_concurrency`](../configuration/index.md#batch-preparation-concurrency) in the workflow file. See [Memory while a batch step prepares](../execution/run-modes.md#batch-preparation-memory).
+
 If your workflow has many parallel actions and you get rate limit errors, consider a lower limit. If you have capacity, increase the limit, to a maximum of 50.
 
 ## Concurrent Runs {/* #concurrent-runs */}

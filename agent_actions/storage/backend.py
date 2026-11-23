@@ -4,7 +4,7 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
@@ -14,6 +14,7 @@ from agent_actions.config.defaults import StorageDefaults
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
 from agent_actions.record.reasons import PARSE_ERROR
+from agent_actions.utils.gc_pause import collector_paused
 from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
@@ -341,12 +342,14 @@ class StorageBackend(ABC):
     def _reconstructed_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Stored rows, reconstructed and lifecycle-validated. Cached pre-reset."""
         cache_key = (action_name, relative_path)
-        if cache_key not in self._reconstruction_cache:
-            result = self._read_target_raw(action_name, relative_path)
-            result = self._reconstruct_from_deltas(action_name, relative_path, result)
-            validate_lifecycle_batch(result, action_name=action_name)
-            self._reconstruction_cache[cache_key] = result
-        return plain_copy(self._reconstruction_cache[cache_key])
+        # Many new objects, none in a cycle: each collection they set off walks the heap.
+        with collector_paused():
+            if cache_key not in self._reconstruction_cache:
+                result = self._read_target_raw(action_name, relative_path)
+                result = self._reconstruct_from_deltas(action_name, relative_path, result)
+                validate_lifecycle_batch(result, action_name=action_name)
+                self._reconstruction_cache[cache_key] = result
+            return plain_copy(self._reconstruction_cache[cache_key])
 
     def forget_reconstructed(self, action_name: str, relative_path: str) -> None:
         """Drop one file's reconstructed rows from the cache; the next read rebuilds them."""
@@ -434,6 +437,16 @@ class StorageBackend(ABC):
     def save_metadata(self, key: str, value: str) -> None:
         """Store a metadata key-value pair. Clears related caches."""
         self._save_metadata_raw(key, value)
+        self._forget_cached_metadata(key)
+
+    def save_and_delete_metadata(self, saves: Mapping[str, str], deletes: Iterable[str]) -> None:
+        """Store *saves* and delete *deletes* in one transaction: all of it lands, or none."""
+        deletes = list(deletes)
+        self._save_and_delete_metadata_raw(saves, deletes)
+        for key in [*saves, *deletes]:
+            self._forget_cached_metadata(key)
+
+    def _forget_cached_metadata(self, key: str) -> None:
         if key == "execution_order":
             self._execution_order_cache = None
         elif key == "dependency_graph":
@@ -442,6 +455,11 @@ class StorageBackend(ABC):
     @abstractmethod
     def _save_metadata_raw(self, key: str, value: str) -> None:
         """Store a metadata key-value pair to the backend."""
+        ...
+
+    @abstractmethod
+    def _save_and_delete_metadata_raw(self, saves: Mapping[str, str], deletes: list[str]) -> None:
+        """Apply the saves and deletes in one transaction; on an error, apply none of them."""
         ...
 
     @abstractmethod
@@ -477,7 +495,7 @@ class StorageBackend(ABC):
             return set()
 
         identities: set[str] = set()
-        for records in self._read_target_raw_batch(upstream_actions, relative_path).values():
+        for _act, records in self._each_upstream_raw(upstream_actions, relative_path):
             for record in records:
                 if isinstance(record, dict):
                     guid = record.get("source_guid")
@@ -487,7 +505,20 @@ class StorageBackend(ABC):
                     # would call a row joinable that rejoins an empty namespace.
                     if guid and isinstance(content, dict) and content:
                         identities.add(guid)
+            del records
         return identities
+
+    def _each_upstream_raw(
+        self, action_names: list[str], relative_path: str
+    ) -> Iterator[tuple[str, list[dict[str, Any]]]]:
+        """Each action's stored rows of the file, decoded one action at a time.
+
+        Not all at once: a delta row keeps its whole envelope, so every upstream's
+        decoded rows together weigh several times the file they rebuild. The caller
+        keeps what it needs of one action's rows and lets them go before the next.
+        """
+        for name in action_names:
+            yield from self._read_target_raw_batch([name], relative_path).items()
 
     def _extract_delta(
         self,
@@ -551,15 +582,13 @@ class StorageBackend(ABC):
         if not upstream_actions:
             return [{k: v for k, v in r.items() if k != "_delta_mode"} for r in delta_records]
 
-        upstream_data = self._read_target_raw_batch(upstream_actions, relative_path)
-
         # A guid's "full" record is self-contained above the action that stored it,
         # so it bounds that guid's merge — the shallowest such action, because a
         # position in this list is not proof of being an ancestor.
         upstream: dict[str, dict[str, dict[str, Any]]] = {}
         full_boundary_guids: dict[str, str] = {}  # guid → action that has full record
         position = {act: i for i, act in enumerate(upstream_actions)}
-        for act, records in upstream_data.items():
+        for act, records in self._each_upstream_raw(upstream_actions, relative_path):
             guid_map: dict[str, dict[str, Any]] = {}
             for rec in records:
                 guid = rec.get("source_guid")
@@ -577,6 +606,7 @@ class StorageBackend(ABC):
                         if held is None or position.get(act, 0) < position.get(held, 0):
                             full_boundary_guids[guid] = act
             upstream[act] = guid_map
+            del records
 
         # For each current record, determine how far back to reconstruct: a guid
         # whose boundary is upstream skips that boundary's own upstream, which the
