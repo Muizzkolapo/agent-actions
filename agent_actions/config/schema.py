@@ -2,7 +2,7 @@
 
 import difflib
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -989,6 +989,22 @@ class StorageConfig(BaseModel):
     )
 
 
+# Strict because the coordinator reads the raw dict, where a coerced "2" stays a string.
+BatchPreparationConcurrency = Annotated[int, Field(ge=1, le=50, strict=True)]
+
+
+class OlderFormatWorkflowKeys(BaseModel):
+    """The top-level keys the run reads as written, in a workflow file of the older format.
+
+    That format skips :class:`WorkflowConfig`, so these keys are checked here by the
+    same rules.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    batch_preparation_concurrency: BatchPreparationConcurrency | None = None
+
+
 OUTPUT_IDENTITY_COLUMN = "source_guid"
 
 
@@ -1057,6 +1073,13 @@ class WorkflowConfig(BaseModel):
     )
     storage: StorageConfig | None = Field(
         default=None, description="Storage maintenance settings for this workflow"
+    )
+    batch_preparation_concurrency: BatchPreparationConcurrency | None = Field(
+        default=None,
+        description=(
+            "The most batch actions of one step that prepare at the same time; online "
+            "actions beside them are not counted. Unset: only --concurrency-limit applies"
+        ),
     )
     outputs: list[OutputConfig] | None = Field(
         default=None, description="Database tables this workflow's results are written to"

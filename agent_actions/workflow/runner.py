@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -49,7 +49,7 @@ class FileProcessParams:
     idx: int
     file_type_filter: set[str] | None = None
     # A version merge's input by file path, walked in place of a stored upstream.
-    correlated_input: dict[str, list[dict[str, Any]]] | None = None
+    correlated_input: Mapping[str, list[dict[str, Any]]] | None = None
 
 
 @dataclass
@@ -87,7 +87,7 @@ class ProcessGenerateParams:
     strategy: ActionStrategy
     previous_action_type: str | None
     idx: int
-    correlated_input: dict[str, list[dict[str, Any]]] | None = None
+    correlated_input: Mapping[str, list[dict[str, Any]]] | None = None
 
 
 class ActionRunner:
@@ -404,7 +404,7 @@ class ActionRunner:
         previous_action_type: str | None,
         idx: int,
         *,
-        correlated_input: dict[str, list[dict[str, Any]]] | None = None,
+        correlated_input: Mapping[str, list[dict[str, Any]]] | None = None,
     ) -> str:
         """Run an action with the appropriate strategy based on its position in the workflow."""
         dependencies = action_config.get("dependencies", [])

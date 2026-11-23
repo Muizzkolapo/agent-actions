@@ -102,6 +102,25 @@ actions:
 - Agent Actions sends the judge batch of an Ollama batch action (see [Judging in batch](../validation/expectations.md#judging-in-batch)) in the same way, `batch_max_workers` requests at a time.
 - Each request of an Ollama batch waits the [`request_timeout`](../configuration/index.md#request-timeout) of the action, or 600 seconds if the action sets none.
 
+### Memory while a batch step prepares {/* #batch-preparation-memory */}
+
+A batch action prepares its requests one input file at a time. The store keeps the output of an action as one entry for each input file. Thus, to read a record, the store reads all of the records of that file. While the action prepares a file, it holds:
+
+- The records of that file, with the namespace of each action above it. This is the largest part.
+- One request for each record of the file. A request holds only what the prompt observes.
+- The context map of the batch. Collection rebuilds each output row from this map. The map holds each record of the file, and it shares the record with the input. The store keeps the map in parts of about 4 MB. Thus a save does not make a second copy of the file in memory.
+
+The action lets the file go before it reads the next file. Thus the memory grows with the largest input file, and not with all of the files. To lower the peak, split a large staging file into smaller files.
+
+All of the actions of a step run at the same time, up to `--concurrency-limit` (default 5). Each batch action of the step holds one file. An online action beside it also holds the file that it processes. For a step with large records, use one of these settings:
+
+| Setting | What it limits | Effect on the other actions |
+|---------|----------------|-----------------------------|
+| [`batch_preparation_concurrency`](../configuration/index.md#batch-preparation-concurrency) in the workflow file | The batch actions of a step that prepare at the same time | An online action of the step continues to run beside them. A batch action that collects is not limited |
+| `--concurrency-limit 1` or `--execution-mode sequential` | Every action of the run | An online action of the step waits for the batch actions, or the batch actions wait for the online action. An online action can run for many minutes, so the batch requests can go out much later |
+
+Each batch file writes a `Prepared {action}/{file} in ...` line to the run log. The line gives the time, the number of records and requests, and the peak memory of the process. Each `StepCompleteEvent` has `peak_rss_mb`. Use these values to find the step and the file that use the most memory.
+
 ### How a batch reads an answer
 
 A batch action reads each answer as the same action reads the answer online:

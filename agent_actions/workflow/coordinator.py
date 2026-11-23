@@ -8,6 +8,7 @@ import logging
 from collections.abc import Container, Iterable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from rich.console import Console
@@ -504,6 +505,9 @@ class AgentWorkflow:
                             action_executor=self.services.core.action_executor,
                             concurrency_limit=concurrency_limit,
                             total_steps=len(levels),
+                            batch_preparation_concurrency=self._workflow_setting(
+                                "batch_preparation_concurrency"
+                            ),
                         )
                     )
 
@@ -673,6 +677,12 @@ class AgentWorkflow:
                     e, elapsed_time=duration, failed_action=running
                 )
                 raise
+
+    def _workflow_setting(self, key: str) -> Any:
+        """A top-level key of the workflow file as written; the config load has checked it."""
+        config_mgr = getattr(self.config, "manager", None)
+        user_cfg = getattr(config_mgr, "user_config", None)
+        return user_cfg.get(key) if isinstance(user_cfg, dict) else None
 
     def _run_storage_maintenance(self) -> None:
         """Run post-workflow storage maintenance (WAL checkpoint, cleanup)."""

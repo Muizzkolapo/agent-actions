@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,6 +26,46 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _CORRELATION_KEYS = frozenset({"_correlation_sources", "_missing_iterations"})
+
+
+class CorrelatedInput(Mapping[str, list[dict[str, Any]]]):
+    """A version merge's input by file path, correlated each time a file is looked up.
+
+    Holds no rows, so the walk holds one file's merged input at a time.
+    """
+
+    def __init__(
+        self,
+        paths: Iterable[str],
+        correlate: Callable[[str], list[dict[str, Any]]],
+    ) -> None:
+        self._paths = tuple(sorted(paths))
+        self._known = frozenset(self._paths)
+        self._correlate = correlate
+
+    def __getitem__(self, path: str) -> list[dict[str, Any]]:
+        if path not in self._known:
+            raise KeyError(path)
+        return self._correlate(path)
+
+    def __contains__(self, path: object) -> bool:
+        return path in self._known
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._paths)
+
+    def __len__(self) -> int:
+        return len(self._paths)
+
+
+def _correlation_failed(
+    agent_name: str, version_sources: list[str], error: Exception
+) -> ConfigurationError:
+    """A raw backend or OS fault, as a clean, loud error naming the merge."""
+    return ConfigurationError(
+        f"Version correlation failed for '{agent_name}' from sources {version_sources}: {error}",
+        context={"action_name": agent_name, "version_sources": version_sources},
+    )
 
 
 class VersionOutputCorrelator:
@@ -77,133 +118,137 @@ class VersionOutputCorrelator:
                     )
         return version_consumption_map
 
-    def _load_version_outputs(
-        self, version_sources: list[str], lost: list[str] | None = None
-    ) -> tuple[dict[str, list[dict[str, Any]]], set]:
-        """Load outputs from all version sources, preferring storage backend over filesystem."""
-        version_outputs = {}
-        version_filenames = set()
-
-        for version_agent in version_sources:
-            outputs, filenames = self._load_from_storage_backend(version_agent, lost)
-            if outputs:
-                version_outputs[version_agent] = outputs
-                version_filenames.update(filenames)
-
-        return version_outputs, version_filenames
-
-    def _load_from_storage_backend(
-        self, version_agent: str, lost: list[str] | None = None
-    ) -> tuple[list[dict[str, Any]], set]:
-        """Load outputs from storage backend for a version agent."""
-        if self.storage_backend is None:
+    def _read_version_file(
+        self, version_agent: str, relative_path: str, lost: list[str]
+    ) -> list[dict[str, Any]] | None:
+        """One version's rows of *relative_path*, dropped from the store's cache; None if gone."""
+        assert self.storage_backend is not None
+        try:
+            rows = self.storage_backend.read_target(version_agent, relative_path)
+        except FileNotFoundError:
+            lost.append(relative_path)
             logger.warning(
-                "No storage backend configured — cannot load version outputs for %s",
+                "Target %s/%s listed but not found (possible TOCTOU race) — skipping",
                 version_agent,
+                relative_path,
+                extra=DIAGNOSTIC,
             )
-            return [], set()
+            return None
+        finally:
+            self.storage_backend.forget_reconstructed(version_agent, relative_path)
+        for record in rows:
+            record["_source_file"] = relative_path
+        return rows
 
-        outputs = []
-        filenames = set()
+    def _versions_of_file(
+        self, relative_path: str, version_agents: list[str], lost: list[str]
+    ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+        """Each version's rows of one file where it holds any, and the versions whose read found it."""
+        outputs: dict[str, list[dict[str, Any]]] = {}
+        found: list[str] = []
+        for version_agent in version_agents:
+            rows = self._read_version_file(version_agent, relative_path, lost)
+            if rows is None:
+                continue
+            found.append(version_agent)
+            if rows:
+                outputs[version_agent] = rows
+        return outputs, found
 
-        target_files = self.storage_backend.list_target_files(version_agent)
-        if not target_files:
-            logger.debug(
-                "No target files found in storage backend for %s",
-                version_agent,
-            )
-            return [], set()
-
-        for relative_path in target_files:
-            try:
-                data = self.storage_backend.read_target(version_agent, relative_path)
-                if isinstance(data, list):
-                    for record in data:
-                        record["_source_file"] = relative_path
-                    outputs.extend(data)
-                else:
-                    data["_source_file"] = relative_path  # type: ignore[unreachable]
-                    outputs.append(data)
-                filenames.add(relative_path)
-            except FileNotFoundError:
-                if lost is not None:
-                    lost.append(relative_path)
-                logger.warning(
-                    "Target %s/%s listed but not found (possible TOCTOU race) — skipping",
-                    version_agent,
-                    relative_path,
-                    extra=DIAGNOSTIC,
-                )
-
-        logger.debug(
-            "Loaded %d records from storage backend for %s (files: %s)",
-            len(outputs),
-            version_agent,
-            list(filenames),
+    def _correlate_file(
+        self, file_version_outputs: dict[str, list[dict[str, Any]]], *, warn_of_folds: bool
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """One file's merged records, and the source records merged apart in it."""
+        records = self._correlate_by_source_record(
+            file_version_outputs, warn_of_folds=warn_of_folds
         )
-        return outputs, filenames
-
-    def _process_version_files(
-        self,
-        version_outputs: dict[str, list[dict[str, Any]]],
-        version_filenames: set,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Correlate outputs by file; a file every version holds empty correlates to []."""
-        correlated: dict[str, list[dict[str, Any]]] = {}
-        for filename in version_filenames:
-            file_version_outputs = {}
-            for version_agent, outputs in version_outputs.items():
-                file_outputs = [o for o in outputs if o.get("_source_file") == filename]
-                if file_outputs:
-                    file_version_outputs[version_agent] = file_outputs
-            records = self._correlate_by_source_record(file_version_outputs)
-            split = _split_across_ids(records)
-            correlated[filename] = [
-                {k: v for k, v in record.items() if k not in _CORRELATION_KEYS}
-                for record in records
-            ]
-            if split:
-                self.split_records[filename] = split
-        return correlated
+        split = _split_across_ids(records)
+        merged = [
+            {k: v for k, v in record.items() if k not in _CORRELATION_KEYS} for record in records
+        ]
+        return merged, split
 
     def prepare_correlated_input(
         self, agent_name: str, version_sources: list[str], _current_idx: int
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> CorrelatedInput:
         """Return the merged input of each file a version source lists, by its path.
 
         Handed to the consumer's walk rather than stored: the consumer's own target
-        holds its answers, which a run carries records from. Raises
+        holds its answers, which a run carries records from. Correlation pairs rows
+        within one file, so each file is read and correlated here to check it, then
+        again when the walk asks for it; no rows are held between. Raises
         AllVersionsFilteredError when every version source produced zero records
         (nothing to merge — the caller cascade-skips), ConfigurationError on a
         storage fault, or DataValidationError when a version record cannot be aligned.
         """
         try:
+            if self.storage_backend is None:
+                logger.warning(
+                    "No storage backend configured — cannot load version outputs for %s",
+                    version_sources,
+                )
+                raise AllVersionsFilteredError(agent_name, version_sources)
+            listed: dict[str, list[str]] = {}
+            for version_agent in version_sources:
+                for relative_path in self.storage_backend.list_target_files(version_agent):
+                    listed.setdefault(relative_path, []).append(version_agent)
             lost: list[str] = []
-            version_outputs, version_filenames = self._load_version_outputs(version_sources, lost)
+            found: dict[str, list[str]] = {}
+            holding: set[str] = set()
+            split_records: dict[str, list[str]] = {}
+            for relative_path in sorted(listed):
+                outputs, found[relative_path] = self._versions_of_file(
+                    relative_path, listed[relative_path], lost
+                )
+                holding.update(outputs)
+                merged, split = self._correlate_file(outputs, warn_of_folds=True)
+                if split:
+                    split_records[relative_path] = split
+                # Let go before the next file is read, not when its rows replace these.
+                del outputs, merged
             if lost:
                 # A source that vanished between listing and reading is skipped
                 # rather than raised, so the correlated input the consumer then
                 # walks is already short and its slice never sees the records.
                 forget_slice_observation(self.storage_backend, agent_name)
-            if not version_outputs:
+            if not holding:
                 raise AllVersionsFilteredError(agent_name, version_sources)
 
-            self.split_records = {}
-            correlated = self._process_version_files(version_outputs, version_filenames)
+            self.split_records = split_records
             if self.split_records:
                 _warn_of_versions_merged_apart(agent_name, version_sources, self.split_records)
             self._forget_files_no_version_holds(agent_name, version_sources)
-            return correlated
+            # A version that holds no row in any file names no file of the input.
+            versions_of = {
+                path: kept
+                for path, versions in found.items()
+                if (kept := [version for version in versions if version in holding])
+            }
+            return CorrelatedInput(
+                versions_of,
+                lambda path: self._correlated_file(agent_name, path, versions_of[path]),
+            )
         except (AllVersionsFilteredError, AgentActionsError):
             raise
         except Exception as e:
-            # Translate raw backend/OS faults into a clean, loud ConfigurationError
-            # rather than letting a raw traceback escape.
-            raise ConfigurationError(
-                f"Version correlation failed for '{agent_name}' from sources "
-                f"{version_sources}: {e}",
-                context={"action_name": agent_name, "version_sources": version_sources},
-            ) from e
+            raise _correlation_failed(agent_name, version_sources, e) from e
+
+    def _correlated_file(
+        self, agent_name: str, relative_path: str, version_agents: list[str]
+    ) -> list[dict[str, Any]]:
+        """The merged input of one file, read again from each version that holds it."""
+        try:
+            lost: list[str] = []
+            outputs, _found = self._versions_of_file(relative_path, version_agents, lost)
+            if lost:
+                forget_slice_observation(self.storage_backend, agent_name)
+            # The check pass warned of each record a version folded away.
+            merged, _split = self._correlate_file(outputs, warn_of_folds=False)
+            return merged
+        except AgentActionsError:
+            raise
+        except Exception as e:
+            raise _correlation_failed(agent_name, version_agents, e) from e
 
     def _forget_files_no_version_holds(self, agent_name: str, version_sources: list[str]) -> None:
         """Delete the merge's stored files that no version source lists: their input is gone.
@@ -290,7 +335,7 @@ class VersionOutputCorrelator:
         return merged_record
 
     def _correlate_by_source_record(
-        self, version_outputs: dict[str, list[dict[str, Any]]]
+        self, version_outputs: dict[str, list[dict[str, Any]]], *, warn_of_folds: bool = True
     ) -> list[dict[str, Any]]:
         """Correlate version outputs by source record ID using merge pattern."""
         correlation_groups = self._build_correlation_groups(version_outputs)
@@ -305,7 +350,9 @@ class VersionOutputCorrelator:
             if agent_records:
                 merged_record = self._create_merged_record(agent_records, version_outputs)
                 correlated_records.append(
-                    _left_for_the_version_that_folded_it(merged_record, agent_records, folded_into)
+                    _left_for_the_version_that_folded_it(
+                        merged_record, agent_records, folded_into, warn=warn_of_folds
+                    )
                 )
         return correlated_records
 
@@ -353,6 +400,8 @@ def _left_for_the_version_that_folded_it(
     merged: dict[str, Any],
     agent_records: dict[str, dict[str, Any]],
     folded_into: dict[str, dict[str, tuple[str, dict[str, Any]]]],
+    *,
+    warn: bool = True,
 ) -> dict[str, Any]:
     """*merged* blocked when a version holding no record of it folded it into another row.
 
@@ -367,16 +416,17 @@ def _left_for_the_version_that_folded_it(
         for guid in guids:
             if guid in folded_into[version]:
                 action, row = folded_into[version][guid]
-                logger.warning(
-                    "Version merge: record %s was consumed into another record's output (%s) "
-                    "by '%s', which holds no record of it; it is left unprocessed here with "
-                    "reason consumed_into_another_record",
-                    guid,
-                    row.get("source_guid"),
-                    action,
-                )
+                if warn:
+                    logger.warning(
+                        "Version merge: record %s was consumed into another record's output (%s) "
+                        "by '%s', which holds no record of it; it is left unprocessed here with "
+                        "reason consumed_into_another_record",
+                        guid,
+                        row.get("source_guid"),
+                        action,
+                    )
                 return consumed_into_another(merged, action=action, row=row)
     return merged
 
 
-__all__ = ["VersionOutputCorrelator"]
+__all__ = ["CorrelatedInput", "VersionOutputCorrelator"]

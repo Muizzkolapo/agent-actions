@@ -1,5 +1,7 @@
 """``workflow_metadata`` key/value access for the SQLite store."""
 
+from collections.abc import Mapping
+
 from agent_actions.storage.backends.sqlite.common import SQLiteHost
 
 
@@ -15,6 +17,22 @@ class SQLiteMetadataMixin(SQLiteHost):
                 (key, value),
             )
             self.connection.commit()
+
+    def _save_and_delete_metadata_raw(self, saves: Mapping[str, str], deletes: list[str]) -> None:
+        with self._lock:
+            try:
+                self.connection.executemany(
+                    "INSERT OR REPLACE INTO workflow_metadata (key, value, updated_at) "
+                    "VALUES (?, ?, CURRENT_TIMESTAMP)",
+                    list(saves.items()),
+                )
+                self.connection.executemany(
+                    "DELETE FROM workflow_metadata WHERE key = ?", [(key,) for key in deletes]
+                )
+                self.connection.commit()
+            except BaseException:
+                self.connection.rollback()
+                raise
 
     def load_metadata(self, key: str) -> str | None:
         """Load a metadata value by key. Returns None if not found."""

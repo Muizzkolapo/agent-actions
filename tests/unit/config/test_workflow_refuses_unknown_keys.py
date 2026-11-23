@@ -52,8 +52,8 @@ class TestAKeyTheWorkflowDoesNotDeclare:
         assert "unknown workflow key 'pipeline'" in message
         assert "did you mean" not in message
         assert (
-            "valid workflow keys are actions, defaults, description, name, outputs, storage, tool_path, version"
-            in message
+            "valid workflow keys are actions, batch_preparation_concurrency, defaults, "
+            "description, name, outputs, storage, tool_path, version" in message
         )
 
     def test_the_retired_plan_key_is_refused(self):

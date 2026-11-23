@@ -229,33 +229,37 @@ class BatchSubmissionService:
         holding = carry_ids - filtered
         if not holding:
             return filtered
-        # With no file stored, a carried input's only row is a checkpoint row, which
-        # finalize does not read.
+        stored_name = batch_output_name(batch_name)
         try:
-            self._storage_backend.read_target_for_rewrite(
-                action_name, batch_output_name(batch_name)
+            # With no file stored, a carried input's only row is a checkpoint row, which
+            # finalize does not read.
+            try:
+                self._storage_backend.read_target_for_rewrite(action_name, stored_name)
+            except FileNotFoundError:
+                return filtered | holding
+            from agent_actions.processing.disposition_gate import (
+                answered_since_stored,
+                build_carry_forward,
             )
-        except FileNotFoundError:
-            return filtered | holding
-        from agent_actions.processing.disposition_gate import (
-            answered_since_stored,
-            build_carry_forward,
-        )
 
-        # Answered online after the file was stored, so its stored row is older than
-        # its answer; and finalize does not read the checkpoint row that holds it.
-        answered_since = holding & answered_since_stored(
-            self._storage_backend, action_name, batch_output_name(batch_name)
-        )
-        _found, missing = build_carry_forward(
-            holding,
-            action_name,
-            batch_output_name(batch_name),
-            self._storage_backend,
-            produced_by=holding,
-            rewriting={guid for record in to_process if (guid := record.get("source_guid"))},
-        )
-        return filtered | missing | answered_since
+            # Answered online after the file was stored, so its stored row is older than
+            # its answer; and finalize does not read the checkpoint row that holds it.
+            answered_since = holding & answered_since_stored(
+                self._storage_backend, action_name, stored_name
+            )
+            _found, missing = build_carry_forward(
+                holding,
+                action_name,
+                stored_name,
+                self._storage_backend,
+                produced_by=holding,
+                rewriting={guid for record in to_process if (guid := record.get("source_guid"))},
+            )
+            return filtered | missing | answered_since
+        finally:
+            # The reads above share one reconstruction through the store's cache, which
+            # only a write clears, and a batch writes nothing while it prepares.
+            self._storage_backend.forget_reconstructed(action_name, stored_name)
 
     def submit_batch_job(
         self,
@@ -501,6 +505,8 @@ class BatchSubmissionService:
             )
         except FileNotFoundError:
             return []
+        # The caller holds its own copy; the store's cache would keep another until a write.
+        self._storage_backend.forget_reconstructed(action_name, stored_name)
         return rows
 
     def _write_for_inputs_carried(
@@ -544,6 +550,8 @@ class BatchSubmissionService:
             # Handed to the merge, no inputs reads as none recorded and keeps every row.
             # An empty input is a file online writes empty.
             rows = []
+        # Not read again: only the write below would clear it from the store's cache.
+        self._storage_backend.forget_reconstructed(action_name, stored_name)
         # The merge keeps a subsequence of the stored rows, so an equal count is no change.
         if stored is not None and len(rows) == len(stored):
             return
