@@ -87,12 +87,28 @@ def rules_for(agent_config: dict[str, Any], action: str) -> list[Expectation]:
 
 
 def observed_refs(agent_config: dict[str, Any]) -> list[str]:
-    """The action's ``context_scope.observe`` references, as written."""
+    """The action's ``context_scope.observe`` references a mock answer may copy from.
+
+    Not a loop's feedback input: it holds the previous iteration, and a copy of it would
+    keep every iteration on one value.
+    """
     scope = agent_config.get("context_scope")
     entries = scope.get("observe") if isinstance(scope, dict) else None
     if not isinstance(entries, list):
         return []
-    return [entry.rstrip("?") for entry in entries if isinstance(entry, str)]
+    feedback = _feedback_namespaces(agent_config)
+    refs = [entry.rstrip("?") for entry in entries if isinstance(entry, str)]
+    return [ref for ref in refs if ref.partition(".")[0] not in feedback]
+
+
+def _feedback_namespaces(agent_config: dict[str, Any]) -> set[str]:
+    """Each name a loop iteration's action reads the previous iteration under."""
+    origin = agent_config.get("_include")
+    if not isinstance(origin, dict) or not isinstance(origin.get("loop"), dict):
+        return set()
+    names = origin.get("names") if isinstance(origin.get("names"), dict) else {}
+    keys = [key for key in origin["loop"].get("feedback") or [] if isinstance(key, str)]
+    return {*keys, *(str(names[key]) for key in keys if key in names)}
 
 
 def parse_context(context_data: Any) -> dict[str, Any]:
@@ -212,7 +228,7 @@ class Contract:
     def _echoes(self, fields: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Each output field an observe reference names exactly, with that input's value.
 
-        Not a wildcard: ``prior.*`` in a loop observes the very field the action rewrites.
+        Not a wildcard, which can hold the very field the action rewrites.
         """
         found: dict[str, Any] = {}
         for ref in self.observe:

@@ -90,10 +90,10 @@ def _config(rules: list[dict], observe: list[str] | None = None) -> dict[str, An
     return config
 
 
-def _online(schema, rules, prompt, context=None, observe=None) -> dict[str, Any]:
+def _online(schema, rules, prompt, context=None, observe=None, config=None) -> dict[str, Any]:
     [record] = AgacClient.call_json(
         None,
-        _config(rules, observe),
+        config or _config(rules, observe),
         prompt,
         json.dumps(context or {"source": {"page_content": "..."}}),
         {"name": "out", "schema": schema},
@@ -101,9 +101,13 @@ def _online(schema, rules, prompt, context=None, observe=None) -> dict[str, Any]
     return record
 
 
-def _batch(schema, rules, prompt, context=None, observe=None) -> dict[str, Any]:
+def _batch(schema, rules, prompt, context=None, observe=None, config=None) -> dict[str, Any]:
     client = AgacBatchClient()
-    config = {**_config(rules, observe), "model_name": "agac-model", "compiled_schema": schema}
+    config = {
+        **(config or _config(rules, observe)),
+        "model_name": "agac-model",
+        "compiled_schema": schema,
+    }
     row = {
         "target_id": "r1",
         "content": context or {"source": {"page_content": "..."}},
@@ -245,6 +249,60 @@ class TestUpstreamEcho:
         )
 
         assert record["invoice_id"].startswith("X-")
+
+    @pytest.mark.parametrize("mode", sorted(ANSWER))
+    def test_a_loop_writer_does_not_copy_the_previous_iteration(self, mode):
+        """A copy of the field the loop rewrites would hold every round on one value."""
+        from agent_actions.config.includes import expand_workflow_includes
+        from agent_actions.config.loops import expand_loops
+
+        branch = {
+            "branch": "rewrite_round",
+            "description": "Rewrite, then check",
+            "inputs": {"prior": "the previous check"},
+            "outputs": ["check"],
+            "actions": [
+                {
+                    "name": "write",
+                    "intent": "Write",
+                    "prompt": "$wf.Write",
+                    "schema": "draft",
+                    "context_scope": {"observe": ["prior.invoice_id"]},
+                },
+                {
+                    "name": "check",
+                    "kind": "tool",
+                    "impl": "check_it",
+                    "intent": "Check",
+                    "schema": "verdict",
+                    "dependencies": ["write"],
+                },
+            ],
+        }
+        workflow = {
+            "name": "wf",
+            "actions": [
+                {
+                    "loop": "round",
+                    "include": "rewrite_round",
+                    "max_iterations": 2,
+                    "feedback": {"prior": "check"},
+                    "until": "check.passed == true",
+                    "result": "check",
+                }
+            ],
+        }
+        data, _ = expand_workflow_includes(workflow, "wf.yml", {"rewrite_round": branch}, [])
+        writer = next(a for a in expand_loops(data)["actions"] if a["name"] == "round_iter2__write")
+        [observed] = writer["context_scope"]["observe"]
+        context = {observed.split(".")[0]: {"invoice_id": "INV-1"}}
+
+        record = ANSWER[mode](
+            SCHEMA, [], SEEDS[0], context=context, config={**writer, "json_mode": True}
+        )
+
+        assert observed.endswith(".invoice_id")
+        assert record["invoice_id"] != "INV-1"
 
     def test_an_unobserved_field_is_not_copied(self):
         record = _online(SCHEMA, [], SEEDS[0], context=self.CONTEXT, observe=["extract.total"])
