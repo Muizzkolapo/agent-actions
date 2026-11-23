@@ -83,7 +83,7 @@ Key Functions
 |--------|------|-------------|------------|
 | `VersionConfig` | `agent_config/{workflow}.yml` | Validates | `actions[].versions` (applied by the render step) |
 | `WorkflowConfig` | `agent_config/{workflow}.yml` | Reads | `name`, `description`, `version`, `defaults`, `actions`, `tool_path`, `storage`, `batch_preparation_concurrency` (extras refused) |
-| `refuse_agents_format` | `agent_config/{workflow}.yml` | Validates | top-level `agents:`, or a top-level key that holds `agents:` or `agent_type` entries (refused: agac reads only `name:` and `actions:`) |
+| `refuse_agents_format` | `agent_config/{workflow}.yml` | Validates | top-level `agents:`, or a top-level key that holds an `agents:` list or a list of `agent_type` entries (refused: agac reads only `name:` and `actions:`) |
 | `ActionConfig` | `agent_config/{workflow}.yml` | Validates | `name`, `intent`, `kind`, `impl`, `model_vendor`, `model_name`, `schema`, `guard`, `dependencies` |
 | `ActionConfig._plain_observe`, `DefaultsConfig._plain_observe` | `agent_config/{workflow}.yml` | Validates | `actions[].context_scope.observe`, `defaults.context_scope.observe` (an entry may be optional: `action.field?` or `{field, optional, default}`) |
 | `DefaultsConfig` | `agent_config/{workflow}.yml` | Validates | `model_vendor`, `model_name`, `granularity`, `run_mode`, `on_empty`, `data_source`, `request_timeout` (positive seconds, also on `ActionConfig`; unset or null, 600, except on a declared endpoint, which keeps its `timeout_seconds`), `context_window` (positive whole tokens, also on `ActionConfig`; the prompt-size guard's window, over the model table), `guard_timeout` (positive seconds; a guard's own `timeout` wins; unset, 5) |
