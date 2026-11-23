@@ -1,0 +1,10 @@
+kind: Under the Hood
+body: >-
+  Removed four legacy shims that no current run reaches. The docs parser no longer copies
+  action-level `loop` and `loop_consumption` keys, which the action config refuses. The batch
+  collect step no longer deletes old placeholder files, and the JSON reader no longer refuses
+  a file shaped like one; no run has written one since #682. A project file with
+  `output_storage` is no longer warned about. The completion stamp no longer reads the old
+  `max_records` key or its truncation marker; `record_limit` replaced it in #1005. A project
+  state from an older release can be rebuilt with `agac run --fresh`.
+time: 2026-11-23T16:05:00.000000+00:00

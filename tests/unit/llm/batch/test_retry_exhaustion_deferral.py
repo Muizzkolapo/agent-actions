@@ -190,7 +190,6 @@ class TestTheRunStillHaltsAfterTheFileIsWritten:
         with (
             patch.object(pr, "RecoveryStateManager"),
             patch.object(pr, "cleanup_recovery", side_effect=lambda *a: order.append("cleanup")),
-            patch.object(pr, "_remove_batch_placeholder"),
         ):
             raised = None
             try:

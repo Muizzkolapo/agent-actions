@@ -1,9 +1,4 @@
-"""A first-stage batch over a staged file in a subdirectory leaves no file on disk.
-
-Submission wrote a placeholder for the file at its folder joined with its relative path
-again, and collection removes one only at the name the file is stored under, so it stayed,
-for a reader of the target folder to take for a batch still out.
-"""
+"""A first-stage batch over a staged file in a subdirectory leaves no file on disk."""
 
 from tests.integration.test_a_batch_the_provider_refuses import (
     CLI_ACTION,

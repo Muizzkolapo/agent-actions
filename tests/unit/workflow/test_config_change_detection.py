@@ -519,29 +519,6 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         )
         assert [backend.get_disposition(name) for name in names] == [[], [], []]
 
-    def test_a_cap_an_earlier_run_recorded_outlives_a_reset_stopped_part_way(self, tmp_path):
-        """It is the only record of that cap. Gone from the file before the action is
-        reopened, a process that dies in between leaves a truncated action served as
-        finished."""
-        executor, state_mgr, backend = self._workflow(tmp_path)
-        state_mgr.update_status("split", ActionStatus.COMPLETED, record_limit=8, max_records=2)
-        clear = backend.clear_disposition
-
-        def killed_at_grade(action_name, *args, **kwargs):
-            if action_name == "grade":
-                raise RuntimeError("killed")
-            return clear(action_name, *args, **kwargs)
-
-        backend.clear_disposition = killed_at_grade
-
-        with pytest.raises(RuntimeError, match="killed"):
-            executor._maybe_invalidate_completed_status(
-                "split", {**self.CONFIGS["split"], "record_limit": 8}, ActionStatus.COMPLETED
-            )
-
-        next_process = ActionStateManager(tmp_path / "status.json", list(self.CONFIGS))
-        assert next_process.adopt_truncation_marker("split") is True
-
     @pytest.mark.parametrize("left_as", [ActionStatus.BATCH_SUBMITTED, ActionStatus.PENDING])
     def test_a_batch_a_reader_still_has_out_is_given_up_and_named(self, tmp_path, caplog, left_as):
         """Pending too: a run stopped while collecting is put back to pending by the

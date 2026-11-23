@@ -673,9 +673,6 @@ class TestLimitStatusInvalidation:
     def mock_deps(self):
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock(spec=ActionStateManager)
-        # No marker in the stamp is the ordinary case; a mock would
-        # otherwise answer with something truthy.
-        deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
         deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
@@ -816,51 +813,16 @@ class TestTheCompletionStamp:
     def executor(self):
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock(spec=ActionStateManager)
-        # No marker in the stamp is the ordinary case; a mock would
-        # otherwise answer with something truthy.
-        deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
         deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
         return ActionExecutor(deps)
 
-    def test_a_recorded_cap_reopens_the_action(self, executor):
-        """The stamp says completed under the configured limit, and the marker
-        says the run that wrote it never reached that limit."""
+    def test_a_matching_stamp_stays_completed(self, executor):
         executor.deps.state_manager.get_status_details.return_value = {
             "status": ActionStatus.COMPLETED,
             "record_limit": 8,
         }
-        executor.deps.state_manager.adopt_truncation_marker.return_value = True
-
-        result = executor._maybe_invalidate_completed_status(
-            "act", {"record_limit": 8}, ActionStatus.COMPLETED
-        )
-
-        assert result == ActionStatus.PENDING
-
-    def test_a_repair_does_not_consume_the_marker(self, executor):
-        """Reading it erases it, so reading during a repair — which must not
-        reopen the action — would lose the only record of the truncation."""
-        executor.deps.action_runner.retried_records = frozenset({"r1"})
-        executor.deps.state_manager.get_status_details.return_value = {
-            "status": ActionStatus.COMPLETED,
-            "record_limit": 8,
-        }
-
-        result = executor._maybe_invalidate_completed_status(
-            "act", {"record_limit": 8}, ActionStatus.COMPLETED
-        )
-
-        executor.deps.state_manager.adopt_truncation_marker.assert_not_called()
-        assert result == ActionStatus.COMPLETED
-
-    def test_no_marker_leaves_a_matching_stamp_completed(self, executor):
-        executor.deps.state_manager.get_status_details.return_value = {
-            "status": ActionStatus.COMPLETED,
-            "record_limit": 8,
-        }
-        executor.deps.state_manager.adopt_truncation_marker.return_value = False
 
         result = executor._maybe_invalidate_completed_status(
             "act", {"record_limit": 8}, ActionStatus.COMPLETED
@@ -1011,7 +973,6 @@ class TestALimitAcrossTheBatchPause:
     def executor(self):
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock(spec=ActionStateManager)
-        deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
         deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()
@@ -1205,7 +1166,6 @@ class TestAFileLimitMeetingAConfigChange:
     def executor(self):
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock(spec=ActionStateManager)
-        deps.state_manager.adopt_truncation_marker.return_value = False
         deps.action_runner = MagicMock()
         deps.action_runner.staged_input_fingerprint.return_value = None
         deps.action_runner.retried_records = frozenset()

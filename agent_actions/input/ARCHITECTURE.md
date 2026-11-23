@@ -466,7 +466,6 @@ The resolver (`resolver.py`) and validator (`validator.py`) use parsed reference
 - **CSV**: `FileReader` returns `list[list[str]]` (raw rows), not `list[dict]`. The `TabularLoader` handles dict conversion using the first row as headers. The initial pipeline passes `content=None` and `file_path` to `TabularLoader` so it reads the file itself.
 - **XML**: `FileReader` returns a `(tree, root)` tuple, not a string. Like CSV, the `XmlLoader` reads the file directly when invoked from the initial pipeline.
 - **XLSX**: `FileReader` returns `list[dict]` via pandas, which means XLSX is the only tabular format where `FileReader` does the full conversion. CSV and XML do not.
-- **JSON batch placeholders**: `FileReader._read_json()` rejects JSON files that look like batch job placeholders (`{"batch_job_id": ..., "status": "submitted"}`), raising an error to prevent re-processing in-flight batches.
 
 ### source_guid assignment timing
 
