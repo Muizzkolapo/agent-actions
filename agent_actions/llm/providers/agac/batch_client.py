@@ -18,7 +18,6 @@ from typing import Any
 
 from agent_actions.config.paths import PathManagerError
 from agent_actions.llm.providers.agac.client import AgacClient
-from agent_actions.llm.providers.agac.contract import Contract, observed_refs, rules_for
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
@@ -112,6 +111,8 @@ class AgacBatchClient(BaseBatchClient):
         self, data: list[dict[str, Any]], agent_config: dict[str, Any]
     ) -> list[dict[str, Any]]:
         """Each task also carries the action's rules, which the answer must meet as online."""
+        from agent_actions.llm.providers.agac.contract import Contract, observed_refs, rules_for
+
         tasks = super().prepare_tasks(data, agent_config)
         action = AgacClient._action_name(agent_config)
         spec = Contract(
@@ -313,6 +314,8 @@ class AgacBatchClient(BaseBatchClient):
         state = self._state_for(batch_id)
         if not state:
             raise ValueError(f"Batch {batch_id} not found")
+
+        from agent_actions.llm.providers.agac.contract import Contract
 
         tasks = self._tasks_by_batch.get(batch_id, [])
         lines = []

@@ -12,7 +12,6 @@ import time
 import uuid
 from typing import Any, ClassVar
 
-from agent_actions.llm.providers.agac.contract import Contract, reset_runs
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.client_base import BaseClient, warn_schema_without_json_mode
 from agent_actions.llm.providers.generation_params import VendorParamSpec
@@ -62,6 +61,8 @@ class AgacClient(BaseClient):
         """Reset attempt tracking (useful between tests)."""
         cls._attempt_counts.clear()
         FakeDataGenerator.set_context()  # Reset generator context too
+        from agent_actions.llm.providers.agac.contract import reset_runs
+
         reset_runs()
         logger.debug("AgacClient state reset")
 
@@ -182,6 +183,9 @@ class AgacClient(BaseClient):
 
         if schema:
             actual_schema = FakeDataGenerator.unwrap_schema(schema)
+            # Imported here: every vendor loads this module, and only the mock reads rules.
+            from agent_actions.llm.providers.agac.contract import Contract
+
             contract = Contract.for_request(agent_config, action, context_data)
             fake_data = contract.generate(actual_schema, attempt)
             logger.debug(
