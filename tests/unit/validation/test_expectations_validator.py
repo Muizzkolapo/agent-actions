@@ -312,9 +312,9 @@ def test_defaulted_expect_reads_an_inlined_schema_without_project_context():
     assert "unknown type 'no_such_type'" in message
 
 
-def test_defaulted_expect_with_no_schema_is_reported_without_project_context():
+def test_defaulted_expect_with_no_inlined_schema_is_skipped_without_project_context():
     defects = find_expectation_defects(default_config(), FIELDS)
-    assert "no schema" in defects["write_q"][0]
+    assert defects == {}
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@ kind: Bug Fix
 body: >-
   Preflight now checks the rules of a bare `expect:` block when it has no project root, if the
   schema of the action is inlined in its config. Before, preflight skipped the bare block
-  without a project root, and a rule with an unknown type got to the run. A bare block with no
-  schema is also reported without a project root now. Preflight still skips a bare block that
-  reads its schema by name, because that needs the project root.
+  without a project root, and a rule with an unknown type got to the run. Preflight still skips
+  a bare block whose schema is not inlined, because it reads that schema by name from the
+  project root.
 time: 2026-11-23T12:01:00.000000+00:00

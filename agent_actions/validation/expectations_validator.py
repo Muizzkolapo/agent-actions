@@ -41,7 +41,7 @@ def find_expectation_defects(
     named ``suite:`` reference, and a bare block that defaults to the action's
     own schema. Only the forms that read a file by name need *project_root*:
     a named suite, and a bare block whose schema was not inlined. Without it,
-    they are not checked.
+    they are not checked; a bare block's inlined schema is.
     """
     defects: dict[str, list[str]] = {}
 
@@ -74,7 +74,7 @@ def find_expectation_defects(
             resolved, suite_messages = _named_suite_entries(suite_name, project_root)
             messages.extend(suite_messages)
             messages.extend(_entry_defects(resolved, fields, available_fields))
-        elif entries is None and suite_name is None:
+        elif entries is None and suite_name is None and _bare_block_checkable(action, project_root):
             resolved, schema_messages = _own_schema_entries(
                 action, project_root, rules_optional=expect.get("repair", "auto") != "none"
             )
@@ -163,6 +163,15 @@ def _repair_mode_defects(
     return messages
 
 
+def _bare_block_checkable(action: dict[str, Any], project_root: Path | None) -> bool:
+    """Whether a bare block's rules can be read: from the inlined schema, or by name from a root.
+
+    Without a root, a caller may pass a partial config, so a schema that is not
+    inlined is not taken as missing.
+    """
+    return project_root is not None or isinstance(action.get("schema"), (dict, list))
+
+
 def _own_schema_entries(
     action: dict[str, Any], project_root: Path | None, *, rules_optional: bool = False
 ) -> tuple[list[Any], list[str]]:
@@ -200,8 +209,6 @@ def _own_schema_entries(
         return entries, defects
     schema_name = action.get("schema_name")
     if isinstance(schema_name, str) and schema_name:
-        if project_root is None:
-            return [], []
         return _named_suite_entries(schema_name, project_root)
     if schema_dispatch_function(schema_data):
         return [], [
