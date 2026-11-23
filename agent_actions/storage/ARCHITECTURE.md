@@ -247,8 +247,7 @@ two identifiers, answering two different questions:
 
 - `source_guid` — the **durable** identity of the record that was prompted,
   the same value `record_disposition.record_id` holds. This is the key for
-  auditing across tables and across runs. Before this column existed the two
-  tables shared no key and the join returned nothing.
+  auditing across tables and across runs.
 - `record_id` — the **prepare-time** `target_id`, minted afresh each run.
   This is the key for "which prompt produced this record on *this* run".
   A durable key cannot answer that: it also matches rows earlier runs left
@@ -259,8 +258,8 @@ A 1→N expansion writes one trace for the parent prompt and mints its children'
 ids only afterwards, so a child reaches that trace through its
 `parent_target_id`; a record prepared here in its own right always resolves to
 its own row first. Repair rounds re-prepare the same record at `attempt=N`,
-and the newest attempt wins. Rows written before the identity columns existed
-keep `NULL` in both and are excluded from durable-key joins.
+and the newest attempt wins. A row written without a `source_guid` holds `NULL`
+there and is excluded from durable-key joins.
 
 One known gap: an expansion's trace records the last child's output as its
 `response_text`, since the children of one prompt are written back
