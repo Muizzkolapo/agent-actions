@@ -112,6 +112,7 @@ def test_a_batch_whose_record_cannot_be_stored_is_not_registered(tmp_path):
 # provider has none of its own; these stand in for them in the process that meets them.
 _AGAC_WITH_FAULTS = """
 import json, os, sys
+from agent_actions.errors import mark_action_fatal
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
 
@@ -143,7 +144,7 @@ if stop_at:
     collect = BatchProcessingService._process_single_batch_file
     def stopping(self, *args, **kwargs):
         if kwargs.get("file_name") == stop_at:
-            raise RuntimeError(f"the collect pass was stopped at {stop_at}")
+            raise mark_action_fatal(RuntimeError(f"the collect pass was stopped at {stop_at}"))
         return collect(self, *args, **kwargs)
     BatchProcessingService._process_single_batch_file = stopping
 

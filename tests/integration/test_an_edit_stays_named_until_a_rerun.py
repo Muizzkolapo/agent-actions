@@ -13,6 +13,7 @@ from click.testing import CliRunner
 
 from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES, EXIT_SUCCESS
 from agent_actions.cli.main import cli
+from agent_actions.errors import mark_action_fatal
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.providers.agac.client import AgacClient
 from tests.integration.test_a_stopped_action_keeps_only_what_its_config_still_answers import (
@@ -470,11 +471,11 @@ def test_an_edit_while_a_batch_nothing_was_collected_from_is_out_stays_named(pro
     killed while collecting, which leaves the status as it was."""
     assert _run("--fresh").exit_code == EXIT_PAUSED
 
-    def provider_dropped(self, **kwargs):
-        raise RuntimeError("the provider dropped the connection")
+    def store_failed(self, **kwargs):
+        raise mark_action_fatal(OSError("the store could not write the file"))
 
     with pytest.MonkeyPatch.context() as patched:
-        patched.setattr(BatchProcessingService, "_process_single_batch_file", provider_dropped)
+        patched.setattr(BatchProcessingService, "_process_single_batch_file", store_failed)
         assert _run().exit_code != 0
     assert _status(project) == "failed"
     assert _stored(project) == {}

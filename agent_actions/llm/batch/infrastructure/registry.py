@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.errors.classification import mark_action_fatal
 from agent_actions.llm.batch.core.batch_constants import BatchStatus, RetiredRecoveryState
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.logging.core.manager import fire_event
@@ -329,7 +330,8 @@ class BatchRegistryManager:
             self._cache = self._load_registry()
             self._rebuild_batch_id_index()
         if self._cache is None:
-            raise RuntimeError("Cache initialization failed")
+            # The registry is the action's, not one file's.
+            raise mark_action_fatal(RuntimeError("Cache initialization failed"))
 
     def _get_cache(self) -> dict[str, BatchJobEntry]:
         self._ensure_cache_loaded()
