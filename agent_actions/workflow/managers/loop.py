@@ -156,10 +156,12 @@ class VersionOutputCorrelator:
         return outputs, found
 
     def _correlate_file(
-        self, file_version_outputs: dict[str, list[dict[str, Any]]]
+        self, file_version_outputs: dict[str, list[dict[str, Any]]], *, warn_of_folds: bool
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """One file's merged records, and the source records merged apart in it."""
-        records = self._correlate_by_source_record(file_version_outputs)
+        records = self._correlate_by_source_record(
+            file_version_outputs, warn_of_folds=warn_of_folds
+        )
         split = _split_across_ids(records)
         merged = [
             {k: v for k, v in record.items() if k not in _CORRELATION_KEYS} for record in records
@@ -199,7 +201,7 @@ class VersionOutputCorrelator:
                     relative_path, listed[relative_path], lost
                 )
                 holding.update(outputs)
-                merged, split = self._correlate_file(outputs)
+                merged, split = self._correlate_file(outputs, warn_of_folds=True)
                 if split:
                     split_records[relative_path] = split
                 # Let go before the next file is read, not when its rows replace these.
@@ -240,7 +242,8 @@ class VersionOutputCorrelator:
             outputs, _found = self._versions_of_file(relative_path, version_agents, lost)
             if lost:
                 forget_slice_observation(self.storage_backend, agent_name)
-            merged, _split = self._correlate_file(outputs)
+            # The check pass warned of each record a version folded away.
+            merged, _split = self._correlate_file(outputs, warn_of_folds=False)
             return merged
         except AgentActionsError:
             raise
@@ -332,7 +335,7 @@ class VersionOutputCorrelator:
         return merged_record
 
     def _correlate_by_source_record(
-        self, version_outputs: dict[str, list[dict[str, Any]]]
+        self, version_outputs: dict[str, list[dict[str, Any]]], *, warn_of_folds: bool = True
     ) -> list[dict[str, Any]]:
         """Correlate version outputs by source record ID using merge pattern."""
         correlation_groups = self._build_correlation_groups(version_outputs)
@@ -347,7 +350,9 @@ class VersionOutputCorrelator:
             if agent_records:
                 merged_record = self._create_merged_record(agent_records, version_outputs)
                 correlated_records.append(
-                    _left_for_the_version_that_folded_it(merged_record, agent_records, folded_into)
+                    _left_for_the_version_that_folded_it(
+                        merged_record, agent_records, folded_into, warn=warn_of_folds
+                    )
                 )
         return correlated_records
 
@@ -395,6 +400,8 @@ def _left_for_the_version_that_folded_it(
     merged: dict[str, Any],
     agent_records: dict[str, dict[str, Any]],
     folded_into: dict[str, dict[str, tuple[str, dict[str, Any]]]],
+    *,
+    warn: bool = True,
 ) -> dict[str, Any]:
     """*merged* blocked when a version holding no record of it folded it into another row.
 
@@ -409,14 +416,15 @@ def _left_for_the_version_that_folded_it(
         for guid in guids:
             if guid in folded_into[version]:
                 action, row = folded_into[version][guid]
-                logger.warning(
-                    "Version merge: record %s was consumed into another record's output (%s) "
-                    "by '%s', which holds no record of it; it is left unprocessed here with "
-                    "reason consumed_into_another_record",
-                    guid,
-                    row.get("source_guid"),
-                    action,
-                )
+                if warn:
+                    logger.warning(
+                        "Version merge: record %s was consumed into another record's output (%s) "
+                        "by '%s', which holds no record of it; it is left unprocessed here with "
+                        "reason consumed_into_another_record",
+                        guid,
+                        row.get("source_guid"),
+                        action,
+                    )
                 return consumed_into_another(merged, action=action, row=row)
     return merged
 

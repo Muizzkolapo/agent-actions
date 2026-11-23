@@ -8,8 +8,10 @@ walk processes it, and let go before the next.
 """
 
 import gc
+import logging
 import tracemalloc
 import weakref
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -250,3 +252,131 @@ def test_a_file_is_let_go_before_the_next_is_read(tmp_path):
     ]
     assert checked == expected
     assert backend.alive_at_read == expected
+
+
+class _Marker:
+    """Put in a version row's own namespace, which a merged row shares, to hold it weakly."""
+
+
+def _marking_reads(backend: SQLiteBackend, monkeypatch) -> dict[str, list[weakref.ref]]:
+    """Mark each version row a read returns; at each read, assert no other file's mark lives."""
+    read = backend.read_target
+    marks: dict[str, list[weakref.ref]] = {}
+
+    def marking_read(version: str, path: str):
+        gc.collect()
+        alive = sorted(
+            other
+            for other, refs in marks.items()
+            if other != path and any(ref() is not None for ref in refs)
+        )
+        assert alive == [], f"rows of {alive} still held when {version}/{path} is read"
+        rows = read(version, path)
+        if version in SOURCES:
+            for row in rows:
+                mark = _Marker()
+                row["content"][version]["mark"] = mark
+                marks.setdefault(path, []).append(weakref.ref(mark))
+        return rows
+
+    monkeypatch.setattr(backend, "read_target", marking_read)
+    return marks
+
+
+def test_the_walk_lets_an_entry_s_merged_rows_go_before_it_looks_up_the_next(
+    tmp_path, agent_folder, backend, monkeypatch
+):
+    _versions_hold(backend, _two_records_each())
+    correlated = _correlate(agent_folder, backend)
+    marks = _marking_reads(backend, monkeypatch)
+    held: list[int] = []
+
+    def prepares_without_writing(file_params):
+        held.append(
+            sum(
+                isinstance(row["content"][SOURCES[0]].get("mark"), _Marker)
+                for row in file_params.data
+            )
+        )
+
+    found, processed, errors = _walk(tmp_path, backend, correlated, prepares_without_writing)
+
+    assert (found, processed, errors.messages) == (4, 4, [])
+    # The merged rows the walk processes hold the marks, so a mark that lives holds them.
+    assert held == [2] * len(FILES)
+    gc.collect()
+    assert sorted(marks) == FILES
+    assert [ref for refs in marks.values() for ref in refs if ref() is not None] == []
+
+
+def test_the_walk_reads_again_only_the_versions_the_check_kept_for_a_file(
+    tmp_path, agent_folder, backend, monkeypatch
+):
+    versions = [*SOURCES, "scorer_3"]
+    _versions_hold(
+        backend,
+        {
+            "a.json": {"scorer_1": ["a1"], "scorer_2": ["a1"], "scorer_3": []},
+            # scorer_2 does not list b.json.
+            "b.json": {"scorer_1": ["b1"], "scorer_3": []},
+            # Held empty by scorer_2, which holds a row in a.json.
+            "d.json": {"scorer_1": ["d1"], "scorer_2": []},
+            # Listed only by scorer_3, which holds no row anywhere.
+            "e.json": {"scorer_3": []},
+        },
+    )
+    correlated = VersionOutputCorrelator(
+        agent_folder, storage_backend=backend
+    ).prepare_correlated_input(MERGE, versions, 2)
+    read = backend.read_target
+    reads: Counter[tuple[str, str]] = Counter()
+
+    def counting_read(version: str, path: str):
+        if version in versions:
+            reads[(version, path)] += 1
+        return read(version, path)
+
+    monkeypatch.setattr(backend, "read_target", counting_read)
+
+    found, processed, errors = _walk(tmp_path, backend, correlated, lambda file_params: None)
+
+    assert (found, processed, errors.messages) == (3, 3, [])
+    assert reads == Counter(
+        {
+            ("scorer_1", "a.json"): 1,
+            ("scorer_2", "a.json"): 1,
+            ("scorer_1", "b.json"): 1,
+            ("scorer_1", "d.json"): 1,
+            ("scorer_2", "d.json"): 1,
+        }
+    )
+
+
+def test_a_record_a_version_folded_away_is_warned_of_once(agent_folder, backend, caplog):
+    folding = _version("scorer_1", "g1")
+    folding["folded_sources"] = {"g2": "scorer_1"}
+    backend._write_target_raw("scorer_1", "items.json", [folding])
+    backend._write_target_raw(
+        "scorer_2", "items.json", [_version("scorer_2", "g1"), _version("scorer_2", "g2")]
+    )
+    backend._reconstruction_cache.clear()
+
+    with caplog.at_level(logging.WARNING, logger="agent_actions.workflow.managers.loop"):
+        correlated = _correlate(agent_folder, backend)
+        first = correlated["items.json"]
+        again = correlated["items.json"]
+
+    warned = [
+        record.getMessage()
+        for record in caplog.records
+        if "consumed into another record's output" in record.getMessage()
+    ]
+    assert len(warned) == 1
+    assert warned[0].startswith("Version merge: record g2 ")
+    # Each lookup still leaves the record unprocessed; only the warning is not repeated.
+    for rows in (first, again):
+        assert {
+            row["source_guid"]: row["metadata"].get("upstream_reason")
+            for row in rows
+            if row["_state"] == "cascade_skipped"
+        } == {"g2": "consumed_into_output"}
