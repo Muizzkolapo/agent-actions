@@ -13,7 +13,7 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.logging.filters import register_secret
 
 _WHOLE_ENV_VAR = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
-_SECRET_WORDS = ("password", "token", "secret", "passphrase")
+_SECRET_WORDS = ("password", "pwd", "token", "secret", "passphrase")
 
 Settings = TypeVar("Settings", bound=BaseModel)
 
@@ -33,7 +33,7 @@ def read_settings(
     for key, value in raw.items():
         if key == "type":
             continue
-        secret = any(word in str(key) for word in _SECRET_WORDS)
+        secret = _is_secret(str(key), model)
         reference = _WHOLE_ENV_VAR.fullmatch(value) if isinstance(value, str) else None
         if secret and reference is None:
             raise ConfigurationError(
@@ -68,3 +68,16 @@ def read_settings(
 
 def _setting_names(model: type[BaseModel]) -> list[str]:
     return [field.alias or name for name, field in model.model_fields.items()]
+
+
+def _is_secret(key: str, model: type[BaseModel]) -> bool:
+    """Whether *key* holds a credential: by its name, or because *model* marks it one."""
+    field = model.model_fields.get(key) or next(
+        (field for field in model.model_fields.values() if field.alias == key), None
+    )
+    marked = bool(
+        field
+        and isinstance(field.json_schema_extra, dict)
+        and field.json_schema_extra.get("secret")
+    )
+    return marked or any(word in key.lower() for word in _SECRET_WORDS)

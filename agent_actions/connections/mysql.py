@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.connections.base import ColumnType
 from agent_actions.connections.dbapi import DbApiConnector, Dialect
@@ -19,7 +19,7 @@ class MysqlSettings(BaseModel):
     port: int = 3306
     database: str
     user: str
-    password: str | None = None
+    password: str | None = Field(default=None, json_schema_extra={"secret": True})
     unix_socket: str | None = None
     connect_timeout: int = 10
 

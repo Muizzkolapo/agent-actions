@@ -30,9 +30,10 @@ A connection is opened only when a workflow uses it.
 ### Secrets
 
 Any setting can be written as `${NAME}` to read it from the environment (or
-`.env`). A setting whose name holds `password`, `token`, `secret` or
-`passphrase` **must** be written that way: a credential typed into the project
-file is refused, and its value is kept out of the logs.
+`.env`). A credential **must** be written that way: a credential typed into the
+project file is refused, and its value is kept out of the logs. The credentials
+are `password`, `private_key_file_pwd` and `access_token`, and any setting
+whose name holds `password`, `pwd`, `token`, `secret` or `passphrase`.
 
 ### Types
 
@@ -144,6 +145,15 @@ Each record the action answered becomes one row: `source_guid`, the carried
 source fields, then the action's output fields. A field holding a list or an
 object is written as JSON text. A record the action did not answer (guard-skipped,
 or failed above it) makes no row.
+
+A table the export creates takes each column's type from the values written
+that time: a column of whole numbers is an integer column. A later write of a
+fraction to it is held as the database holds a fraction in an integer column
+(SQLite keeps it; most databases round or refuse it). Create the table yourself
+when a column's type must not depend on the first rows.
+
+A carried field that no answered record's source holds is refused, since it is
+more often a misspelling than a column of nulls.
 
 ### Modes
 

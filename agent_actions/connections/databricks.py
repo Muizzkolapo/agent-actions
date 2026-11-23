@@ -17,7 +17,7 @@ class DatabricksSettings(BaseModel):
 
     server_hostname: str
     http_path: str
-    access_token: str
+    access_token: str = Field(json_schema_extra={"secret": True})
     catalog: str | None = None
     # ``schema`` is a pydantic name, so the setting is read through an alias.
     schema_: str | None = Field(default=None, alias="schema")

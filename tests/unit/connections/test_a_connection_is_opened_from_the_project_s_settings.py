@@ -113,3 +113,48 @@ def test_a_sqlite_column_given_no_type_holds_a_value_as_written(tmp_path: Path):
         connector.write("labels", ["id", "label"], [(1, "a")], mode=WriteMode.APPEND)
 
         assert list(connector.read("SELECT * FROM labels")) == [{"id": 1, "label": "a"}]
+
+
+def test_a_snowflake_key_passphrase_written_in_the_project_file_is_refused():
+    from agent_actions.connections.snowflake import SnowflakeSettings
+
+    raw = {"account": "acme", "user": "loader", "private_key_file_pwd": "hunter2"}
+
+    with pytest.raises(ConfigurationError, match="'private_key_file_pwd' must name an environment"):
+        read_settings("warehouse", raw, SnowflakeSettings)
+
+
+def test_a_snowflake_key_passphrase_read_from_the_environment_is_kept_out_of_the_logs():
+    from agent_actions.connections.snowflake import SnowflakeSettings
+
+    read_settings(
+        "warehouse",
+        {"account": "acme", "user": "loader", "private_key_file_pwd": "${KEY_PWD}"},
+        SnowflakeSettings,
+        environ={"KEY_PWD": "key-passphrase-value"},
+    )
+
+    assert "key-passphrase-value" not in redact_known_secrets("unlocking key-passphrase-value")
+
+
+def _settings_models():
+    import importlib
+
+    for target in CONNECTORS.values():
+        module = importlib.import_module(target.partition(":")[0])
+        for value in vars(module).values():
+            if isinstance(value, type) and issubclass(value, BaseModel) and value is not BaseModel:
+                yield value
+
+
+@pytest.mark.parametrize(
+    "credential",
+    sorted({"password", "access_token", "private_key_file_pwd"}),
+)
+def test_every_credential_a_connection_type_takes_is_refused_as_a_literal(credential):
+    takers = [model for model in _settings_models() if credential in model.model_fields]
+    assert takers, f"no connection type takes {credential}"
+
+    for model in takers:
+        with pytest.raises(ConfigurationError, match=f"'{credential}' must name an environment"):
+            read_settings("warehouse", {credential: "typed-in"}, model)

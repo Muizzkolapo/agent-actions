@@ -173,3 +173,29 @@ def test_an_output_naming_an_action_the_workflow_does_not_run_is_refused(tmp_pat
 def test_a_carried_column_that_would_be_written_twice_is_refused(carry, problem):
     with pytest.raises(ValueError, match=problem):
         _output(carry=carry)
+
+
+@pytest.mark.parametrize("unanswered", ["guard_skipped", "failed"])
+def test_a_merge_keyed_on_an_answered_field_with_nothing_answered_writes_nothing(
+    unanswered, connector
+):
+    store = _Stored([_record("g1", {"score": 4}, state=unanswered)])
+
+    assert write_output(store, _output(key=["score"]), connector) == 0
+    assert list(connector.read("SELECT name FROM sqlite_master WHERE name = 'grades'")) == []
+
+
+def test_a_carried_field_no_record_s_source_holds_is_refused():
+    records = [_record("g1", {"score": 4}, source={"ticket_id": 7})]
+
+    with pytest.raises(ConfigurationError, match=r"'carry' names ticket, which no record's source"):
+        output_table(records, "grade", ["ticket"])
+
+
+def test_a_carried_field_only_some_sources_hold_is_null_for_the_rest():
+    records = [
+        _record("g1", {"score": 4}, source={"ticket": 7}),
+        _record("g2", {"score": 2}, source={}),
+    ]
+
+    assert output_table(records, "grade", ["ticket"])[1] == [("g1", 7, 4), ("g2", None, 2)]

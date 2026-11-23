@@ -28,10 +28,13 @@ def output_table(
     """The columns and rows *records* make: identity, carried source fields, the action's fields.
 
     A record the action left no answer for (guard-skipped, failed above) makes no
-    row. A field holding a list or an object is written as JSON text.
+    row. A field holding a list or an object is written as JSON text. A carried
+    field that no answered record's source holds is refused: it is a misspelling
+    more often than a column of nulls.
     """
     columns = [IDENTITY_COLUMN, *carry]
     flat: list[dict[str, Any]] = []
+    held: set[str] = set()
     for record in records:
         content = record.get("content")
         if record.get("_state") in _NOT_OUTPUT_STATES or not isinstance(content, dict):
@@ -48,11 +51,19 @@ def output_table(
             )
         source = content.get("source")
         source = source if isinstance(source, dict) else {}
+        held.update(source)
         row = {IDENTITY_COLUMN: record.get(IDENTITY_COLUMN)}
         row.update({name: source.get(name) for name in carry})
         row.update(answer)
         columns.extend(name for name in answer if name not in columns)
         flat.append(row)
+    unheld = [name for name in carry if name not in held]
+    if flat and unheld:
+        raise ConfigurationError(
+            f"'carry' names {', '.join(unheld)}, which no record's source holds "
+            f"(the source fields are {', '.join(sorted(held)) or 'none'})",
+            context={"action": action, "carry": unheld},
+        )
     return columns, [tuple(_cell(row.get(name)) for name in columns) for row in flat]
 
 
@@ -88,10 +99,10 @@ def write_output(backend: StorageBackend, output: OutputConfig, connector: Conne
     columns, rows = output_table(
         _stored_records(backend, output.action), output.action, output.carry
     )
-    if output.mode is WriteMode.MERGE:
-        rows = _last_row_per_key(columns, rows, output.key, output.table)
     if not rows and output.mode is not WriteMode.REPLACE:
         return 0
+    if output.mode is WriteMode.MERGE:
+        rows = _last_row_per_key(columns, rows, output.key, output.table)
     return connector.write(
         output.table,
         columns,

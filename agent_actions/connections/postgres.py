@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.connections.dbapi import DbApiConnector
 from agent_actions.connections.settings import read_settings
@@ -18,7 +18,7 @@ class PostgresSettings(BaseModel):
     port: int = 5432
     dbname: str
     user: str
-    password: str | None = None
+    password: str | None = Field(default=None, json_schema_extra={"secret": True})
     sslmode: str | None = None
     connect_timeout: int = 10
 
