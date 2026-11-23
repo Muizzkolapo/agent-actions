@@ -46,7 +46,7 @@ The log line before the warning names the `agac dispositions` command that shows
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow NAME` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow NAME` | The workflow name (required). `-a` names the same option. |
 | `-u, --user-code DIRECTORY` | The path to the folder of your code that contains the tools |
 | `--use-tools` | Let actions use tools |
 | `-e, --execution-mode` | The execution mode: `auto` (default), `parallel` or `sequential` |

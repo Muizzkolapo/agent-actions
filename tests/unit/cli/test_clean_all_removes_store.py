@@ -53,17 +53,14 @@ def test_all_removes_store(tmp_path):
     cleaner.run()
     names = _cleaned_names(agent_manager)
     assert "store" in names, f"--all must remove store/, got {names}"
-    assert names == {"source", "target", "staging", "store"}
+    assert names == {"target", "staging", "store"}
 
 
 def test_no_all_preserves_store(tmp_path):
-    """Baseline: without --all, only source/ is removed (store survives)."""
+    """Baseline: without --all or --target, the cleaner removes nothing."""
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=False, force=True)
     cleaner.run()
-    names = _cleaned_names(agent_manager)
-    assert "store" not in names
-    assert "staging" not in names
-    assert names == {"source"}
+    assert _cleaned_names(agent_manager) == set()
 
 
 def test_all_confirmation_lists_store(tmp_path, monkeypatch, capsys):
@@ -168,7 +165,7 @@ def test_all_ignores_backend_that_owns_no_paths(tmp_path, monkeypatch):
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
-    assert names == {"source", "target", "staging", "store"}, (
+    assert names == {"target", "staging", "store"}, (
         "Remote backend contributed no paths yet SQLite's store/ still gets wiped"
     )
 
@@ -232,7 +229,7 @@ def test_all_picks_up_extra_backend_paths(tmp_path, monkeypatch):
     cleaner, agent_manager = _make_cleaner(tmp_path, remove_all=True, force=True)
     cleaner.run()
     names = _cleaned_names(agent_manager)
-    assert names == {"source", "target", "staging", "store", "warehouse"}
+    assert names == {"target", "staging", "store", "warehouse"}
 
 
 if __name__ == "__main__":  # pragma: no cover
@@ -266,7 +263,7 @@ def test_all_keeps_the_store_when_a_record_would_not_go(tmp_path, monkeypatch, c
 
     names = _cleaned_names(agent_manager)
     assert "store" not in names, f"the store went while a record was still there: {names}"
-    assert names == {"source", "target", "staging"}
+    assert names == {"target", "staging"}
     assert "Keeping the store" in capsys.readouterr().out
 
 

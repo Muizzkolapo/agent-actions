@@ -18,7 +18,7 @@ class CleanCommandArgs(BaseModel):
 
     agent: str = Field(..., description="Name of the agent whose workspace should be cleaned.")
     force: bool = Field(False, description="Skip interactive confirmation.")
-    target: bool = Field(False, description="Also remove the target directory (generated output).")
+    target: bool = Field(False, description="Remove the target directory (generated output).")
     all: bool = Field(False, description="Remove all directories including target and staging.")
 
 

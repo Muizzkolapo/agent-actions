@@ -221,7 +221,7 @@ def test_a_filter_dry_run_is_not_refused(tmp_path):
     assert "Nothing was filtered" in output, output
 
 
-@pytest.mark.parametrize("flags", [[], ["--target"], ["--all"]], ids=["source", "target", "all"])
+@pytest.mark.parametrize("flags", [["--target"], ["--all"]], ids=["target", "all"])
 def test_a_clean_is_refused_while_another_holds_the_workflow(tmp_path, flags):
     """`clean` deletes what a run reads and writes, `--all` the lock file with it (1699)."""
     root = _project(tmp_path)

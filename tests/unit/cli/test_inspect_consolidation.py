@@ -62,7 +62,7 @@ class TestInspectDefault:
         assert kwargs.get("user_code_path") == "my_tools"
 
 
-# ── --agent is required when no subcommand ──────────────────────────────
+# ── --workflow is required when no subcommand ────────────────────────────
 
 
 class TestInspectAgentRequired:

@@ -98,16 +98,20 @@ class TestWithoutTheFramework:
         assert record.exists()
         assert "agac clean -a wf --all" in capsys.readouterr().err
 
-    def test_target_and_source_still_go(self, script, project, monkeypatch):
+    def test_target_still_goes_and_source_stays(self, script, project, monkeypatch):
         """Keeping the store is not an excuse to do nothing."""
         root, base = project
         _record(root)
+        (base / "target" / "anything").write_text("[]")
+        (base / "source").mkdir()
+        (base / "source" / "anything").write_text("[]")
         _import_failing_on(monkeypatch, lambda n: n.startswith("agent_actions"), ImportError)
 
         _run_full(script, monkeypatch, root)
 
         assert (base / "target").exists(), "target/ is recreated after the wipe"
         assert not (base / "target" / "anything").exists()
+        assert (base / "source" / "anything").exists(), "no reset removes source/"
 
 
 class TestWithTheFramework:

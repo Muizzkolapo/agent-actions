@@ -26,10 +26,6 @@ FILE_LIMIT_ENV = "AGAC_FILE_LIMIT"
 RECORD_LIMIT_KEY = "_record_limit"
 FILE_LIMIT_KEY = "_file_limit"
 
-# Renamed. Read only to reject it: a run that believes it is capped and is not
-# spends against a provider with no limit at all.
-_RETIRED_ENV = "AGAC_MAX_RECORDS"
-
 
 def check_environment() -> None:
     """Refuse an environment the run cannot honour before it starts.
@@ -39,14 +35,8 @@ def check_environment() -> None:
     limit is not consulted until a file has been walked — and failing there
     leaves that action unstamped. Called once while the run is being assembled.
     """
-    _refuse_retired_name()
     _from_environment(RECORD_LIMIT_ENV)
     _from_environment(FILE_LIMIT_ENV)
-
-
-def _refuse_retired_name() -> None:
-    if os.environ.get(_RETIRED_ENV) is not None:
-        raise ValueError(f"{_RETIRED_ENV} is not read; set {RECORD_LIMIT_ENV} instead")
 
 
 def _from_environment(name: str) -> int | None:
@@ -90,7 +80,6 @@ def _resolve(
     ``bool`` is rejected rather than treated as an int: ``record_limit: true``
     in YAML would otherwise silently cap a run at one record.
     """
-    _refuse_retired_name()
     in_config = action_config.get(config_key)
     if isinstance(in_config, bool) or not isinstance(in_config, int) or in_config < 1:
         in_config = None

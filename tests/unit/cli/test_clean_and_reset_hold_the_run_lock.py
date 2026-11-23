@@ -72,12 +72,11 @@ def test_the_lock_is_held_while_clean_asks_and_deletes(tmp_path, monkeypatch, st
     assert not (io_dir / "staging").exists()
 
 
-@pytest.mark.parametrize("flags", [{}, {"remove_target": True}], ids=["source", "target"])
-def test_the_lock_is_held_while_a_narrower_clean_deletes(tmp_path, flags):
+def test_the_lock_is_held_while_a_narrower_clean_deletes(tmp_path):
     io_dir = _io_dir(tmp_path, store=False)
     seen: list[str] = []
 
-    _cleaner(io_dir, seen, force=True, **flags).run()
+    _cleaner(io_dir, seen, force=True, remove_target=True).run()
 
     assert seen and set(seen) == {"delete held=True"}
 
@@ -90,7 +89,7 @@ def test_clean_all_keeps_only_the_lock_file_in_the_store(tmp_path, store):
     _cleaner(io_dir, None, force=True, remove_all=True).run()
 
     assert sorted(p.name for p in (io_dir / "store").iterdir()) == ["wf.db.lock"]
-    assert not (io_dir / "source").exists()
+    assert (io_dir / "source" / "kept.json").exists()
     assert not (io_dir / "target").exists()
     assert not (io_dir / "staging").exists()
 
@@ -197,7 +196,7 @@ def test_the_lock_is_held_while_a_full_reset_deletes(
     _full_reset(script, monkeypatch, root)
 
     assert seen and all(seen), seen
-    assert not (base / "source").exists()
+    assert (base / "source").exists()
 
 
 @pytest.mark.parametrize("framework", [True, False], ids=["framework", "plain-python"])

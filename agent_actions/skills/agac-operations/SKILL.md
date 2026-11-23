@@ -106,7 +106,7 @@ The health check reads counts. It does not read the content of the output. For a
 |---|---|---|
 | Context window | agent-actions estimates a prompt as characters / 4 and refuses a prompt above the model's window. A model name that it does not know gets 128,000 tokens. `context_window` on the action or in `defaults:` sets the window | Set `context_window` when the model reads more than agent-actions knows. Split oversized inputs (below). Keep large fields out of `observe` where a distilled field exists. Keep `context_block: auto` (the default), so a field the prompt prints is not sent twice |
 | Memory | Batch preparation holds the records of the action in memory. Very large records times many records can fill the machine | Close other large programs. Watch the process memory during the first large batch step |
-| Disk | The store grows with each action. Old workflow stores and virtual environments add up | Remove old stores with `agac clean` or `scripts/reset_workflow.py --full` (agac-agent-skills) when you no longer need them |
+| Disk | The store grows with each action. Old workflow stores and virtual environments add up | Remove old stores with `agac clean --all` or `scripts/reset_workflow.py --full` (agac-agent-skills) when you no longer need them |
 | Rate limits | Online mode with high `record_concurrency` gets HTTP 429 from some providers | Set `retry` and `request_timeout` in `defaults:`. Lower `record_concurrency` for providers with low limits |
 
 See Context handling (docs: `reference/execution/context-handling`) and Chunking (docs: `reference/data-io/chunking`).

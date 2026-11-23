@@ -39,7 +39,7 @@ UPSTREAM = "extract"
 
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
-    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT"):
         monkeypatch.delenv(name, raising=False)
 
 

@@ -17,9 +17,8 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. Every command takes the workflow as `-w/--workflow` and `-a/--agent` alike (`workflow_option`), and an action as `-A/--action` wherever it takes one. | `cli`, `shared` |
-| `workflow_option` | Function | The workflow option of a command: `-w/--workflow`, with `-a/--agent` as the same option. | - |
-| `action_option` | Function | `-A/--action` for `traces`, `records` and `preview`, which read the action from `-a`: `-a` still names it there, with a deprecation warning on stderr. The option is eager, so the warning is printed before `--help` and before an error in any other option. | - |
+| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. Every command takes the workflow as `-w/--workflow` and `-a` alike (`workflow_option`), and an action as `-A/--action` wherever it takes one (`traces`, `records` and `preview` included). | `cli`, `shared` |
+| `workflow_option` | Function | The workflow option of a command: `-w/--workflow`, with `-a` as the same option. | - |
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
 | `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
 | `enter_project` | Function | The project check and banner `requires_project` applies, as a call: a group callback that Click runs before a subcommand's `--help` (`docs`) calls it only when the group itself runs. | - |
@@ -75,7 +74,7 @@
 | `classify_outcome` | Function | The `RunOutcome` of a workflow, `run_status` told apart further: `FAILED` when every action is terminal and one failed; `PAUSED_FOR_BATCH` when an action is not terminal and one is `batch_submitted`, `PAUSED` when none is; otherwise `RECORD_FAILURES` when an action is `completed_with_failures` (it holds a `failed` or `exhausted` record, `storage.backend.FAILURE_DISPOSITIONS`), else `SUCCESS`. | - |
 | `actions_with_record_failures` | Function | The actions whose status is `completed_with_failures`, in execution order. | - |
 | `report_quota_stop` | Function | Prints a `ProviderQuotaStop` on stderr unless the workflow that raised it has shown it (`_already_displayed`), so the stop is reported once. | - |
-| `main.py` | Module | Main entry point for the Agent Actions CLI. Each command module is imported on first lookup (`_COMMANDS`, `_LazyGroup`), so `agac --help` imports none of them. A usage error is printed as Click words it (`format_message`), so a missing option is named by its flags: `Missing option '-w' / '--workflow' / '-a' / '--agent'.` | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
+| `main.py` | Module | Main entry point for the Agent Actions CLI. Each command module is imported on first lookup (`_COMMANDS`, `_LazyGroup`), so `agac --help` imports none of them. A usage error is printed as Click words it (`format_message`), so a missing option is named by its flags: `Missing option '-w' / '--workflow' / '-a'.` | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
 | `_COMMANDS` | Constant | Each top-level command's `module:attribute` and the one-line summary `agac --help` lists it by until it is imported. | - |
 | `_LazyGroup` | Class | Click group that imports a command on first `get_command`; `format_commands` shortens a command not yet imported from its summary as Click shortens its help. | - |
 | `CLI` | Class | Agent Actions CLI application. | - |
@@ -112,7 +111,7 @@
 | `StatusCommand` | Class | Implementation of the status command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the status command. | - |
 | `status` | Function | Display the status of an agent workflow. | - |
-| `clean.py` | Module | Clean command for the Agent Actions CLI. | `cli`, `llm_invocation`, `validation` |
+| `clean.py` | Module | Clean command for the Agent Actions CLI. With neither `--target` nor `--all` it removes nothing and exits 2 with the choices (a Click usage error), checked before the workflow and the project. It never removes `agent_io/source/`. | `cli`, `llm_invocation`, `validation` |
 | `clean_cli` | Function | CLI entrypoint for 'clean'. | - |
 | `preview.py` | Module | Preview command for viewing SQLite storage data. Unwraps namespaced `content[action_name]` when displaying action output. | `cli`, `storage`, `validation` |
 | `PreviewCommand` | Class | Implementation of the preview command. | - |
@@ -163,9 +162,8 @@
 | `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | — |
 | `PreviewCommand.execute()` | `agent_io/target/{action}/` | Reads | — |
 | `BaseInspectCommand._load_inspector()` | `agent_config/{workflow}.yml` | Reads | — |
-| `clean_cli()` | `agent_io/source/` | Writes | — |
-| `clean_cli()` | `agent_io/staging/` | Writes | — |
-| `clean_cli()` | `agent_io/target/{action}/` | Writes | — |
+| `clean_cli()` | `agent_io/staging/` | Writes | `--all` |
+| `clean_cli()` | `agent_io/target/{action}/` | Writes | `--target`, `--all` |
 | `clean_cli()` | `.agac/batch_state/` | Deletes | `--all` |
 
 ## Dependencies

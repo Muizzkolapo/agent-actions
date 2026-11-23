@@ -398,7 +398,7 @@ Agent Actions catches configuration errors. It validates these items:
 Error: Configuration Error: Invalid configuration in agent 'my_workflow'
   Problem: 1 validation error for WorkflowConfig
 defaults
-  Value error, unknown defaults key 'temperture' — did you mean 'temperature'?; valid defaults keys are anthropic_version, api_key, base_url, ...
+  Value error, unknown defaults key 'temperture' — did you mean 'temperature'?; valid defaults keys are api_key, base_url, batch_max_workers, ...
 ```
 
 The list of valid keys is always present. A suggestion is the closest-spelling match, so it can point at the wrong field. The list is the fallback.

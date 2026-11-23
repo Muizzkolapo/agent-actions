@@ -238,7 +238,7 @@ def _limit_variables_do_not_leak_in():
     """
     saved = {
         name: os.environ.pop(name)
-        for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS")
+        for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT")
         if name in os.environ
     }
     yield
