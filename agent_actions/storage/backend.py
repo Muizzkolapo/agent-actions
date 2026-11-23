@@ -175,6 +175,8 @@ class StorageBackend(ABC):
                 "store": store,
                 "stored_version": stored,
                 "supported": self._STORAGE_FORMAT_VERSION,
+                "hint": f"Run `agac clean -a {workflow_name} --all` to remove the store, "
+                "then run the workflow again.",
             },
         )
 
