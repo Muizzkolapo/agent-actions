@@ -39,7 +39,7 @@ pathways.
 | `lineage.py` | Module | `LineageBuilder`: lineage chain building and ancestry propagation. | `lineage` |
 | `path_utils.py` | Module | Convenience path helpers (ensure dirs, mirror target-to-source, resolve absolute paths, find project root) backed by `PathManager`. Thread-safe global singleton with double-checked locking. `set_path_manager()` allows explicit DI of a scoped instance. `derive_workflow_root()` safely finds the workflow root from a path inside a workflow (agent_io fast-path + agent_config walk-up + safe fallback). | `config.paths`, `file_io` |
 | `safe_format.py` | Module | Robust exception formatting (safe formatting, root cause extraction, chain formatting). | `logging`, `errors` |
-| `tools_resolver.py` | Module | Normalizes the various `tools`/`tool_path` syntaxes in agent configs. | `configuration`, `validation` |
+| `tools_resolver.py` | Module | `resolve_tools_path` gives the first `tool_path` entry of an agent config (a string or a list), anchored to the project root. `parse_udf_call` splits a `dispatch_task(...)` argument string. | `configuration`, `validation` |
 | `error_handler.py` | Module | Error handling utilities for configuration and validation errors. | `errors`, `logging` |
 | `error_wrap.py` | Module | Decorator for wrapping validation errors with additional context. | `errors`, `validation` |
 | `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery. Imports `logging`, `os`, `collections.abc` and `config.path_config`. Moved from `output/`. `walk_files` enumerates a tree the way `Path.rglob` cannot: rglob drops a whole subtree it cannot read and raises nothing, so `walk_files` requires an `on_error` callback — no default, because a default would reinstate that silence. The two staging walks in `workflow/runner_file_processing.py` and the tool scan in `tooling/code_scanner.py` use it; other `rglob` callers in the tree are discovery paths where a missing file surfaces by name and have not been converted. | `file_io` |
@@ -51,7 +51,7 @@ pathways.
 |--------|------|-------------|------------|
 | `find_project_root()` | `agent_actions.yml` | Reads | — |
 | `ensure_in_project()` | `agent_actions.yml` | Validates | — |
-| `resolve_tools_path()` | `agent_actions.yml` | Reads | `tool_path`, `tools` |
+| `resolve_tools_path()` | `agent_actions.yml` | Reads | `tool_path` |
 | `FileHandler.get_agent_paths()` | `agent_config/{workflow}.yml` | Reads | — |
 | `FileHandler.get_agent_paths()` | `agent_io/target/{action}/` | Reads | — |
 | `discover_and_load_udfs()` | `tools/{workflow}/*.py` | Reads | — |

@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from agent_actions.config.manager import ConfigManager
 from agent_actions.config.schema import (
     ActionConfig,
     DefaultsConfig,
@@ -162,17 +161,6 @@ def test_the_expander_copies_no_undeclared_key_onto_the_agent():
 
     assert "interceptors" not in agent
     assert agent["expect"]["repair"] == "auto"
-
-
-def test_a_clean_agent_of_the_older_format_still_merges():
-    manager = ConfigManager.__new__(ConfigManager)
-    manager.default_config = {}
-    manager.tool_path = None
-    manager.agent_configs = {}
-
-    manager.merge_agent_configs([{"agent_type": "a1", **BASE_DEFAULTS, "chunk_config": {}}])
-
-    assert manager.agent_configs["a1"].model_dump()["model_name"] == "gpt-4"
 
 
 class TestNothingAdvertisesARetiredKey:

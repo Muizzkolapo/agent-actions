@@ -108,11 +108,8 @@ class TestTheStaticCheckerReadsNoActionReferenceFromIt:
 
     def test_a_dotted_clause_is_what_the_checker_misread(self):
         """Pins the mechanism rather than the fix: the extractor is unchanged, and this
-        is why nothing more than the parser had to move. An `actions:` config can no
-        longer produce a dotted clause, since the expander validates the guard first.
-        The legacy `agents:` shape still can -- `get_user_agents` returns those dicts
-        verbatim and `AgentConfig` allows extras -- so this input stays reachable there,
-        and such a config fails exactly as it did before."""
+        is why nothing more than the parser had to move. An `actions:` config cannot
+        produce a dotted clause, since the expander validates the guard first."""
         requirements = ReferenceExtractor().extract_from_agent(
             {"conditional_clause": "tools.check_eligibility"}
         )

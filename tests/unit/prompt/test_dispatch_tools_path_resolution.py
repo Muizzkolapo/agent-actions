@@ -1,8 +1,7 @@
 """Tests for dispatch_task() tools_path auto-resolution in PromptPreparationService.
 
 Verifies that dispatch_task() calls in prompts are resolved even when the caller
-does not explicitly pass tools_path, as long as agent_config contains a resolvable
-tool path (via tool_path, tools.path, or OpenAI format).
+does not explicitly pass tools_path, as long as agent_config contains a tool_path.
 """
 
 from unittest.mock import patch
@@ -14,7 +13,7 @@ from agent_actions.errors import AgentActionsError
 from agent_actions.prompt.service import PromptPreparationService
 
 
-def _make_agent_config(*, tool_path=None, tools=None):
+def _make_agent_config(*, tool_path=None):
     """Build a minimal agent_config dict for prompt preparation tests."""
     config = {
         "agent_type": "test_action",
@@ -23,8 +22,6 @@ def _make_agent_config(*, tool_path=None, tools=None):
     }
     if tool_path is not None:
         config["tool_path"] = tool_path
-    if tools is not None:
-        config["tools"] = tools
     return config
 
 
@@ -69,9 +66,8 @@ class TestDispatchToolsPathResolution:
         [
             ({"tool_path": ["tools/my_workflow"]}, "tool_path_list"),
             ({"tool_path": "tools/my_workflow"}, "tool_path_string"),
-            ({"tools": {"path": "tools/my_workflow"}}, "tools_dict_path"),
         ],
-        ids=["tool_path_list", "tool_path_string", "tools_dict_path"],
+        ids=["tool_path_list", "tool_path_string"],
     )
     def test_dispatch_resolved_via_config(self, config_kwargs, test_id):
         """dispatch_task() resolves via auto-resolution from different config formats."""
@@ -120,28 +116,6 @@ class TestDispatchToolsPathResolution:
 
         assert "dispatch_task" not in result.formatted_prompt
         assert "computed_result" in result.formatted_prompt
-
-    def test_config_validation_error_propagates(self):
-        """ConfigValidationError from resolve_tools_path propagates, not swallowed."""
-        from agent_actions.errors import ConfigValidationError
-
-        config = _make_agent_config()
-        field_context = {"source": {"text": "hello"}}
-
-        with (
-            _stub_raw_prompt("Use: dispatch_task('my_func')"),
-            patch(
-                "agent_actions.utils.tools_resolver.resolve_tools_path",
-                side_effect=ConfigValidationError("path traversal detected"),
-            ),
-            pytest.raises(ConfigValidationError, match="path traversal"),
-        ):
-            PromptPreparationService.prepare_prompt_with_field_context(
-                agent_config=config,
-                agent_name="test",
-                contents={},
-                field_context=field_context,
-            )
 
     def test_dispatch_error_surfaces(self):
         """dispatch_task() with missing function raises, not silently passes through."""

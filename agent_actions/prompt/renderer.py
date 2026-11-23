@@ -273,10 +273,8 @@ class ConfigRenderingService:
                 cause=e,
             ) from e
 
-    def _validate_new_format(
-        self, config: ActionConfigMap, agent_name: str
-    ) -> list[ActionEntryDict]:
-        """Validate new format config with 'actions' key."""
+    def _validate_actions(self, config: ActionConfigMap, agent_name: str) -> list[ActionEntryDict]:
+        """Validate each entry of the `actions:` list."""
         actions = config.get("actions", [])
         validated_entries = []
         for action in actions:
@@ -286,27 +284,6 @@ class ConfigRenderingService:
             )
             validated_entries.append(validated)
         config["_validated_actions"] = validated_entries
-        return validated_entries
-
-    def _validate_legacy_format(
-        self, config: ActionConfigMap, agent_name: str
-    ) -> list[ActionEntryDict]:
-        """Validate legacy format config with agent_name key."""
-        agent_entries_list = cast(list[ActionEntryDict], config.get(agent_name))
-        if agent_entries_list is None:
-            raise ConfigValidationError(
-                config_key="agent_configuration",
-                reason="No agent configuration found",
-                context={"agent_name": agent_name, "operation": "validate_config"},
-            )
-
-        validated_entries = []
-        for entry in agent_entries_list:
-            validated = self._validate_entry_with_pydantic(
-                cast(dict[str, Any], entry), agent_name, "agent_configuration"
-            )
-            validated_entries.append(validated)
-        config[agent_name] = validated_entries
         return validated_entries
 
     def _run_config_validator(
@@ -336,17 +313,11 @@ class ConfigRenderingService:
     def _validate_agent_config_block(
         self, config: ActionConfigMap, agent_name: str, project_root: Path | None = None
     ) -> None:
-        """Validate the config - handle both old and new formats."""
         project_root_path = project_root or find_project_root()
         if project_root_path is None:
             project_root_path = Path.cwd()
 
-        is_new_format = "actions" in config and "name" in config
-        if is_new_format:
-            validated_entries = self._validate_new_format(config, agent_name)
-        else:
-            validated_entries = self._validate_legacy_format(config, agent_name)
-
+        validated_entries = self._validate_actions(config, agent_name)
         self._run_config_validator(validated_entries, agent_name, project_root_path)
 
     @as_validation_error(ConfigurationError)

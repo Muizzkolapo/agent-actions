@@ -59,13 +59,3 @@ def test_prompt_trace_persists_model_name_for_both_modes(mode):
         f"model_name not persisted: {kwargs['model_name']!r}"
     )
     assert kwargs["model_vendor"] == "openai"
-
-
-def test_prompt_trace_falls_back_to_model_alias_when_model_name_absent():
-    preparer = TaskPreparer()
-    ctx = _context(RunMode.ONLINE, agent_config={"model": "gpt-4o-mini", "model_vendor": "openai"})
-    item = {"content": {"quality_score": 0.9}, "source_guid": "sg-1"}
-    kwargs = _prepare_and_get_trace_kwargs(preparer, ctx, item)
-    assert kwargs["model_name"] == "gpt-4o-mini", (
-        f"model alias not used as model_name fallback: {kwargs['model_name']!r}"
-    )

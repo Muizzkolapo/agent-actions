@@ -101,7 +101,6 @@ class ActionConfigDict(TypedDict, total=False):
     # Model
     model_vendor: str
     model_name: str
-    model: str  # legacy fallback for model_name
     api_key: str  # env var reference
     gemini_api_key: str  # vendor-specific API key override
     openai_api_key: str  # vendor-specific API key override
@@ -164,7 +163,6 @@ class ActionConfigDict(TypedDict, total=False):
     # Tool / code paths
     tools_path: str
     tool_path: str  # alternative tool path (distinct from tools_path)
-    tools: Any
     code_path: str
 
     # HITL-specific (subscript-assigned in pipeline.py)
