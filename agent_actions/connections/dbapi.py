@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
-from itertools import chain
 from typing import Any, Literal
 
 from agent_actions.connections.base import (
@@ -14,6 +14,7 @@ from agent_actions.connections.base import (
     Connector,
     Row,
     WriteMode,
+    json_safe,
     quoted_identifier,
 )
 from agent_actions.errors import ConfigurationError
@@ -54,6 +55,11 @@ class Dialect:
     types: Mapping[ColumnType, str] = field(default_factory=lambda: _STANDARD_TYPES)
     # The type of a column given none; None declares the column with no type.
     untyped: str | None = "TEXT"
+    # The type a key is cast to so it compares as text, whatever its column holds.
+    text_cast: str = "TEXT"
+    # Whether two column names that differ only in case are different columns.
+    case_sensitive_names: bool = False
+    add_column: str = "ALTER TABLE {table} ADD COLUMN {column}"
 
     def identifier(self, name: str) -> str:
         return quoted_identifier(name.upper() if self.fold_upper else name, self.quote)
@@ -73,6 +79,13 @@ class Dialect:
     def column(self, name: str, kind: ColumnType | None) -> str:
         declared = self.untyped if kind is None else self.types[kind]
         return f"{self.identifier(name)} {declared}" if declared else self.identifier(name)
+
+    def as_text(self, name: str) -> str:
+        return f"CAST({self.identifier(name)} AS {self.text_cast})"
+
+    def same_name(self, name: str) -> str:
+        """*name* as the database tells it from another."""
+        return name if self.case_sensitive_names else name.lower()
 
 
 class DbApiConnector(Connector):
@@ -191,20 +204,30 @@ class DbApiConnector(Connector):
         key: Sequence[str] = (),
         types: Mapping[str, ColumnType] | None = None,
     ) -> int:
+        if self.read_only:
+            raise ConfigurationError(f"Cannot write {table}: the connection was opened to read")
         if mode is WriteMode.MERGE and not key:
             raise ConfigurationError(
                 "A merge needs the key columns that identify a row", context={"table": table}
             )
+        missing = [column for column in key if column not in columns]
+        if missing:
+            raise ConfigurationError(
+                f"The key of {table} names {', '.join(missing)}, which the rows do not hold "
+                f"(they hold {', '.join(columns)})",
+                context={"table": table, "key": list(key)},
+            )
+        rows = list(rows)
+        positions = [columns.index(column) for column in key]
+        if key and mode is not WriteMode.REPLACE:
+            _refuse_null_keys(table, key, positions, rows)
         if mode is WriteMode.APPEND and key:
-            rows = self._not_held(table, columns, rows, key)
+            rows = self._not_held(table, rows, positions, key)
         dialect = self.dialect
         target = dialect.identifier(table)
-        key_positions = [columns.index(column) for column in key]
         connection = self._open()
         held = self._held_columns(connection, table)
-        batches = _batches(rows, _WRITE_BATCH)
-        first = next(batches, None)
-        if first is None and held is None:
+        if not rows and (held is None or mode is not WriteMode.REPLACE):
             return 0
         written = 0
         try:
@@ -214,13 +237,13 @@ class DbApiConnector(Connector):
                 kinds = types or {}
                 declared = ", ".join(dialect.column(name, kinds.get(name)) for name in columns)
                 cursor.execute(f"CREATE TABLE IF NOT EXISTS {target} ({declared})")
-            elif first is not None:
-                _refuse_missing_columns(table, columns, held, exact=not dialect.fold_upper)
+            else:
+                self._add_missing_columns(cursor, table, columns, held, types or {})
             if mode is WriteMode.REPLACE:
                 cursor.execute(f"DELETE FROM {target} WHERE 1 = 1")  # nosec B608
-            for batch in [] if first is None else chain([first], batches):
+            for batch in _batches(rows, _WRITE_BATCH):
                 if mode is WriteMode.MERGE:
-                    self._delete_keyed(cursor, table, key, key_positions, batch)
+                    self._delete_keyed(cursor, table, key, positions, batch)
                 self._insert(cursor, table, columns, batch)
                 written += len(batch)
             self._commit(connection)
@@ -236,6 +259,30 @@ class DbApiConnector(Connector):
             ) from error
         return written
 
+    def _add_missing_columns(
+        self,
+        cursor: Any,
+        table: str,
+        columns: Sequence[str],
+        held: Sequence[str],
+        types: Mapping[str, ColumnType],
+    ) -> None:
+        """Add each column the rows hold and *table* lacks, as a column that may be null.
+
+        An action's optional field is in no row until an answer carries it, so the
+        table made by the first write can lack a column a later write needs.
+        """
+        dialect = self.dialect
+        have = {dialect.same_name(name) for name in held}
+        for name in columns:
+            if dialect.same_name(name) in have:
+                continue
+            statement = dialect.add_column.format(
+                table=dialect.identifier(table), column=dialect.column(name, types.get(name))
+            )
+            cursor.execute(statement)
+            logger.info("Added column %s to %s", name, table)
+
     def _delete_keyed(
         self,
         cursor: Any,
@@ -244,15 +291,14 @@ class DbApiConnector(Connector):
         positions: Sequence[int],
         batch: list[Sequence[Any]],
     ) -> None:
-        keys = [[row[position] for position in positions] for row in batch]
-        if any(value is None for values in keys for value in values):
-            raise ConfigurationError(
-                f"A row written to {table} has no value for its key ({', '.join(key)}); "
-                "a merge cannot tell which row it replaces",
-                context={"table": table, "key": list(key)},
-            )
+        """Delete the rows sharing a key with *batch*, keys compared as text.
+
+        Compared as text, a key matches whatever type its column holds: an id an
+        earlier write stored as text, or a column made by hand, still matches.
+        """
+        keys = [[_key_text(row[position]) for position in positions] for row in batch]
         dialect = self.dialect
-        names = [dialect.identifier(column) for column in key]
+        names = [dialect.as_text(column) for column in key]
         for chunk in _statement_chunks(keys, len(key), dialect.max_params):
             markers = iter(dialect.markers(len(chunk) * len(key)))
             if len(key) == 1:
@@ -270,21 +316,41 @@ class DbApiConnector(Connector):
     def _not_held(
         self,
         table: str,
-        columns: Sequence[str],
-        rows: Iterable[Sequence[Any]],
+        rows: list[Sequence[Any]],
+        positions: Sequence[int],
         key: Sequence[str],
     ) -> list[Sequence[Any]]:
-        positions = [columns.index(column) for column in key]
-        held = self.held_keys(table, key)
-        return [row for row in rows if tuple(row[p] for p in positions) not in held]
+        """The rows whose key neither *table* nor an earlier row of *rows* holds."""
+        seen = self.held_keys(table, key)
+        kept: list[Sequence[Any]] = []
+        for row in rows:
+            row_key = tuple(_key_text(row[position]) for position in positions)
+            if row_key not in seen:
+                seen.add(row_key)
+                kept.append(row)
+        return kept
 
-    def held_keys(self, table: str, key: Sequence[str]) -> set[tuple[Any, ...]]:
-        """The *key* values *table* holds; none when there is no such table."""
+    def held_keys(self, table: str, key: Sequence[str]) -> set[tuple[str | None, ...]]:
+        """The *key* values *table* holds, as text; none when there is no such table."""
         if self._held_columns(self._open(), table) is None:
             return set()
-        names = ", ".join(self.dialect.identifier(column) for column in key)
+        names = ", ".join(self.dialect.as_text(column) for column in key)
         query = f"SELECT {names} FROM {self.dialect.identifier(table)}"  # nosec B608
-        return {tuple(row.values()) for row in self.read(query)}
+        return set(self._read_tuples(query))
+
+    def _read_tuples(self, query: str) -> Iterator[tuple[Any, ...]]:
+        """Read *query* as tuples, without the duplicate-name check: casts may share a name."""
+        connection = self._open()
+        cursor = None
+        try:
+            cursor = self._cursor(connection)
+            cursor.execute(query)
+            while batch := cursor.fetchmany(_READ_BATCH):
+                for values in batch:
+                    yield tuple(values)
+        finally:
+            _close_quietly(cursor)
+            self._rollback(connection)
 
     def _held_columns(self, connection: Any, table: str) -> list[str] | None:
         """The columns *table* has, or None when the database has no such table."""
@@ -332,17 +398,22 @@ def _close_quietly(cursor: Any) -> None:
         logger.debug("Could not close a cursor: %s", error)
 
 
-def _refuse_missing_columns(
-    table: str, columns: Sequence[str], held: Sequence[str], *, exact: bool
+def _refuse_null_keys(
+    table: str, key: Sequence[str], positions: Sequence[int], rows: Sequence[Sequence[Any]]
 ) -> None:
-    """Refuse a write to a table lacking a column; a bare name is matched in any case."""
-    have = set(held) if exact else {name.lower() for name in held}
-    missing = [column for column in columns if (column if exact else column.lower()) not in have]
-    if missing:
+    """Refuse every row with no value for its key, before any statement is sent."""
+    if any(row[position] is None for row in rows for position in positions):
         raise ConfigurationError(
-            f"Table {table} has no column {', '.join(missing)}; add it, or write to a new table",
-            context={"table": table, "missing": missing},
+            f"A row written to {table} has no value for its key ({', '.join(key)}); "
+            "it cannot be told from another row",
+            context={"table": table, "key": list(key)},
         )
+
+
+def _key_text(value: Any) -> str:
+    """*value* as text, the way a database casts a stored key to text."""
+    safe = json_safe(value)
+    return safe if isinstance(safe, str) else json.dumps(safe)
 
 
 def _statement_chunks(

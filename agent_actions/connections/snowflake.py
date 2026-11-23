@@ -49,6 +49,7 @@ class SnowflakeConnector(DbApiConnector):
             ColumnType.BOOLEAN: "BOOLEAN",
         },
         untyped="VARCHAR",
+        text_cast="VARCHAR",
     )
 
     def __init__(self, settings: SnowflakeSettings) -> None:

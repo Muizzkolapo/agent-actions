@@ -1,0 +1,9 @@
+schema_path: schema
+tool_path: ["tools"]
+
+# The warehouse this example reads its tickets from and writes its results to.
+# Make it with: python seed_warehouse.py
+connections:
+  warehouse:
+    type: sqlite
+    path: warehouse.db

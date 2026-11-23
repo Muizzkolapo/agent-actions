@@ -42,6 +42,8 @@ class DatabricksConnector(DbApiConnector):
             ColumnType.BOOLEAN: "BOOLEAN",
         },
         untyped="STRING",
+        text_cast="STRING",
+        add_column="ALTER TABLE {table} ADD COLUMNS ({column})",
         max_params=250,
     )
 

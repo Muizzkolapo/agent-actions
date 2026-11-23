@@ -94,18 +94,30 @@ defaults:
 |-----|---------|---------|
 | `connection` | required | A name from the project's `connections:` block |
 | `sql` | required | The query to read; each row becomes one record |
-| `files` | `8` | How many snapshot files the rows are spread over, at most 256. Each row goes to the file its content picks, so the query's `ORDER BY` is kept only with `files: 1` |
+| `files` | `1` | How many snapshot files the rows are spread over, at most 256. With one file the query's `ORDER BY` is kept, and an action with `granularity: File` sees every row at once. With more, each row goes to the file its content picks, and a File-granularity action runs once a file |
 
 Every column of a row is a field of `source`, so a prompt reads `{{ source.title }}`.
+
+### The query
+
+The `sql` must read: it has to start with `SELECT`, `WITH` or `VALUES`, and
+anything else (`DELETE`, `UPDATE`, `DROP`) is refused before it reaches the
+database. SQLite and DuckDB are opened read-only for it, and Postgres and MySQL
+get a read-only session, so a `WITH ... DELETE` cannot write either.
+
+It must return rows, and each column must have a name of its own:
+`SELECT t.id, u.id` is refused, so alias one with `AS`.
 
 ### The snapshot
 
 The rows are written to `agent_io/_remote_cache/database/` the first time the
 workflow runs, and every later run reads that snapshot. A run that pauses for a
-batch and resumes a day later therefore sees the rows it started with. A
-snapshot belongs to the query and to the connection's settings, a `${NAME}`
-setting by the value it reads, so editing the query, a setting or a variable it
-reads reads the query again. A credential counts by its name, not its value.
+batch and resumes a day later therefore sees the rows it started with.
+
+Each start action keeps one snapshot. It belongs to the query, the file count
+and the connection's settings (a `${NAME}` setting by the value it reads, a
+credential by its name). Changing any of them reads the query again, and so
+does going back to an earlier query: only the current one is kept.
 
 To read the query again:
 
@@ -113,11 +125,10 @@ To read the query again:
 agac run -a my_workflow --refresh-input
 ```
 
-`--refresh-input` is refused while a batch is still open, since the batch
-answers the rows it was sent.
-
-The query must return rows (end it in a `SELECT`), and each column must have a
-name of its own: `SELECT t.id, u.id` is refused, so alias one with `AS`.
+The new rows replace the snapshot only once they are all read, so a refresh
+that fails leaves the snapshot there was. `--refresh-input` is refused, before
+anything else happens, while a batch is still open, since the batch answers the
+rows it was sent.
 
 A record's identity is its content, so after a refresh:
 
@@ -126,7 +137,8 @@ A record's identity is its content, so after a refresh:
 - a row the query no longer returns is forgotten.
 
 Dates, timestamps and decimals are stored as text (`2026-11-23`, `10.50`) and
-binary values as base64. Cast a column in the query if it has a type that has
+binary values as base64. A timestamp with a time zone is stored in UTC, so a
+row reads the same whichever zone the machine or the session is in. Cast a column in the query if it has a type that has
 no JSON form.
 
 ## Writing results
@@ -157,7 +169,11 @@ object is written as JSON text. A record the action did not answer (guard-skippe
 or failed above it) makes no row.
 
 A table the export creates takes each column's type from the values written
-that time: a column of whole numbers is an integer column. A later write of a
+that time: a column of whole numbers is an integer column. A field that no
+answer carried yet (an optional one) is added as a column the first time an
+answer carries it; the rows written before hold null in it. A name is matched
+without regard to case, except on Postgres, where a quoted name keeps its case.
+On MySQL, text columns are `LONGTEXT`, so a long body or answer fits. A later write of a
 fraction to it is held as the database holds a fraction in an integer column
 (SQLite keeps it; most databases round or refuse it). Create the table yourself
 when a column's type must not depend on the first rows.
@@ -173,15 +189,23 @@ more often a misspelling than a column of nulls.
 | `replace` | Exactly the rows the store holds now. |
 | `merge` | What it held, with each row sharing a `key` replaced. Writing twice changes nothing. |
 
-`merge` never removes a row, and refuses a row with no value for its key. With the default key, a source row that changes
+A key is compared as text, so it matches whatever type its column holds: an id
+stored as `VARCHAR` matches the number `7`, and a Postgres `UUID` column matches
+the `source_guid` text. Keep keys to ids and text; a timestamp or a fraction may
+not read back as the same text.
+
+`merge` and `append` refuse a row with no value for its key, before anything is
+written. `merge` never removes a row. With the default key, a source row that changes
 gets a new `source_guid`, so the table keeps both versions. Set `key` to the
 row's own identifier (carried from the source) to have the new version replace
 the old one, or use `replace` to mirror the store.
 
 ### When tables are written
 
-Tables are written when `agac run` or `agac retry` finishes with every action
-complete. If the write fails, the results are still in the store. Write them
+The outputs are checked before any action runs: an output naming an action the
+workflow does not run, or a connection the project does not declare, stops the
+run at once. Tables are written when `agac run` or `agac retry` finishes with
+every action complete. If the write fails, the results are still in the store. Write them
 again, without calling a model, with:
 
 ```bash

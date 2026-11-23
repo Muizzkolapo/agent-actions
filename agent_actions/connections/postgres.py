@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_actions.connections.dbapi import DbApiConnector
+from agent_actions.connections.dbapi import DbApiConnector, Dialect
 from agent_actions.connections.settings import CREDENTIAL, read_settings
 
 
@@ -26,6 +26,9 @@ class PostgresSettings(BaseModel):
 class PostgresConnector(DbApiConnector):
     """Reads and writes PostgreSQL through psycopg. A write is one transaction, DDL included."""
 
+    # A quoted name keeps its case, so "Summary" and "summary" are two columns.
+    dialect = Dialect(case_sensitive_names=True)
+
     kind = "postgres"
 
     def __init__(self, settings: PostgresSettings) -> None:
@@ -41,7 +44,11 @@ class PostgresConnector(DbApiConnector):
     def _connect(self) -> Any:
         import psycopg
 
-        return psycopg.connect(**self._settings.model_dump(exclude_none=True))
+        options = self._settings.model_dump(exclude_none=True)
+        if self.read_only:
+            options["options"] = "-c default_transaction_read_only=on"
+        # Text in a SQL_ASCII database comes back as bytes unless the client asks for utf8.
+        return psycopg.connect(client_encoding="utf8", **options)
 
     def _read_cursor(self, connection: Any) -> Any:
         # A named cursor is held by the server, so a large result is not read into memory.

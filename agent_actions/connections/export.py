@@ -129,6 +129,32 @@ def _last_row_per_key(
     return list(latest.values())
 
 
+def check_outputs(declared: Any, project_root: Path, *, actions: Collection[str]) -> None:
+    """Refuse outputs that name an action the workflow does not run or an undeclared connection.
+
+    Asked before the run, so a typo fails in a second, not after every action has run.
+    """
+    from agent_actions.connections import connection_settings
+
+    outputs = _parsed(declared)
+    unknown = sorted({output.action for output in outputs} - set(actions))
+    if unknown:
+        raise ConfigurationError(
+            f"outputs name {', '.join(unknown)}, which this workflow does not run "
+            f"(it runs {', '.join(actions)})",
+            context={"unknown": unknown},
+        )
+    for connection in sorted({output.connection for output in outputs}):
+        connection_settings(connection, project_root)
+
+
+def _parsed(declared: Any) -> list[OutputConfig]:
+    return [
+        entry if isinstance(entry, OutputConfig) else OutputConfig(**entry)
+        for entry in declared or []
+    ]
+
+
 def write_outputs(
     backend: StorageBackend,
     declared: Any,
@@ -142,23 +168,14 @@ def write_outputs(
     *actions* are the workflow's own: an output naming any other is refused
     before a table is touched.
     """
-    outputs = [
-        entry if isinstance(entry, OutputConfig) else OutputConfig(**entry)
-        for entry in declared or []
-    ]
-    unknown = sorted({output.action for output in outputs} - set(actions))
-    if unknown:
-        raise ConfigurationError(
-            f"outputs name {', '.join(unknown)}, which this workflow does not run "
-            f"(it runs {', '.join(actions)})",
-            context={"unknown": unknown},
-        )
+    outputs = _parsed(declared)
     if only_action and only_action not in {output.action for output in outputs}:
         raise ConfigurationError(
             f"No output writes {only_action}; the actions with outputs are "
             f"{', '.join(sorted({output.action for output in outputs}))}",
             context={"action": only_action},
         )
+    check_outputs(outputs, project_root, actions=actions)
     written: dict[str, int] = {}
     for output in outputs:
         if only_action and output.action != only_action:

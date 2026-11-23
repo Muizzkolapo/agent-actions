@@ -41,6 +41,7 @@ class RedshiftConnector(DbApiConnector):
             ColumnType.BOOLEAN: "BOOLEAN",
         },
         untyped="VARCHAR(65535)",
+        text_cast="VARCHAR(65535)",
     )
 
     def __init__(self, settings: RedshiftSettings) -> None:

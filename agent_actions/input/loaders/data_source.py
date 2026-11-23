@@ -18,7 +18,10 @@ from agent_actions.errors import ConfigurationError, FileSystemError
 from agent_actions.input.loaders.database_source import (
     DEFAULT_SNAPSHOT_FILES,
     REMOTE_CACHE_DIR,
+    refuse_a_statement_that_writes,
+    snapshot_directory,
     snapshot_fingerprint,
+    snapshot_needs_reading,
     snapshot_query,
 )
 from agent_actions.utils import deep_json
@@ -335,11 +338,14 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
         ) from e
 
 
-def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourceResolutionResult:
+def _resolve_database(
+    config: DataSourceConfig, agent_folder: Path, agent_name: str, project_root: Path | None
+) -> DataSourceResolutionResult:
     """Resolve a database data source -- read the query once and keep its rows on disk.
 
-    A snapshot is kept per query and connection settings (a ``${NAME}`` setting by
-    its value, a credential by its name), so a changed setting reads again. ``agac run --refresh-input`` drops it, so the query is read again.
+    A snapshot is kept per action, query, file count and connection settings (a
+    ``${NAME}`` setting by its value, a credential by its name), so changing any
+    of them reads again. ``agac run --refresh-input`` reads it again too.
     """
     if not config.connection or not config.sql or not config.sql.strip():
         raise ConfigurationError(
@@ -349,19 +355,20 @@ def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourc
                 "operation": "resolve_database_data_source",
             },
         )
+    refuse_a_statement_that_writes(config.sql)
 
     from agent_actions.connections import connection_settings, open_connection
     from agent_actions.connections.settings import settings_as_resolved
 
-    project_root = find_project_root(str(agent_folder)) or agent_folder.resolve().parent
-    settings = settings_as_resolved(connection_settings(config.connection, project_root))
-    fingerprint = snapshot_fingerprint(config.connection, config.sql, settings)
-    snapshot_dir = agent_folder / _REMOTE_CACHE_DIR / "database" / fingerprint / "data"
-    if snapshot_dir.exists():
+    root = project_root or find_project_root(str(agent_folder)) or agent_folder.resolve().parent
+    settings = settings_as_resolved(connection_settings(config.connection, root))
+    fingerprint = snapshot_fingerprint(config.connection, config.sql, settings, config.files)
+    snapshot_dir = snapshot_directory(agent_folder, agent_name, fingerprint)
+    if not snapshot_needs_reading(snapshot_dir):
         logger.info("Using the stored snapshot of '%s': %s", config.connection, snapshot_dir)
         return DataSourceResolutionResult(directories=[snapshot_dir])
 
-    with open_connection(config.connection, project_root) as connector:
+    with open_connection(config.connection, root, read_only=True) as connector:
         snapshot_query(connector, config.sql, snapshot_dir, config.files)
     return DataSourceResolutionResult(directories=[snapshot_dir])
 
@@ -375,6 +382,7 @@ def resolve_start_node_data_source(
     agent_folder: Path,
     data_source: Any,
     agent_name: str,
+    project_root: Path | None = None,
 ) -> DataSourceResolutionResult:
     """Resolve the data source for a start node.
 
@@ -396,7 +404,7 @@ def resolve_start_node_data_source(
         return _resolve_api(config, agent_folder, agent_name)
 
     if config.type == DataSourceType.DATABASE:
-        return _resolve_database(config, agent_folder)
+        return _resolve_database(config, agent_folder, agent_name, project_root)
 
     raise ConfigurationError(
         f"Unsupported data source type: {config.type}",

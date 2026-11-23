@@ -43,6 +43,7 @@ class BigqueryConnector(DbApiConnector):
             ColumnType.BOOLEAN: "BOOL",
         },
         untyped="STRING",
+        text_cast="STRING",
     )
 
     def __init__(self, settings: BigquerySettings, project_root: Path) -> None:

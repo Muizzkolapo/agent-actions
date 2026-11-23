@@ -57,10 +57,15 @@ def connection_settings(name: str, project_root: Path) -> dict[str, Any]:
     return settings
 
 
-def open_connection(name: str, project_root: Path) -> Connector:
-    """Open the connection the project's ``connections:`` block calls *name*."""
+def open_connection(name: str, project_root: Path, *, read_only: bool = False) -> Connector:
+    """Open the connection the project's ``connections:`` block calls *name*.
+
+    *read_only* asks the database for a session that cannot write, where it has one.
+    """
     settings = connection_settings(name, project_root)
-    return _connector_class(name, settings).from_settings(name, settings, project_root)
+    connector = _connector_class(name, settings).from_settings(name, settings, project_root)
+    connector.read_only = read_only
+    return connector
 
 
 def _connector_class(name: str, settings: dict[str, Any]) -> type[Connector]:

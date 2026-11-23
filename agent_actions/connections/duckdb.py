@@ -32,6 +32,7 @@ class DuckdbConnector(DbApiConnector):
             ColumnType.BOOLEAN: "BOOLEAN",
         },
         untyped="VARCHAR",
+        text_cast="VARCHAR",
     )
 
     def __init__(self, path: Path) -> None:
@@ -48,7 +49,7 @@ class DuckdbConnector(DbApiConnector):
     def _connect(self) -> Any:
         import duckdb
 
-        return duckdb.connect(str(self._path))
+        return duckdb.connect(str(self._path), read_only=self.read_only)
 
     def _begin(self, connection: Any) -> None:
         connection.begin()

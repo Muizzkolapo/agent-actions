@@ -1019,7 +1019,8 @@ class OutputConfig(BaseModel):
     mode: WriteMode = Field(default=WriteMode.MERGE, description="append, replace or merge")
     key: list[str] = Field(
         default_factory=lambda: [OUTPUT_IDENTITY_COLUMN],
-        description="Columns identifying a row (for mode=merge)",
+        min_length=1,
+        description="Columns identifying a row (for mode=merge and mode=append)",
     )
     carry: list[str] = Field(
         default_factory=list, description="Source fields written beside the action's own"

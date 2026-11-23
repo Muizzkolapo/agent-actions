@@ -170,15 +170,54 @@ def test_a_merge_of_a_row_with_no_key_value_is_refused_and_writes_nothing(connec
     assert _held(connector, table) == [(1, "a")]
 
 
-def test_a_table_lacking_a_column_is_refused_and_left_as_it_was(connector, table):
+def test_a_column_the_table_lacks_is_added_and_earlier_rows_hold_null(connector, table):
     _write(connector, table, [(1, "a")])
 
-    with pytest.raises(ConfigurationError, match="no column score"):
-        connector.write(
-            table, [*COLUMNS, "score"], [(2, "b", 0.5)], mode=WriteMode.REPLACE, types=TYPES
-        )
+    connector.write(
+        table, [*COLUMNS, "note"], [(2, "b", "late")], mode=WriteMode.APPEND, types=TYPES
+    )
 
-    assert _held(connector, table) == [(1, "a")]
+    name = connector.dialect.identifier(table)
+    held = sorted(
+        (row["id"], row["note"]) for row in connector.read(f"SELECT id, note FROM {name}")
+    )
+    assert held == [(1, None), (2, "late")]
+
+
+def test_a_column_named_in_another_case_is_the_same_column(connector, table):
+    if connector.kind == "postgres":
+        pytest.skip("Postgres keeps a quoted name's case, so these are two columns")
+    _write(connector, table, [(1, "a")])
+
+    assert connector.write(table, ["ID", "LABEL"], [(2, "b")], mode=WriteMode.APPEND) == 1
+
+
+def test_a_key_compares_as_text_whatever_type_its_column_holds(connector, table):
+    connector.write(
+        table,
+        COLUMNS,
+        [("1", "a"), ("A-8", "b")],
+        mode=WriteMode.APPEND,
+        types={"id": ColumnType.TEXT, "label": ColumnType.TEXT},
+    )
+
+    _write(connector, table, [(1, "A")], mode=WriteMode.MERGE, key=["id"])
+    assert _write(connector, table, [(1, "A")], mode=WriteMode.APPEND, key=["id"]) == 0
+
+    name = connector.dialect.identifier(table)
+    held = sorted((str(r["id"]), r["label"]) for r in connector.read(f"SELECT * FROM {name}"))
+    assert held == [("1", "A"), ("A-8", "b")]
+
+
+def test_an_append_of_a_null_key_is_refused_before_anything_is_written(connector, table):
+    with pytest.raises(ConfigurationError, match="has no value for its key"):
+        _write(connector, table, [(1, "a"), (None, "b")], mode=WriteMode.APPEND, key=["id"])
+
+    assert not _exists(connector, table)
+
+
+def test_an_append_drops_a_key_repeated_within_the_write(connector, table):
+    assert _write(connector, table, [(1, "a"), (1, "a")], mode=WriteMode.APPEND, key=["id"]) == 1
 
 
 def test_a_row_the_database_refuses_leaves_the_rows_before_it_unwritten(connector, table):

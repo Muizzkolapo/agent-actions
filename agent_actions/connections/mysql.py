@@ -35,8 +35,11 @@ class MysqlConnector(DbApiConnector):
 
     dialect = Dialect(
         quote="`",
+        untyped="LONGTEXT",
+        text_cast="CHAR",
         types={
-            ColumnType.TEXT: "TEXT",
+            # TEXT holds 64 KB; a long body or answer needs LONGTEXT.
+            ColumnType.TEXT: "LONGTEXT",
             ColumnType.INTEGER: "BIGINT",
             ColumnType.REAL: "DOUBLE",
             ColumnType.BOOLEAN: "BOOLEAN",
@@ -57,7 +60,10 @@ class MysqlConnector(DbApiConnector):
         import pymysql
 
         options = self._settings.model_dump(exclude_none=True)
-        return pymysql.connect(charset="utf8mb4", **options)
+        connection = pymysql.connect(charset="utf8mb4", **options)
+        if self.read_only:
+            connection.cursor().execute("SET SESSION TRANSACTION READ ONLY")
+        return connection
 
     def _read_cursor(self, connection: Any) -> Any:
         import pymysql.cursors

@@ -12,6 +12,7 @@ Six workflows demonstrating agent-actions patterns — from single-vendor local 
 | [support_resolution](./support_resolution) | 7 | Ollama | `json_mode: false`, `output_field` (no schema needed), works with any model including local 3B, guard as cost control |
 | [contract_reviewer](./contract_reviewer) | 4 | Gemini | Map-Reduce (split → per-clause analysis → FILE granularity aggregate), context scoping with drop |
 | [question_rounds](./question_rounds) | 6 (12 once unrolled) | agac-provider (offline mock) | `- loop:` (write → check up to 3 rounds, with the previous check as feedback), `- route:` on the loop's verdict, `- join:` |
+| [ticket_triage_warehouse](./ticket_triage_warehouse) | 3 | agac-provider (offline mock) | Input read from a database table, results written back as tables (`connections:`, `data_source: {type: database}`, `outputs:`), `--refresh-input`, FILE granularity digest |
 | [book_catalog_enrichment](./book_catalog_enrichment) | 14 | Ollama, Groq, OpenAI | HITL review, expectations, grounded recommendations (LLM → Tool search → LLM rank), 3-way parallel fan-out |
 
 ## Quick Start
@@ -47,6 +48,7 @@ All workflows default to `record_limit: 2` for quick testing. Remove or increase
 | Grounded retrieval (anti-hallucination) | book_catalog_enrichment |
 | Non-JSON mode + output_field | support_resolution |
 | Loop, router and join | question_rounds |
+| Database input and output tables | ticket_triage_warehouse |
 | Local model support (Ollama) | support_resolution, review_analyzer, incident_triage, book_catalog_enrichment |
 
 ## Project Structure

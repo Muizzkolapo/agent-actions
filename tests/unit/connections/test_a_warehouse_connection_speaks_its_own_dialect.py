@@ -177,19 +177,19 @@ def test_the_driver_is_handed_the_connection_s_settings(
         (
             "redshift",
             'CREATE TABLE IF NOT EXISTS "out"."labels" ("id" BIGINT, "label" VARCHAR(65535))',
-            'DELETE FROM "out"."labels" WHERE "id" IN (%s)',
+            'DELETE FROM "out"."labels" WHERE CAST("id" AS VARCHAR(65535)) IN (%s)',
             'INSERT INTO "out"."labels" ("id", "label") VALUES (%s, %s)',
         ),
         (
             "snowflake",
             'CREATE TABLE IF NOT EXISTS "OUT"."LABELS" ("ID" NUMBER(38, 0), "LABEL" VARCHAR)',
-            'DELETE FROM "OUT"."LABELS" WHERE "ID" IN (%s)',
+            'DELETE FROM "OUT"."LABELS" WHERE CAST("ID" AS VARCHAR) IN (%s)',
             'INSERT INTO "OUT"."LABELS" ("ID", "LABEL") VALUES (%s, %s)',
         ),
         (
             "databricks",
             "CREATE TABLE IF NOT EXISTS `out`.`labels` (`id` BIGINT, `label` STRING)",
-            "DELETE FROM `out`.`labels` WHERE `id` IN (:p0)",
+            "DELETE FROM `out`.`labels` WHERE CAST(`id` AS STRING) IN (:p0)",
             "INSERT INTO `out`.`labels` (`id`, `label`) VALUES (:p0, :p1)",
         ),
     ],
@@ -207,6 +207,8 @@ def test_a_merge_is_sent_in_the_database_s_own_words(
         [] if kind == "databricks" else ["COMMIT"]
     )
     bound = driver.log[3][1]
+    deleted = driver.log[2][1]
+    assert deleted == ({"p0": "1"} if kind == "databricks" else ("1",))
     assert bound == ({"p0": 1, "p1": "a"} if kind == "databricks" else (1, "a"))
 
 

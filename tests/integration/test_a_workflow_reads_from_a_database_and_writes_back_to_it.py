@@ -134,7 +134,7 @@ def test_a_row_that_leaves_the_query_takes_no_other_row_back_to_the_model(projec
 
 
 def test_a_write_that_fails_says_the_results_are_stored_and_how_to_write_them(project):
-    _sql(project, "CREATE TABLE published (unrelated TEXT)")
+    _sql(project, "CREATE TABLE published (unrelated TEXT NOT NULL)")
 
     result = run_agac(project, "run", "-a", WORKFLOW)
     output = " ".join((result.stdout + result.stderr).split())

@@ -40,6 +40,9 @@ class ColumnType(str, Enum):
 class Connector(ABC):
     """One open connection to a database a workflow reads rows from and writes rows to."""
 
+    # Set before the first statement: a session that cannot write, where the database has one.
+    read_only: bool = False
+
     @classmethod
     @abstractmethod
     def from_settings(cls, name: str, settings: dict[str, Any], project_root: Path) -> Connector:
@@ -112,6 +115,9 @@ def json_safe(value: Any) -> Any:
         return value
     if isinstance(value, decimal.Decimal):
         return format(value, "f")
+    if isinstance(value, datetime.datetime) and value.utcoffset() is not None:
+        # The session's zone decides how an aware time reads; UTC reads the same anywhere.
+        return value.astimezone(datetime.UTC).isoformat()
     if isinstance(value, datetime.datetime | datetime.date | datetime.time):
         return value.isoformat()
     if isinstance(value, datetime.timedelta):

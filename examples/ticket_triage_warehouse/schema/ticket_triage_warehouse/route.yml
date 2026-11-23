@@ -1,0 +1,5 @@
+name: route
+fields:
+  - {id: team, type: string, required: true}
+  - {id: sla_hours, type: integer, required: true}
+  - {id: escalation, type: string, required: false}

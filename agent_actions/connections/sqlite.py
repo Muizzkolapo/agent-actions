@@ -52,6 +52,9 @@ class SqliteConnector(DbApiConnector):
     def _connect(self) -> sqlite3.Connection:
         # Autocommit, so a write opens its own transaction and the CREATE TABLE
         # is rolled back with the rows.
+        if self.read_only:
+            uri = f"{self._path.resolve().as_uri()}?mode=ro"
+            return sqlite3.connect(uri, uri=True, isolation_level=None)
         return sqlite3.connect(self._path, isolation_level=None)
 
     def _begin(self, connection: sqlite3.Connection) -> None:
