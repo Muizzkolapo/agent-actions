@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import re
 import tracemalloc
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -32,6 +33,8 @@ from agent_actions.utils.memory import peak_rss_mb
 from agent_actions.workflow.execution_events import fire_step_complete
 
 ANCESTORS = 10
+# The peak memory of a running pytest process, in MB: more than 10, less than 100 GB.
+_PLAUSIBLE_MB = (10, 100_000)
 FIELD = 20_000
 
 
@@ -153,7 +156,9 @@ def test_a_prepared_file_logs_its_time_records_and_peak_memory(caplog):
     (line,) = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Prepared")]
     assert line.startswith("Prepared summarise/pages.json in ")
     assert "3 record(s), 2 task(s), 1 filtered" in line
-    assert "peak memory " in line and line.endswith(" MB")
+    peak = re.search(r"; peak memory (\d+) MB$", line)
+    assert peak is not None, line
+    assert _PLAUSIBLE_MB[0] < int(peak.group(1)) < _PLAUSIBLE_MB[1]
 
 
 def test_a_closing_step_carries_the_peak_memory():
@@ -179,5 +184,14 @@ def test_a_closing_step_carries_the_peak_memory():
         EventManager.reset()
 
     (step,) = [event for event in events if event.event_type == "StepCompleteEvent"]
-    assert step.data["peak_rss_mb"] > 0
-    assert step.data["peak_rss_mb"] <= (peak_rss_mb() or 0)
+    assert _PLAUSIBLE_MB[0] < step.data["peak_rss_mb"] <= (peak_rss_mb() or 0)
+
+
+def test_the_peak_is_in_megabytes_on_this_platform():
+    pytest.importorskip("resource")
+
+    peak = peak_rss_mb()
+
+    # A pytest process holding the framework is tens of MB at least; a unit slip of
+    # 1024 either way leaves well under 10 MB or well over 100 GB.
+    assert peak is not None and _PLAUSIBLE_MB[0] < peak < _PLAUSIBLE_MB[1], peak
