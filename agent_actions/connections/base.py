@@ -42,8 +42,8 @@ class Connector(ABC):
 
     @classmethod
     @abstractmethod
-    def from_settings(cls, settings: dict[str, Any], project_root: Path) -> Connector:
-        """Build from one entry of the project's ``connections:`` block."""
+    def from_settings(cls, name: str, settings: dict[str, Any], project_root: Path) -> Connector:
+        """Build from the entry the project's ``connections:`` block calls *name*."""
 
     @abstractmethod
     def check(self) -> None:
@@ -70,7 +70,7 @@ class Connector(ABC):
         each column of the type *types* gives it.
         ``MERGE`` replaces the rows sharing a *key* with an incoming row, so
         writing the same rows twice leaves the table as writing them once did;
-        it removes no other row.
+        it removes no other row, and refuses a row whose key is null.
         """
 
     @abstractmethod
@@ -84,11 +84,12 @@ class Connector(ABC):
         self.close()
 
 
-def quoted_identifier(name: str) -> str:
-    """*name* quoted for SQL, each dotted part on its own.
+def quoted_identifier(name: str, quote: str = '"') -> str:
+    """*name* wrapped in *quote* for SQL, each dotted part on its own.
 
     A table or column name is written into the statement, never bound, so only
-    plain identifiers are let through.
+    plain identifiers are let through. An empty *quote* leaves the name bare,
+    for a database that folds the case of an unquoted name.
     """
     parts = name.split(".")
     if not all(_IDENTIFIER.fullmatch(part) for part in parts):
@@ -97,7 +98,7 @@ def quoted_identifier(name: str) -> str:
             "underscores, with a dot between a schema and a table",
             context={"identifier": name},
         )
-    return ".".join(f'"{part}"' for part in parts)
+    return ".".join(f"{quote}{part}{quote}" for part in parts)
 
 
 def json_safe(value: Any) -> Any:

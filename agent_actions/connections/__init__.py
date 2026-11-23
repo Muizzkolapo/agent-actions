@@ -30,6 +30,13 @@ __all__ = [
 # A connector is imported when a project names its type, so a database driver
 # is needed only by the projects that use it.
 CONNECTORS: dict[str, str] = {
+    "bigquery": "agent_actions.connections.bigquery:BigqueryConnector",
+    "databricks": "agent_actions.connections.databricks:DatabricksConnector",
+    "duckdb": "agent_actions.connections.duckdb:DuckdbConnector",
+    "mysql": "agent_actions.connections.mysql:MysqlConnector",
+    "postgres": "agent_actions.connections.postgres:PostgresConnector",
+    "redshift": "agent_actions.connections.redshift:RedshiftConnector",
+    "snowflake": "agent_actions.connections.snowflake:SnowflakeConnector",
     "sqlite": "agent_actions.connections.sqlite:SqliteConnector",
 }
 
@@ -46,7 +53,7 @@ def open_connection(name: str, project_root: Path) -> Connector:
             f"No connection named '{name}' in agent_actions.yml (declared: {known})",
             context={"connection": name},
         )
-    return _connector_class(name, settings).from_settings(settings, project_root)
+    return _connector_class(name, settings).from_settings(name, settings, project_root)
 
 
 def _connector_class(name: str, settings: dict[str, Any]) -> type[Connector]:

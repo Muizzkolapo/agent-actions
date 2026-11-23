@@ -13,7 +13,16 @@ store after the last.
 |------|------|-------------|---------|
 | `__init__.py` | Module | `CONNECTORS` registry (type name to `module:Class`, imported when a project names the type) and `open_connection(name, project_root)`, which reads the project's `connections:` block. | `config.path_config`, `errors` |
 | `base.py` | Module | `Connector` contract (`from_settings`, `check`, `read`, `write`, `close`), `WriteMode` (`append`, `replace`, `merge`), `ColumnType` (the type a created column is given), `quoted_identifier` (a table or column name is validated, then quoted) and `json_safe` (a database value's one JSON form, so a row read twice has one identity). | `errors` |
-| `sqlite.py` | Module | `SqliteConnector`: the reference connector, on the standard library. A write is one transaction, table creation included, and a write of no rows creates no table; `merge` deletes the rows sharing a key with an incoming row, then inserts. | `sqlite3`, `errors` |
+| `settings.py` | Module | `read_settings` validates one connection's settings against its model, reads each `${NAME}` value from the environment, refuses a secret written in the project file, and registers a secret's value with the log redaction. | `pydantic`, `logging.filters`, `errors` |
+| `dbapi.py` | Module | `DbApiConnector`: `read` and `write` over any PEP 249 driver, and `Dialect` (parameter style, identifier quote, column type names). A database's connector adds how to connect and the hooks it needs (`_begin`, `_commit`, `_cursor`, `_read_cursor`, `_insert`, `_column_name`). A write probes the table with a zero-row select, creates it when absent, then deletes and inserts in one transaction where the database has them. | `connections.base`, `errors` |
+| `sqlite.py` | Module | `SqliteConnector`, on the standard library; an untyped column is declared with no type. | `sqlite3` |
+| `duckdb.py` | Module | `DuckdbConnector`; statements run on the connection itself, since a DuckDB cursor is another connection outside its transaction. | `duckdb` |
+| `postgres.py` | Module | `PostgresConnector` through psycopg; a query is read through a server-side cursor. | `psycopg` |
+| `mysql.py` | Module | `MysqlConnector` through PyMySQL; a query is read unbuffered. | `pymysql` |
+| `redshift.py` | Module | `RedshiftConnector` through `redshift_connector`, with password or IAM sign-in. | `redshift_connector` |
+| `snowflake.py` | Module | `SnowflakeConnector`; names are written bare and a folded result column is read back in lower case. | `snowflake.connector` |
+| `bigquery.py` | Module | `BigqueryConnector`; rows are added by a load job into the full table id. | `google.cloud.bigquery` |
+| `databricks.py` | Module | `DatabricksConnector`; named parameters, and nothing to commit. | `databricks.sql` |
 | `export.py` | Module | `output_table` turns an action's stored records into columns and rows (identity, carried source fields, the action's own fields; nested values as JSON text; a record the action did not answer makes no row). `column_types` gives each column the type its values share. `write_output` / `write_outputs` write the outputs a workflow declares, refusing one that names an action the workflow does not run; a merge keeps the last stored row of each key. | `storage.backend`, `record.state`, `config.schema` |
 
 ## Project Surface
@@ -36,6 +45,8 @@ store after the last.
 
 ## Notes
 
-- A warehouse connector (BigQuery, Snowflake) is one more `CONNECTORS` entry and a
-  class meeting `Connector`; its driver is imported only when a project names the type.
-- `write` takes rows in bulk so a connector can use its database's load path.
+- A new type is one more `CONNECTORS` entry, a `DbApiConnector` subclass and an extra in
+  `pyproject.toml` named as the type; its driver is imported only when a connection opens.
+- `sqlite`, `duckdb`, `postgres` and `mysql` are held to one contract against a real database
+  (`tests/integration/test_every_connection_type_reads_and_writes_alike.py`); the types that
+  need an account are tested against a stand-in driver.

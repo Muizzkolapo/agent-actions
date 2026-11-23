@@ -18,12 +18,63 @@ Name each database in `agent_actions.yml`:
 ```yaml
 connections:
   warehouse:
-    type: sqlite
-    path: data/warehouse.db    # relative to the project
+    type: postgres
+    host: db.internal
+    dbname: analytics
+    user: loader
+    password: ${WAREHOUSE_PASSWORD}
 ```
 
-`sqlite` is the one type that ships. A connection is opened only when a workflow
-uses it.
+A connection is opened only when a workflow uses it.
+
+### Secrets
+
+Any setting can be written as `${NAME}` to read it from the environment (or
+`.env`). A setting whose name holds `password`, `token`, `secret` or
+`passphrase` **must** be written that way: a credential typed into the project
+file is refused, and its value is kept out of the logs.
+
+### Types
+
+Each type but `sqlite` needs its driver, installed as an extra of the same name:
+
+```bash
+pip install 'agent-actions[postgres]'
+```
+
+| Type | Driver | Settings (required in bold) |
+|------|--------|-----------------------------|
+| `sqlite` | built in | **`path`** |
+| `duckdb` | `duckdb` | **`path`** |
+| `postgres` | `psycopg` | **`host`**, **`dbname`**, **`user`**, `password`, `port`, `sslmode`, `connect_timeout` |
+| `mysql` | `pymysql` | **`database`**, **`user`**, `password`, `host`, `port`, `unix_socket`, `connect_timeout` |
+| `redshift` | `redshift-connector` | **`host`**, **`database`**, `user`, `password`, `port`, `iam`, `cluster_identifier`, `region`, `db_user`, `sslmode` |
+| `snowflake` | `snowflake-connector-python` | **`account`**, **`user`**, `password`, `private_key_file`, `private_key_file_pwd`, `authenticator`, `warehouse`, `database`, `schema`, `role` |
+| `bigquery` | `google-cloud-bigquery` | **`project`**, `dataset`, `location`, `keyfile` |
+| `databricks` | `databricks-sql-connector` | **`server_hostname`**, **`http_path`**, **`access_token`**, `catalog`, `schema` |
+
+A `path` or `keyfile` is relative to the project. `bigquery` without a
+`keyfile` uses the environment's own Google credentials; `redshift` with
+`iam: true` uses the environment's AWS credentials.
+
+### What differs between types
+
+| Type | A write is one transaction | Notes |
+|------|----------------------------|-------|
+| `sqlite`, `duckdb`, `postgres`, `redshift` | Yes, table creation included | |
+| `mysql`, `snowflake` | Rows yes; a `CREATE TABLE` commits at once | A first write that fails leaves the new table behind, empty |
+| `bigquery`, `databricks` | No | Rows are added by a load job on `bigquery`. A write that stops partway is put right by writing again, except an `append` |
+
+`snowflake` names are written unquoted, so Snowflake folds them to upper case
+as it does for a table made by hand; a result column it folded is read back in
+lower case, so a prompt reads `{{ source.title }}`.
+
+:::note How each type is tested
+`sqlite`, `duckdb`, `postgres` and `mysql` are run against a real database by
+the test suite. `redshift`, `snowflake`, `bigquery` and `databricks` share the
+same code and are tested against a stand-in for their driver: the statements
+they send are checked, but not against a live account.
+:::
 
 ## Reading input
 
@@ -102,7 +153,7 @@ or failed above it) makes no row.
 | `replace` | Exactly the rows the store holds now. |
 | `merge` | What it held, with each row sharing a `key` replaced. Writing twice changes nothing. |
 
-`merge` never removes a row. With the default key, a source row that changes
+`merge` never removes a row, and refuses a row with no value for its key. With the default key, a source row that changes
 gets a new `source_guid`, so the table keeps both versions. Set `key` to the
 row's own identifier (carried from the source) to have the new version replace
 the old one, or use `replace` to mirror the store.
