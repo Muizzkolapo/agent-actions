@@ -51,7 +51,7 @@ pathways.
 |--------|------|-------------|------------|
 | `find_project_root()` | `agent_actions.yml` | Reads | — |
 | `ensure_in_project()` | `agent_actions.yml` | Validates | — |
-| `resolve_tools_path()` | `agent_actions.yml` | Reads | `tool_path`, `tools` |
+| `resolve_tools_path()` | `agent_actions.yml` | Reads | `tool_path` |
 | `FileHandler.get_agent_paths()` | `agent_config/{workflow}.yml` | Reads | — |
 | `FileHandler.get_agent_paths()` | `agent_io/target/{action}/` | Reads | — |
 | `discover_and_load_udfs()` | `tools/{workflow}/*.py` | Reads | — |

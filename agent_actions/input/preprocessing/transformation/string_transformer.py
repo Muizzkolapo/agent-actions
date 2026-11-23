@@ -32,7 +32,7 @@ class StringProcessor:
             if not tools_path:
                 raise ConfigurationError(
                     f"No tools_path configured — cannot import UDF '{module_name}'. "
-                    f"Set 'tool_path' or 'tools.path' in your agent config.",
+                    f"Set 'tool_path' in agent_actions.yml.",
                     context={
                         "function_name": full_function_name,
                         "operation": "call_user_function",
