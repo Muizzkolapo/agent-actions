@@ -24,7 +24,6 @@ from agent_actions.config.schema import (
     dump_defaults,
     refuse_blank_output_field,
     refuse_context_scope_siblings,
-    refuse_retired_keys,
 )
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
 from agent_actions.llm.config.endpoints import clear_project_endpoints, load_project_endpoints
@@ -104,9 +103,6 @@ def _validate_project_expect_block(project_defaults: dict[str, Any]) -> dict[str
     `repair: none` silently dropped the iteration keys it cannot use, and a scalar
     `expect: "auto"` was coerced to None.
 
-    That matters more since #1066, whose refusal message sends a migrating author to this
-    very block -- landing them back in the silence the refusal exists to end.
-
     Validated the way chunk_config already is above, and dumped with exclude_unset so the
     merge below still sees only what the author wrote.
     """
@@ -164,7 +160,6 @@ def project_agent_config(project_config: dict[str, Any]) -> dict[str, Any]:
 
     defaults = project_config.get("default_agent_config", {})
     _refuse_or_raise(defaults, "default_agent_config", "merge_agent_configs")
-    _refuse_retired_or_raise(defaults, "default_agent_config", "merge_agent_configs")
     _refuse_removed_spellings_or_raise(defaults, "default_agent_config", "merge_agent_configs")
     _refuse_project_split_field(defaults)
     return DefaultAgentConfig.model_validate(defaults).model_dump()
@@ -202,14 +197,6 @@ def _refuse_undeclared_or_raise(project_defaults: Any, operation: str) -> None:
 
     try:
         refuse_undeclared_default_agent_keys(project_defaults)
-    except ValueError as e:
-        raise ConfigurationError(str(e), context={"operation": operation}) from e
-
-
-def _refuse_retired_or_raise(block: Any, surface: str, operation: str) -> None:
-    """Raise the framework's own error for a key whose runtime is gone."""
-    try:
-        refuse_retired_keys(block, surface)
     except ValueError as e:
         raise ConfigurationError(str(e), context={"operation": operation}) from e
 
@@ -518,7 +505,6 @@ class ConfigManager:
         default_agent_config = project_agent_config(self.default_config or {})
         for agent in user_agents:
             _refuse_or_raise(agent, "agent", "merge_agent_configs")
-            _refuse_retired_or_raise(agent, "agent", "merge_agent_configs")
             _refuse_removed_spellings_or_raise(
                 agent,
                 "Agent configuration",

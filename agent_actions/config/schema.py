@@ -79,99 +79,6 @@ def _plain_observe_references(context_scope: Any) -> Any:
         raise ValueError(str(e)) from e
 
 
-# Version fan-out puts each version in the dependency graph as its own action, so
-# what order they run in is the graph's answer and no key can change it.
-_VERSION_ORDER_HINT = (
-    "version fan-out runs in parallel and orders nothing per action; ordering is set for "
-    "the whole workflow: --execution-mode sequential runs one action at a time and "
-    "--concurrency-limit caps how many run at once"
-)
-
-# Both shapes the retired block took have a spelling under `expect:`, so a reader told
-# only to remove the key loses the behaviour they were asking for.
-_EXPECT_REPLACES_REPROMPT = (
-    "schema checking and retry live in the expect: block: a check of the output against "
-    "the schema is written expect: {repair: auto}, and one naming a validation: function "
-    "is a rule list, e.g. expect: {expectations: [{type: no_null_fields}]}"
-)
-_EXPECT_REPLACES_SCHEMA_MISMATCH = (
-    "schema mismatch handling lives in the expect: block: expect: {repair: auto} "
-    "regenerates the output, and expect: {max_iterations: 1, on_exhausted: raise} halts "
-    "on the first mismatch"
-)
-
-# Grouping is still reachable, so a reader told only to remove the key loses it.
-_FILE_GRANULARITY_REPLACES_REDUCE_KEY = (
-    "aggregation lives in File granularity: a kind: tool action with granularity: File is "
-    "handed every record of a file in one call, groups them by any field it likes, and "
-    "returns as many rows as the grouping produces"
-)
-
-# Keys whose runtime was deleted; a bare unknown-key error reads as a misspelling
-# and sends the author to try the same block one level up. A value is where the
-# behaviour the key named is reachable another way.
-_RETIRED_CONFIG_KEYS: dict[str, str] = {
-    "anthropic_version": "the Anthropic SDK sets the API version",
-    "constraints": "write the instruction into the action's prompt",
-    "enable_caching": "Anthropic prompt caching is enable_prompt_caching",
-    "ephemeral": "",
-    "idempotency_key": "",
-    "interceptors": "",
-    "max_execution_time": "",
-    "on_schema_mismatch": _EXPECT_REPLACES_SCHEMA_MISMATCH,
-    "policy": "",
-    "reduce_key": _FILE_GRANULARITY_REPLACES_REDUCE_KEY,
-    "reprompt": _EXPECT_REPLACES_REPROMPT,
-    "skip_condition": "skip an action's records with a guard: condition plus on_false: skip",
-    "skip_if": "skip an action's records with a guard: condition plus on_false: skip",
-    "version_mode": _VERSION_ORDER_HINT,
-    "where_clause": "filter records with a guard: condition plus on_false: filter",
-}
-
-
-def refuse_retired_keys(data: Any, surface: str) -> Any:
-    """Refuse a key that configures nothing, naming where its behaviour moved if it did.
-
-    Called by every block that carries agent settings, for the same reason as
-    `refuse_context_scope_siblings`: the models that allow extras refuse nothing
-    by leaving a field undeclared, and the strict ones say only that the key is
-    unknown.
-    """
-    if not isinstance(data, dict):
-        return data
-    stray = sorted(str(key) for key in data if str(key) in _RETIRED_CONFIG_KEYS)
-    if not stray:
-        return data
-
-    # Named even when the block has none of its own: `default_agent_config:` lives
-    # in a different file from the workflow, and an error that omits it sends the
-    # reader to the wrong one.
-    named = data.get("name") or data.get("agent_type")
-    where = f"{surface} '{named}': " if isinstance(named, str) and named else f"{surface}: "
-    raise ValueError(where + "; ".join(_retired_key_reason(key) for key in stray))
-
-
-def _retired_key_reason(key: str) -> str:
-    hint = _RETIRED_CONFIG_KEYS[key]
-    reason = f"'{key}' is no longer read and configures nothing; remove it"
-    return f"{reason} — {hint}" if hint else reason
-
-
-def _refuse_retired_version_keys(data: Any) -> Any:
-    """Refuse `mode:` in a `versions:` block, which named an order nothing read.
-
-    Kept out of the shared retired-keys dict on purpose: that one is checked against
-    every block carrying agent settings, and `mode` is too general a name to refuse
-    everywhere on the strength of this one block.
-    """
-    if isinstance(data, dict) and "mode" in data:
-        raise ValueError(
-            "versions: 'mode' is no longer read and configures nothing; remove it "
-            f"— {_VERSION_ORDER_HINT}"
-        )
-    return data
-
-
 def refuse_blank_output_field(data: Any, surface: str) -> Any:
     """Refuse `output_field:` written with no value.
 
@@ -251,7 +158,7 @@ class VersionConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _no_undeclared_keys(cls, data: Any) -> Any:
-        return refuse_undeclared_keys(_refuse_retired_version_keys(data), cls, "versions")
+        return refuse_undeclared_keys(data, cls, "versions")
 
     param: str = Field(default="i", description="Parameter name for version variable")
     range: list[int | str] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
@@ -325,7 +232,7 @@ def validate_version_block(version_config: Any, action_name: str) -> VersionConf
     """Validate a `versions:` block and return it, for the expansion to read.
 
     The last point on the load path that holds the block: the expansion below drops
-    it, so an undeclared or retired key would otherwise be replaced by a default and
+    it, so an undeclared key would otherwise be replaced by a default and
     never reported. Returned rather than discarded so the expansion reads the same
     coerced values that were validated.
     """
@@ -600,7 +507,7 @@ class ActionConfig(_RetryValidators):
     @classmethod
     def _no_context_scope_siblings(cls, data: Any) -> Any:
         return refuse_blank_output_field(
-            refuse_context_scope_siblings(refuse_retired_keys(data, "action"), "action"),
+            refuse_context_scope_siblings(data, "action"),
             "action",
         )
 
@@ -818,7 +725,7 @@ class DefaultsConfig(_RetryValidators):
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return refuse_undeclared_keys(
             refuse_blank_output_field(
-                refuse_context_scope_siblings(refuse_retired_keys(data, "defaults"), "defaults"),
+                refuse_context_scope_siblings(data, "defaults"),
                 "defaults",
             ),
             cls,
@@ -1146,7 +1053,6 @@ __all__ = [
     "ActionKind",
     "ChunkConfig",
     "refuse_context_scope_siblings",
-    "refuse_retired_keys",
     "refuse_undeclared_keys",
     "Granularity",
     "HitlConfig",

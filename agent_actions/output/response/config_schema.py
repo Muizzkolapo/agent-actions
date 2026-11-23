@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, m
 from agent_actions.config.schema import (
     ChunkConfig,
     DefaultsConfig,
-    refuse_retired_keys,
     refuse_undeclared_keys,
 )
 from agent_actions.config.types import RunMode
@@ -56,9 +55,7 @@ class DefaultAgentConfig(BaseModel):
 
 def refuse_undeclared_default_agent_keys(data: Any) -> Any:
     """Refuse a `default_agent_config:` key that a `defaults:` block does not take."""
-    return refuse_undeclared_keys(
-        refuse_retired_keys(data, "default_agent_config"), DefaultsConfig, "default_agent_config"
-    )
+    return refuse_undeclared_keys(data, DefaultsConfig, "default_agent_config")
 
 
 class AgentConfig(BaseModel):
