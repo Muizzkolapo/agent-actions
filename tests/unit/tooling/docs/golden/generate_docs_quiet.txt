@@ -1,0 +1,9 @@
+
+Building catalog
+  Found 1 workflow
+  Compiled 0 actions
+  Discovered 0 prompts
+  Loaded 0 schemas
+  Indexed 0 tool functions
+
+Done. Documentation compiled to artefact/

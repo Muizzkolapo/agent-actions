@@ -31,7 +31,7 @@ orchestration, prompts, and processing to concrete implementations.
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
 | `path_config.py` | Module | Path configuration: `load_project_config`, `resolve_project_root` (cwd fallback), `get_tool_dirs` (tool dir resolution), `get_schema_path`. | `paths`, `configuration` |
 | `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
-| `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
+| `interfaces.py` | Module | Loader interfaces and async mixins. | `configuration`, `interfaces` |
 | `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `LLMDefaults` (the 600 s request timeout an action gets when it sets none, except on a declared endpoint, which keeps its `timeout_seconds`; and the 5 s connect limit for the SDKs that take an `httpx.Timeout`), `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
 | `types.py` | Module | Typed dictionaries (`ActionConfigDict`, `ActionEntryDict`, `ActionConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `HitlConfigDict`) and enums (`Granularity`, `RunMode`) for config structures. `ActionConfigDict.vendor_params` is the merged block. | `config`, `workflow`, `processing` |
 | `project_paths.py` | Module | `ProjectPathsFactory` and `ProjectPaths` for project directory resolution. Moved from `cli/`. | `paths`, `validation`, `output` |
@@ -66,6 +66,7 @@ Key Functions
 | `path_config.py` | `get_project_name` | Function | Return `project_name` from project config, or `None` with warning if absent. |
 | `path_config.py` | `get_tool_dirs` | Function | Resolve tool directory names from project config, defaulting to `["tools"]`. |
 | `path_config.py` | `warn_unread_project_keys` | Function | Report each top-level `agent_actions.yml` key that no reader takes. |
+| `path_config.py` | `record_seed_search_folders` | Function | `seed_search_folders` for a run's records: keeps the project root and named folders per workflow file until a stat of the project file changes; folder presence is checked on every call. |
 
 ## Cross-Module Touchpoints
 
@@ -98,6 +99,7 @@ Key Functions
 | `get_seed_data_path` | `agent_actions.yml` | Reads | `seed_data_path` |
 | `get_seed_data_paths` | `agent_actions.yml` | Reads, refuses a missing or outside folder | `seed_data_paths` |
 | `seed_search_folders`, `resolve_seed_file` | `seed_data/`, `<seed_data_paths>/` | Reads; the one search the loader, preflight, the editor and `inspect` share | `seed_data_path`, `seed_data_paths` |
+| `record_seed_search_folders` | `agent_actions.yml`, `seed_data/`, `<seed_data_paths>/` | Stats the project file per record; re-reads it only when the stat changes | `seed_data_path`, `seed_data_paths` |
 | `get_project_name` | `agent_actions.yml` | Reads | `project_name` |
 | `warn_unread_project_keys` | `agent_actions.yml` | Validates | `output_storage` |
 | `ProjectInitializer.init_project` | `agent_actions.yml` | Writes | `project_name`, `default_agent_config`, `schema_path`, `tool_path`, `seed_data_path` |
@@ -108,7 +110,7 @@ Key Functions
 | `unroll_loops`, `finish_loops` | `agent_config/{workflow}.yml`, `branches/{name}.yml` | Validates, expands | `actions[].loop`, `actions[].include`, `actions[].max_iterations`, `actions[].inputs`, `actions[].feedback`, `actions[].until`, `actions[].result` |
 | `ConfigManager._resolve_dotenv` | `.env` | Reads | — |
 
-**Internal only**: `ActionKind`, `MergePattern`, `VersionConsumptionConfig`, `RetryConfig`, `ExpectConfig`, `HitlConfig`, `PathType`, `PathConfig`, `PathManagerError`, `ProjectRootNotFoundError`, `PathManagerValidationError`, `ILoader`, `IProcessor`, `IGenerator`, `IDataLoader`, `ISourceDataLoader`, `Granularity`, `RunMode`, `ContextScopeDict`, `GuardConfigDict`, `HitlConfigDict`, `ActionConfigDict`, `ActionEntryDict`, `ActionConfigMap`, `ProjectPaths`, `StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults` -- no direct project surface.
+**Internal only**: `ActionKind`, `MergePattern`, `VersionConsumptionConfig`, `RetryConfig`, `ExpectConfig`, `HitlConfig`, `PathType`, `PathConfig`, `PathManagerError`, `ProjectRootNotFoundError`, `PathManagerValidationError`, `ILoader`, `IDataLoader`, `ISourceDataLoader`, `Granularity`, `RunMode`, `ContextScopeDict`, `GuardConfigDict`, `HitlConfigDict`, `ActionConfigDict`, `ActionEntryDict`, `ActionConfigMap`, `ProjectPaths`, `StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults` -- no direct project surface.
 
 ## Dependencies
 

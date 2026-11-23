@@ -266,7 +266,7 @@ class ActionLevelOrchestrator:
                 errors.append((action, result.error))
 
         if errors:
-            error_details = "\n".join([f"  - {action}: {str(exc)}" for action, exc in errors])
+            error_details = "\n".join([f"  - {action}: {exc!s}" for action, exc in errors])
             logger.warning(
                 "Level %d: %d action(s) failed:\n%s",
                 params.level_idx,

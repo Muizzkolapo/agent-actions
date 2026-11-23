@@ -51,9 +51,12 @@ def launches_in(source: str) -> list[int]:
     """
     lines: set[int] = set()
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Constant) and node.value in LAUNCH_NAMES:
-            lines.add(node.lineno)
-        elif isinstance(node, ast.Call) and _first_word(_command(node)) == "agac":
+        if (
+            isinstance(node, ast.Constant)
+            and node.value in LAUNCH_NAMES
+            or isinstance(node, ast.Call)
+            and _first_word(_command(node)) == "agac"
+        ):
             lines.add(node.lineno)
     return sorted(lines)
 

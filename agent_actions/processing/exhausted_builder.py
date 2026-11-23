@@ -74,7 +74,7 @@ class ExhaustedRecordBuilder:
         exhausted_item["_recovery"] = recovery_metadata.to_dict()
 
         if isinstance(original_row, dict):
-            if "target_id" in original_row and original_row["target_id"]:
+            if original_row.get("target_id"):
                 exhausted_item["target_id"] = original_row["target_id"]
             exhausted_item["lineage"] = LineageBuilder.build_lineage(original_row, node_id)
             LineageBuilder.set_parent_tracking(exhausted_item, original_row)

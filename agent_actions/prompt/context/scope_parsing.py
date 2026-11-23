@@ -1,5 +1,6 @@
 """Field reference parsing and action name extraction utilities."""
 
+import functools
 import logging
 from collections.abc import Mapping
 
@@ -134,30 +135,26 @@ def extract_action_names_from_context_scope(context_scope: dict | None) -> set:
 def extract_action_names_from_template(
     template: str | None, names: Mapping[str, str] | None = None
 ) -> set:
-    """
-    Extract unique action names referenced in a Jinja2 template.
+    """Return the action names a Jinja2 template references.
 
-    Parses template AST to extract namespace names, excluding variables scoped
-    by {% for %}, {% set %}, and {% macro %} constructs. A name a top-level
-    {% set a = b %} of the alias header binds to b, as *names* (the action's ``as:``
-    map) agrees, reads b. Logs a warning and
-    returns empty set on Jinja2 syntax errors (syntax errors are caught at
-    render time; this function is a best-effort dependency extractor).
-
-    Args:
-        template: Jinja2 template string
-
-    Returns:
-        Set of action names (potential upstream dependencies) referenced in template.
-        Empty set if the template has syntax errors (a warning is logged).
-
-    Example:
-        template = "{{ summarize_page_content.summary }} and {{ source.text }}"
-        Returns: {"summarize_page_content"}  # 'source' is filtered as special namespace
+    Names scoped by ``{% for %}``, ``{% set %}`` and ``{% macro %}`` are excluded, except
+    that a top-level ``{% set a = b %}`` the action's ``as:`` map (*names*) agrees with
+    reads ``b``. A syntax error is logged as a warning and raised.
     """
     if not template or not isinstance(template, str):
         return set()
 
+    items = tuple((names or {}).items())
+    try:
+        hash(items)
+    except TypeError:
+        return set(_template_action_names.__wrapped__(template, items))
+    return set(_template_action_names(template, items))
+
+
+@functools.lru_cache(maxsize=256)
+def _template_action_names(template: str, names_items: tuple) -> frozenset[str]:
+    """Parsed once per (template, names); every record of an action asks again."""
     from jinja2 import Environment, nodes
     from jinja2.exceptions import TemplateSyntaxError
 
@@ -166,7 +163,7 @@ def extract_action_names_from_template(
     _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
 
     try:
-        env = Environment(extensions=PROMPT_EXTENSIONS)
+        env = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
         ast = env.parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError as e:
         logger.warning(
@@ -179,7 +176,7 @@ def extract_action_names_from_template(
         raise
 
     referenced_actions: set[str] = set()
-    aliases = prompt_aliases(ast, names or {})
+    aliases = prompt_aliases(ast, dict(names_items))
 
     def _walk(node: nodes.Node, local_vars: set[str]) -> None:
         # {% for %} and {% macro %} create child scopes — copy the set
@@ -237,7 +234,7 @@ def extract_action_names_from_template(
             _walk(child, local_vars)
 
     _walk(ast, set())
-    return referenced_actions
+    return frozenset(referenced_actions)
 
 
 def extract_field_value(field_context: dict, action_name: str, field_name: str, default=None):

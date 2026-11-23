@@ -1,0 +1,6 @@
+kind: Bug Fix
+body: >-
+  The error raised when a realtime prompt arrives unprepared now points at `TaskPreparer` in
+  `agent_actions/processing/task_preparer.py` as the example to follow; it named a
+  `prompt_generation/data_generator.py` that does not exist.
+time: 2026-11-22T10:00:14Z

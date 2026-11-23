@@ -1,21 +1,36 @@
+# ruff, mypy and bandit run through `uv run` so hooks use the uv-locked versions CI uses.
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.10
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix, --unsafe-fixes]
+        name: ruff
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
       - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: mypy
+        name: mypy
+        entry: uv run mypy agent_actions
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        require_serial: true
+      - id: bandit
+        name: bandit
+        entry: uv run bandit -c pyproject.toml -r agent_actions -ll -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: no-commit-to-branch
         args: [--branch, main]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [pydantic, types-PyYAML]
-        args: [--ignore-missing-imports]
-        exclude: ^(examples|tests)/

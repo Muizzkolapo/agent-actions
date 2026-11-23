@@ -1,34 +1,20 @@
 """Main entry point for the Agent Actions CLI."""
 
+import importlib
 import logging
 import signal
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from functools import partial
+from gettext import gettext as _
 from pathlib import Path
 
 import click
+from click.utils import make_default_short_help
 
 from agent_actions.__version__ import __version__
-from agent_actions.cli.clean import clean_cli as clean
-from agent_actions.cli.dispositions import dispositions
-from agent_actions.cli.docs import docs
-from agent_actions.cli.example import example
-from agent_actions.cli.expect import expect
-from agent_actions.cli.init import init
-from agent_actions.cli.inspect import inspect
-from agent_actions.cli.list_udfs import list_udfs_cmd
-from agent_actions.cli.preview import preview
-from agent_actions.cli.records import records
-from agent_actions.cli.retry import retry
-from agent_actions.cli.run import run
-from agent_actions.cli.schema import schema
-from agent_actions.cli.skills import skills
-from agent_actions.cli.status import status
-from agent_actions.cli.traces import traces
-from agent_actions.cli.usage import usage
 from agent_actions.config.path_config import find_project_root_dir, load_project_config
 from agent_actions.errors import ConfigValidationError, ProjectNotFoundError
-from agent_actions.llm.batch.batch_cli import batch
 from agent_actions.logging.config import LoggingConfig, report_unread_env_vars
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.errors import format_user_error
@@ -39,7 +25,109 @@ from agent_actions.logging.events import (
 )
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.utils.safe_format import format_exception_chain_for_debug
-from agent_actions.validation.validate_udfs import validate_udfs_cmd
+
+# name -> ("module:attribute", summary). A command is imported only when it is
+# looked up; `agac --help` lists the others by their summary, which a test holds
+# equal to the command's own short help.
+_COMMANDS: dict[str, tuple[str, str]] = {
+    "clean": ("agent_actions.cli.clean:clean_cli", "Remove a workflow's working directories."),
+    "dispositions": (
+        "agent_actions.cli.dispositions:dispositions",
+        "Inspect record-level processing dispositions per action.",
+    ),
+    "init": ("agent_actions.cli.init:init", "Initialize a new Agent Actions project."),
+    "inspect": (
+        "agent_actions.cli.inspect:inspect",
+        "Inspect workflow structure and validation status.",
+    ),
+    "preview": (
+        "agent_actions.cli.preview:preview",
+        "Preview data stored in the SQLite storage backend.",
+    ),
+    "retry": (
+        "agent_actions.cli.retry:retry",
+        "Retry failed/exhausted records from a specific action forward.",
+    ),
+    "run": ("agent_actions.cli.run:run", "Run agents with a specified agent configuration."),
+    "batch": (
+        "agent_actions.llm.batch.batch_cli:batch",
+        "CLI command group for batch processing operations.",
+    ),
+    "schema": (
+        "agent_actions.cli.schema:schema",
+        "Display input and output schemas for all actions in a workflow.",
+    ),
+    "status": ("agent_actions.cli.status:status", "Display the status of an agent workflow."),
+    "list-udfs": (
+        "agent_actions.cli.list_udfs:list_udfs_cmd",
+        "List all discovered User-Defined Functions (UDFs).",
+    ),
+    "validate-udfs": (
+        "agent_actions.validation.validate_udfs:validate_udfs_cmd",
+        "Validate all UDF references in config without running the workflow.",
+    ),
+    "docs": ("agent_actions.cli.docs:docs", "Build and serve workflow documentation."),
+    "example": ("agent_actions.cli.example:example", "Browse and install example projects."),
+    "expect": ("agent_actions.cli.expect:expect", "Inspect expectation rules and verdicts."),
+    "skills": (
+        "agent_actions.cli.skills:skills",
+        "Manage AI coding assistant skills (Claude Code / OpenAI Codex).",
+    ),
+    "traces": (
+        "agent_actions.cli.traces:traces",
+        "Print the prompt, context and response an action's records were run with.",
+    ),
+    "records": (
+        "agent_actions.cli.records:records",
+        "Print the records an action stored, as a JSON list.",
+    ),
+    "usage": (
+        "agent_actions.cli.usage:usage",
+        "Show the tokens each action's model calls used, and an estimated cost.",
+    ),
+}
+
+
+class _LazyGroup(click.Group):
+    """A group that imports a command added with ``add_lazy_command`` on first lookup.
+
+    ``commands`` holds only the commands imported so far; ``list_commands`` and
+    ``get_command`` see them all.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.lazy_commands: dict[str, tuple[str, str]] = {}
+
+    def add_lazy_command(self, name: str, import_path: str, summary: str) -> None:
+        self.lazy_commands[name] = (import_path, summary)
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        return sorted({*self.commands, *self.lazy_commands})
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        if cmd_name not in self.commands and cmd_name in self.lazy_commands:
+            module_name, attribute = self.lazy_commands[cmd_name][0].split(":")
+            self.add_command(getattr(importlib.import_module(module_name), attribute), cmd_name)
+        return super().get_command(ctx, cmd_name)
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        """Click's listing, shortening a command not yet imported from its summary."""
+        entries: list[tuple[str, Callable[[int], str]]] = []
+        for name in self.list_commands(ctx):
+            if name not in self.commands and name in self.lazy_commands:
+                summary = self.lazy_commands[name][1]
+                entries.append((name, partial(make_default_short_help, summary)))
+                continue
+            cmd = self.get_command(ctx, name)
+            if cmd is None or cmd.hidden:
+                continue
+            entries.append((name, cmd.get_short_help_str))
+        if entries:
+            limit = formatter.width - 6 - max(len(name) for name, _short_help in entries)
+            rows = [(name, short_help(limit)) for name, short_help in entries]
+            with formatter.section(_("Commands")):
+                formatter.write_dl(rows)
 
 
 class CLI:
@@ -56,10 +144,10 @@ class CLI:
         self._register_signal_handlers()
         fire_event(CLIInitCompleteEvent(command="agent-actions"))
 
-    def _create_click_group(self) -> click.Group:
+    def _create_click_group(self) -> _LazyGroup:
         cli_instance = self
 
-        @click.group(name="agent-actions")
+        @click.group(name="agent-actions", cls=_LazyGroup)
         @click.version_option(
             version=__version__, prog_name="Agent Actions CLI", message="%(prog)s v%(version)s"
         )
@@ -78,25 +166,8 @@ class CLI:
 
     def _register_commands(self) -> None:
         self.logger.debug("Registering CLI commands")
-        self.click_group.add_command(clean)
-        self.click_group.add_command(dispositions)
-        self.click_group.add_command(init)
-        self.click_group.add_command(inspect)
-        self.click_group.add_command(preview)
-        self.click_group.add_command(retry)
-        self.click_group.add_command(run)
-        self.click_group.add_command(batch)
-        self.click_group.add_command(schema)
-        self.click_group.add_command(status)
-        self.click_group.add_command(list_udfs_cmd)
-        self.click_group.add_command(validate_udfs_cmd)
-        self.click_group.add_command(docs)
-        self.click_group.add_command(example)
-        self.click_group.add_command(expect)
-        self.click_group.add_command(skills)
-        self.click_group.add_command(traces)
-        self.click_group.add_command(records)
-        self.click_group.add_command(usage)
+        for name, (import_path, summary) in _COMMANDS.items():
+            self.click_group.add_lazy_command(name, import_path, summary)
 
     def _register_signal_handlers(self) -> None:
         try:

@@ -34,6 +34,14 @@ class SkipEvaluator:
         # can set any more. A guard skips records.
         self.strategies: list[SkipStrategy] = []
 
+    def needs_previous_outputs(self) -> bool:
+        """Whether :meth:`should_skip_action` reads upstream outputs at all.
+
+        Loading them copies every earlier action's whole output, so a caller with no
+        strategy to feed skips the load.
+        """
+        return bool(self.strategies)
+
     def __repr__(self):
         return f"SkipEvaluator(strategies={len(self.strategies)})"
 

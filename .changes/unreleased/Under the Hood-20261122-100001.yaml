@@ -1,0 +1,5 @@
+kind: Under the Hood
+body: >-
+  Applied ruff's safe autofixes for `str()` inside f-strings, `else` after `return`, duplicate
+  `if` arms, redundant key checks before `dict.get`, and collapsible `else: if`. No behavior change.
+time: 2026-11-22T10:00:01Z

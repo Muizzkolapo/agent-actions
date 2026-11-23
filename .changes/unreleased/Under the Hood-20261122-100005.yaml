@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: >-
+  `import agent_actions` no longer loads the expectation checks and the LLM judge behind them;
+  `udf_tool`, `FileUDFResult` and `expectation_check` resolve on first access, which cuts the
+  package import from about 400 ms to under 10 ms.
+time: 2026-11-22T10:00:05Z

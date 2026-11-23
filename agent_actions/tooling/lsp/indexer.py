@@ -389,7 +389,7 @@ def _build_action_data_map(actions: list) -> dict:
     return action_map
 
 
-def _index_workflow_lines(
+def _index_workflow_lines(  # noqa: C901
     index: ProjectIndex,
     yaml_file: Path,
     lines: list[str],

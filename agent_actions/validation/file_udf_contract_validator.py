@@ -115,9 +115,7 @@ def _source_constructs_new_dicts(source: str) -> bool:
                 and node.value is not None
                 and isinstance(node.target, ast.Name)
                 and _feeds_dicts(node.value, dict_vars, list_dict_vars)
-            ):
-                list_dict_vars.add(node.target.id)
-            elif (
+            ) or (
                 isinstance(node, ast.AugAssign)
                 and isinstance(node.target, ast.Name)
                 and _is_list_of_dicts(node.value, dict_vars)
@@ -129,9 +127,12 @@ def _source_constructs_new_dicts(source: str) -> bool:
                 and isinstance(node.func.value, ast.Name)
                 and node.args
             ):
-                if node.func.attr == "append" and _is_dict_construct(node.args[0], dict_vars):
-                    list_dict_vars.add(node.func.value.id)
-                elif node.func.attr == "extend" and _is_list_of_dicts(node.args[0], dict_vars):
+                if (
+                    node.func.attr == "append"
+                    and _is_dict_construct(node.args[0], dict_vars)
+                    or node.func.attr == "extend"
+                    and _is_list_of_dicts(node.args[0], dict_vars)
+                ):
                     list_dict_vars.add(node.func.value.id)
         if len(list_dict_vars) == before:
             break

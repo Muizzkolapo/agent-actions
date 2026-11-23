@@ -68,6 +68,12 @@ class TestSQLiteBackend:
         assert "record_disposition" in tables
         backend.close()
 
+    def test_connection_uses_wal_with_normal_sync(self, backend):
+        """WAL plus synchronous=NORMAL: one fsync per checkpoint, not per commit."""
+        conn = backend.connection
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1  # NORMAL
+
     def test_write_and_read_target(self, backend):
         """Test writing and reading target data — read resets resettable states to ACTIVE."""
         data = [

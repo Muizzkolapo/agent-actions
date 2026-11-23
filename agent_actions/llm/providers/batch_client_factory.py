@@ -280,8 +280,6 @@ class BatchClientFactory:
         """Get list of supported client types."""
         supported = []
         for name, reg in _BATCH_CLIENT_REGISTRY.items():
-            if reg.package is None:
-                supported.append(name)
-            elif _is_package_available(reg.package):
+            if reg.package is None or _is_package_available(reg.package):
                 supported.append(name)
         return supported

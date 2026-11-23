@@ -164,7 +164,7 @@ class GuardFilter:
 
         except ValueError as e:
             execution_time = time.time() - start_time
-            error_msg = f"Error evaluating guard condition: {str(e)}"
+            error_msg = f"Error evaluating guard condition: {e!s}"
 
             # Fire the G002 event for all callers (evaluator, skip.py).
             # No WARNING log here — the evaluator's _reclassify may

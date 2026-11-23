@@ -49,17 +49,21 @@ def test_a_call_that_does_no_work_is_five_times_faster_than_a_fresh_interpreter(
         durations = []
         for _ in range(calls):
             started = time.perf_counter()
-            result = run_agac(tmp_path, "--help", **options)
+            result = run_agac(tmp_path, "inspect", "--help", **options)
             durations.append(time.perf_counter() - started)
             assert result.returncode == 0, result.stderr
         return statistics.median(durations)
 
-    run_agac(tmp_path, "--help")
+    # `inspect --help` imports the command, as every call that does work does; a bare
+    # `--help` imports none and costs a fresh interpreter little.
+    run_agac(tmp_path, "inspect", "--help")
     warm = median_seconds(20)
     fresh = median_seconds(5, fresh_process=True)
 
     # Measured against a fresh start in the same test, so a loaded machine slows both.
-    print(f"run_agac --help: median {warm:.3f} s warm, {fresh:.3f} s fresh (limit fresh / 5)")
+    print(
+        f"run_agac inspect --help: median {warm:.3f} s warm, {fresh:.3f} s fresh (limit fresh / 5)"
+    )
     assert warm < fresh / 5
 
 

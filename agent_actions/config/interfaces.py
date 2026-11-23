@@ -12,14 +12,6 @@ class ILoader:
     """Base interface for all loaders."""
 
 
-class IProcessor:
-    """Base interface for all processors."""
-
-
-class IGenerator:
-    """Base interface for all generators."""
-
-
 # Loader interfaces
 class IDataLoader(ILoader, Generic[T]):
     """Interface for data loading operations."""

@@ -711,28 +711,27 @@ class OnlineLLMStrategy:
                     source_snapshot=source_snapshot,
                     input_record=input_record,
                 )
-            else:
-                fire_event(
-                    RecordFilteredEvent(
-                        action_name=context.agent_name,
-                        record_index=context.record_index,
-                        source_guid=source_guid or "",
-                        filter_reason=LLM_LAYER_GUARD_SKIP,
-                    )
+            fire_event(
+                RecordFilteredEvent(
+                    action_name=context.agent_name,
+                    record_index=context.record_index,
+                    source_guid=source_guid or "",
+                    filter_reason=LLM_LAYER_GUARD_SKIP,
                 )
-                tombstone = build_tombstone(
-                    context.action_name,
-                    input_record,
-                    GUARD_SKIP,
-                    source_guid=source_guid,
-                )
-                return ProcessingResult.unprocessed(
-                    data=[tombstone],
-                    reason=GUARD_SKIP,
-                    source_guid=source_guid,
-                    source_snapshot=source_snapshot,
-                    input_record=input_record,
-                )
+            )
+            tombstone = build_tombstone(
+                context.action_name,
+                input_record,
+                GUARD_SKIP,
+                source_guid=source_guid,
+            )
+            return ProcessingResult.unprocessed(
+                data=[tombstone],
+                reason=GUARD_SKIP,
+                source_guid=source_guid,
+                source_snapshot=source_snapshot,
+                input_record=input_record,
+            )
 
         # Empty output handling
         if _is_empty_output(response):

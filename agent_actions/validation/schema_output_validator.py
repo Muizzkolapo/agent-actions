@@ -8,6 +8,7 @@ from typing import Any
 import jsonschema  # type: ignore[import-untyped]
 
 from agent_actions.config.schema_field import field_is_required, top_level_required_ids
+from agent_actions.utils.jsonschema_cache import checked_validator
 from agent_actions.validation.schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
@@ -417,11 +418,10 @@ def _element_errors(
     """Validate each array element against the items sub-schema, naming the element index."""
     location = f"'items' for field '{field_name}'" if field_name else "'items'"
     try:
-        jsonschema.Draft202012Validator.check_schema(items_schema)
+        validator = checked_validator(items_schema, jsonschema.Draft202012Validator)
     except jsonschema.exceptions.SchemaError as e:
         return [f"Invalid {location} sub-schema: {e.message}"]
 
-    validator = jsonschema.Draft202012Validator(items_schema)
     prefix = f"Field '{field_name}' element" if field_name else "Element"
     errors: list[str] = []
     for idx, element in enumerate(elements):
@@ -436,11 +436,10 @@ def _constraint_errors(value: Any, field_name: str, field_def: dict[str, Any]) -
     if not constraints:
         return []
     try:
-        jsonschema.Draft202012Validator.check_schema(constraints)
+        validator = checked_validator(constraints, jsonschema.Draft202012Validator)
     except jsonschema.exceptions.SchemaError as e:
         return [f"Invalid constraints for field '{field_name}': {e.message}"]
 
-    validator = jsonschema.Draft202012Validator(constraints)
     return [
         f"Field '{field_name}': {message}"
         for message in sorted(err.message for err in validator.iter_errors(value))
@@ -451,7 +450,7 @@ def _extract_output_fields(llm_output: Any) -> set[str]:
     """Extract field names from LLM output."""
     if isinstance(llm_output, dict):
         return set(llm_output.keys())
-    elif isinstance(llm_output, list) and llm_output:
+    if isinstance(llm_output, list) and llm_output:
         # For array output, extract fields from all items
         all_keys: set[str] = set()
         for item in llm_output:

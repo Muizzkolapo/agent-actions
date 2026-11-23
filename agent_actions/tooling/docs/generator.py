@@ -233,6 +233,160 @@ def _reported_drop_refs(context_scope: dict[str, Any]) -> list[str]:
     return reported
 
 
+_STAT_KEYS = (
+    "total_workflows",
+    "total_actions",
+    "llm_actions",
+    "tool_actions",
+    "total_prompts",
+    "total_schemas",
+    "total_tool_functions",
+    "total_runs",
+    "validation_errors",
+    "validation_warnings",
+    "runtime_warnings",
+    "runtime_errors",
+    "total_vendors",
+    "total_error_types",
+    "total_event_types",
+    "total_examples",
+    "total_data_loaders",
+    "total_processing_states",
+    "total_data_nodes",
+)
+
+
+def _size(data: Any) -> int:
+    return len(data) if data else 0
+
+
+def _with_used_by(entries: dict[str, Any] | None) -> dict[str, Any]:
+    """Copy each entry with an empty ``used_by`` list for the actions that reference it."""
+    with_refs = {}
+    for name, data in (entries or {}).items():
+        with_refs[name] = data.copy()
+        with_refs[name]["used_by"] = []
+    return with_refs
+
+
+def _record_use(entries: dict[str, Any], ref: Any, workflow_id: str, action_name: str) -> None:
+    if ref and ref in entries:
+        entries[ref]["used_by"].append({"workflow": workflow_id, "action": action_name})
+
+
+def _readme_for(
+    readmes_data: dict[str, ReadmeData] | None, workflow_id: str, artefact_dir: Path | None
+) -> str | None:
+    if not readmes_data or workflow_id not in readmes_data:
+        return None
+    if artefact_dir:
+        return _copy_readme_images(readmes_data[workflow_id], workflow_id, artefact_dir)
+    return readmes_data[workflow_id].content
+
+
+def _count_workflow(stats: dict[str, Any], actions: dict[str, Any]) -> None:
+    stats["total_workflows"] += 1
+    stats["total_actions"] += len(actions)
+    for action in actions.values():
+        if action.get("type") == DEFAULT_ACTION_KIND:
+            stats["llm_actions"] += 1
+        elif action.get("type") == "tool":
+            stats["tool_actions"] += 1
+
+
+def _runtime_warning_entries(
+    runs_data: dict[str, Any] | None,
+) -> tuple[list[dict], list[dict]]:
+    """Split every workflow's runtime warnings into (warnings, errors) catalog rows."""
+    warnings: list[dict] = []
+    errors: list[dict] = []
+    for wf_data in (runs_data or {}).values():
+        for evt in wf_data.get("runtime_warnings", []):
+            target = evt.get("action_name") or evt.get("event_type") or "NOT_SET"
+            entry = {
+                "target": target,
+                "message": evt.get("message", ""),
+                "timestamp": evt.get("timestamp", ""),
+            }
+            if evt.get("level") == "error":
+                errors.append(entry)
+            else:
+                warnings.append(entry)
+    return warnings, errors
+
+
+def _failed_execution_entries(executions_data: list[dict[str, Any]] | None) -> list[dict]:
+    """Runtime error rows for each failed run and failed action in runs.json."""
+    entries: list[dict] = []
+    for exec_rec in executions_data or []:
+        status = (exec_rec.get("status") or "").upper()
+        if status == "FAILED":
+            entries.append(
+                {
+                    "target": exec_rec.get("workflow_name")
+                    or exec_rec.get("workflow_id")
+                    or "NOT_SET",
+                    "message": exec_rec.get("error_message")
+                    or f"Run {exec_rec.get('id', '?')} failed",
+                    "timestamp": exec_rec.get("ended_at") or exec_rec.get("started_at") or "",
+                }
+            )
+        for action_name, action_data in (exec_rec.get("actions") or {}).items():
+            if (action_data.get("status") or "").upper() == "FAILED":
+                entries.append(
+                    {
+                        "target": action_name,
+                        "message": action_data.get("error")
+                        or f"Action {action_name} failed in run {exec_rec.get('id', '?')}",
+                        "timestamp": action_data.get("ended_at")
+                        or exec_rec.get("started_at")
+                        or "",
+                    }
+                )
+    return entries
+
+
+def _event_sources(
+    logs_data: dict[str, Any] | None, runs_data: dict[str, Any] | None
+) -> list[tuple[str, list[dict]]]:
+    """Every log the project wrote, each under a distinct name that row ids are built from."""
+    taken_names: set[str] = set()
+
+    def distinct(name: str) -> str:
+        candidate, suffix = name, 2
+        while candidate in taken_names:
+            candidate, suffix = f"{name}~{suffix}", suffix + 1
+        taken_names.add(candidate)
+        return candidate
+
+    sources: list[tuple[str, list[dict]]] = [
+        (distinct("project:logs"), (logs_data or {}).get("events", []))
+    ]
+    # A stray directory yields a run entry named after itself, and only the
+    # scanner knows whether it read a workflow config for it.
+    sources += [
+        (
+            distinct(f"{'workflow' if data.get('is_workflow', True) else 'project'}:{name}"),
+            data.get("events", []),
+        )
+        for name, data in sorted((runs_data or {}).items())
+    ]
+    return sources
+
+
+def _event_level_totals(
+    logs_data: dict[str, Any] | None, runs_data: dict[str, Any] | None
+) -> dict[str, int]:
+    """Totals over every log, so "N in view" can be read against the whole."""
+    event_levels: dict[str, int] = {}
+    for counts in [(logs_data or {}).get("level_counts", {})] + [
+        data.get("level_counts", {}) for data in (runs_data or {}).values()
+    ]:
+        for level, n in counts.items():
+            event_levels[level] = event_levels.get(level, 0) + n
+    return event_levels
+
+
 class CatalogGenerator:
     """Generate catalog.json from workflows."""
 
@@ -316,6 +470,85 @@ class CatalogGenerator:
 
         return enriched
 
+    def _enrich_workflow_actions(
+        self,
+        catalog: dict[str, Any],
+        workflow_id: str,
+        workflow: dict[str, Any],
+        tool_functions_data: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Enrich a workflow's actions, index them, and record prompt/schema use."""
+        schema_service = self._build_schema_service(workflow)
+        enriched_actions = {}
+
+        for action_name, action in workflow["actions"].items():
+            action_schema = (
+                schema_service.get_action_schema(action_name) if schema_service else None
+            )
+            enriched_action = self._enrich_action_with_fields(action, action_schema)
+
+            if action.get("type") == "tool" and tool_functions_data:
+                impl_name = action.get("implementation")
+                if impl_name and impl_name in tool_functions_data:
+                    enriched_action["tool_function"] = tool_functions_data[impl_name]
+
+            enriched_actions[action_name] = enriched_action
+
+            action_with_workflow = enriched_action.copy()
+            action_with_workflow["workflow_id"] = workflow_id
+            catalog["actions"][f"{workflow_id}.{action_name}"] = action_with_workflow
+
+            _record_use(catalog["prompts"], action.get("prompt"), workflow_id, action_name)
+            schema_ref = action.get("schema")
+            if isinstance(schema_ref, str):
+                _record_use(catalog["schemas"], schema_ref, workflow_id, action_name)
+
+        return enriched_actions
+
+    def _add_workflow(
+        self,
+        catalog: dict[str, Any],
+        workflow_id: str,
+        paths: dict[str, Any],
+        tool_functions_data: dict[str, Any] | None,
+        runs_data: dict[str, Any] | None,
+        readmes_data: dict[str, ReadmeData] | None,
+        artefact_dir: Path | None,
+    ) -> None:
+        """Parse one workflow and add its entry, actions and counts to the catalog."""
+        # Use rendered workflow if available, otherwise use original
+        yaml_path = paths["rendered"] or paths["original"]
+        workflow = self.parser.parse_workflow(
+            yaml_path, self.project_path, rendered=bool(paths["rendered"])
+        )
+        if workflow is None:
+            return
+
+        enriched_actions = self._enrich_workflow_actions(
+            catalog, workflow_id, workflow, tool_functions_data
+        )
+
+        workflow_runs = runs_data[workflow_id] if runs_data and workflow_id in runs_data else {}
+        for action_name, metrics in workflow_runs.get("action_metrics", {}).items():
+            if action_name in enriched_actions:
+                enriched_actions[action_name]["metrics"] = metrics
+
+        catalog["workflows"][workflow_id] = {
+            "id": workflow_id,
+            "name": workflow["name"],
+            "description": workflow["description"],
+            "path": workflow["path"],
+            "version": workflow["version"],
+            "defaults": workflow.get("defaults", {}),
+            "actions": enriched_actions,
+            "action_count": len(enriched_actions),
+            "latest_run": workflow_runs.get("latest_run"),
+            "manifest": workflow_runs.get("manifest"),
+            "readme": _readme_for(readmes_data, workflow_id, artefact_dir),
+        }
+
+        _count_workflow(catalog["stats"], workflow["actions"])
+
     def generate(
         self,
         prompts_data: dict[str, Any] | None = None,
@@ -335,18 +568,6 @@ class CatalogGenerator:
         artefact_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Generate the complete catalog structure."""
-        # Initialize prompts with used_by tracking
-        prompts_with_refs = {}
-        for prompt_name, prompt_data in (prompts_data or {}).items():
-            prompts_with_refs[prompt_name] = prompt_data.copy()
-            prompts_with_refs[prompt_name]["used_by"] = []
-
-        # Initialize schemas with used_by tracking
-        schemas_with_refs = {}
-        for schema_name, schema_data in (schemas_data or {}).items():
-            schemas_with_refs[schema_name] = schema_data.copy()
-            schemas_with_refs[schema_name]["used_by"] = []
-
         project_name = self.project_path.name if self.project_path else None
         catalog = {
             "metadata": {
@@ -357,8 +578,8 @@ class CatalogGenerator:
             },
             "workflows": {},
             "actions": {},  # Flattened index for faster lookup
-            "prompts": prompts_with_refs,
-            "schemas": schemas_with_refs,
+            "prompts": _with_used_by(prompts_data),
+            "schemas": _with_used_by(schemas_data),
             "tool_functions": tool_functions_data or {},
             # Each workflow's event tail is merged into logs.events below; keeping
             # the per-workflow copy here too would ship the same rows twice.
@@ -376,361 +597,123 @@ class CatalogGenerator:
             "data_loaders": data_loaders_data or {},  # Data loader implementations
             "processing_states": processing_states_data or {},  # Processing enums/types
             "workflow_data": workflow_data or {},  # Workflow output data previews
-            "stats": {
-                "total_workflows": 0,
-                "total_actions": 0,
-                "llm_actions": 0,
-                "tool_actions": 0,
-                "total_prompts": 0,
-                "total_schemas": 0,
-                "total_tool_functions": 0,
-                "total_runs": 0,
-                "validation_errors": 0,
-                "validation_warnings": 0,
-                "runtime_warnings": 0,
-                "runtime_errors": 0,
-                "total_vendors": 0,
-                "total_error_types": 0,
-                "total_event_types": 0,
-                "total_examples": 0,
-                "total_data_loaders": 0,
-                "total_processing_states": 0,
-                "total_data_nodes": 0,
-            },
+            "stats": dict.fromkeys(_STAT_KEYS, 0),
         }
 
-        # Track unique schemas and prompts across all workflows
-        unique_schemas = set()
-        actions_with_prompts = 0
-
-        for workflow_name, paths in self.workflows_data.items():
-            # Use rendered workflow if available, otherwise use original
-            yaml_path = paths["rendered"] or paths["original"]
-            workflow = self.parser.parse_workflow(
-                yaml_path, self.project_path, rendered=bool(paths["rendered"])
+        for workflow_id, paths in self.workflows_data.items():
+            self._add_workflow(
+                catalog,
+                workflow_id,
+                paths,
+                tool_functions_data,
+                runs_data,
+                readmes_data,
+                artefact_dir,
             )
 
-            # Skip if workflow parsing failed
-            if workflow is None:
-                continue
+        stats = catalog["stats"]
+        stats["total_schemas"] = _size(schemas_data)
+        stats["total_prompts"] = _size(prompts_data)
+        stats["total_tool_functions"] = _size(tool_functions_data)
+        stats["total_runs"] = _size(executions_data)
 
-            # Build WorkflowSchemaService for this workflow to get ActionSchemas
-            schema_service = self._build_schema_service(workflow)
-
-            # Merge dependencies and enrich actions with field information
-            enriched_actions = {}
-            workflow_id = workflow_name
-
-            for action_name, action in workflow["actions"].items():
-                # Get pre-resolved ActionSchema (has field types, descriptions)
-                action_schema = (
-                    schema_service.get_action_schema(action_name) if schema_service else None
-                )
-                # Enrich with input/output fields for lineage
-                enriched_action = self._enrich_action_with_fields(action, action_schema)
-
-                # Attach tool function details for tool actions
-                if action.get("kind") == "tool" and tool_functions_data:
-                    impl_name = action.get("implementation")
-                    if impl_name and impl_name in tool_functions_data:
-                        enriched_action["tool_function"] = tool_functions_data[impl_name]
-
-                enriched_actions[action_name] = enriched_action
-
-                # Add to flattened actions index with workflow reference
-                action_with_workflow = enriched_action.copy()
-                action_with_workflow["workflow_id"] = workflow_id
-                catalog["actions"][f"{workflow_id}.{action_name}"] = action_with_workflow
-
-                # Track prompt-to-action relationships
-                prompt_ref = action.get("prompt")
-                if prompt_ref and prompt_ref in catalog["prompts"]:
-                    catalog["prompts"][prompt_ref]["used_by"].append(
-                        {"workflow": workflow_id, "action": action_name}
-                    )
-
-                # Track schema-to-action relationships
-                schema_ref = action.get("schema")
-                if schema_ref and isinstance(schema_ref, str) and schema_ref in catalog["schemas"]:
-                    catalog["schemas"][schema_ref]["used_by"].append(
-                        {"workflow": workflow_id, "action": action_name}
-                    )
-
-            # Merge action metrics from runs data if available
-            if runs_data and workflow_id in runs_data:
-                workflow_runs = runs_data[workflow_id]
-                action_metrics = workflow_runs.get("action_metrics", {})
-                for action_name, metrics in action_metrics.items():
-                    if action_name in enriched_actions:
-                        enriched_actions[action_name]["metrics"] = metrics
-
-            # Get latest run info and manifest if available
-            latest_run = None
-            manifest = None
-            if runs_data and workflow_id in runs_data:
-                latest_run = runs_data[workflow_id].get("latest_run")
-                manifest = runs_data[workflow_id].get("manifest")
-
-            # Create workflow entry
-            catalog["workflows"][workflow_id] = {
-                "id": workflow_id,
-                "name": workflow["name"],
-                "description": workflow["description"],
-                "path": workflow["path"],
-                "version": workflow["version"],
-                "defaults": workflow.get("defaults", {}),
-                "actions": enriched_actions,
-                "action_count": len(enriched_actions),
-                "latest_run": latest_run,
-                "manifest": manifest,
-                "readme": _copy_readme_images(readmes_data[workflow_id], workflow_id, artefact_dir)
-                if readmes_data and workflow_id in readmes_data and artefact_dir
-                else (
-                    readmes_data[workflow_id].content
-                    if readmes_data and workflow_id in readmes_data
-                    else None
-                ),
-            }
-
-            # Update stats
-            catalog["stats"]["total_workflows"] += 1
-            catalog["stats"]["total_actions"] += len(workflow["actions"])
-
-            # Count action types, schemas, and prompts
-            for action in workflow["actions"].values():
-                if action.get("type") == DEFAULT_ACTION_KIND:
-                    catalog["stats"]["llm_actions"] += 1
-                elif action.get("type") == "tool":
-                    catalog["stats"]["tool_actions"] += 1
-
-                # Count unique schemas (only string references, not inline dicts)
-                schema = action.get("schema")
-                if schema and isinstance(schema, str):
-                    unique_schemas.add(schema)
-
-                # Count actions with prompts (LLM actions typically have prompts)
-                if action.get("prompt") or (
-                    action.get("kind") == DEFAULT_ACTION_KIND and action.get("intent")
-                ):
-                    actions_with_prompts += 1
-
-        # Update global stats for schemas, prompts, tool functions, and runs
-        catalog["stats"]["total_schemas"] = len(schemas_data) if schemas_data else 0
-        catalog["stats"]["total_prompts"] = len(prompts_data) if prompts_data else 0
-        catalog["stats"]["total_tool_functions"] = (
-            len(tool_functions_data) if tool_functions_data else 0
-        )
-        catalog["stats"]["total_runs"] = len(executions_data) if executions_data else 0
-
-        # Update validation stats from logs
         if logs_data:
-            catalog["stats"]["validation_errors"] = len(logs_data.get("validation_errors", []))
-            catalog["stats"]["validation_warnings"] = len(logs_data.get("validation_warnings", []))
+            stats["validation_errors"] = len(logs_data.get("validation_errors", []))
+            stats["validation_warnings"] = len(logs_data.get("validation_warnings", []))
 
-        # Aggregate runtime warnings/errors from run data and surface in catalog["logs"]
-        runtime_warn_entries: list[dict] = []
-        runtime_error_entries: list[dict] = []
-        if runs_data:
-            for wf_data in runs_data.values():
-                for evt in wf_data.get("runtime_warnings", []):
-                    target = evt.get("action_name") or evt.get("event_type") or "NOT_SET"
-                    entry = {
-                        "target": target,
-                        "message": evt.get("message", ""),
-                        "timestamp": evt.get("timestamp", ""),
-                    }
-                    if evt.get("level") == "error":
-                        runtime_error_entries.append(entry)
-                    else:
-                        runtime_warn_entries.append(entry)
-
-        # Surface failed executions from runs.json as runtime errors
-        if executions_data:
-            for exec_rec in executions_data:
-                status = (exec_rec.get("status") or "").upper()
-                if status == "FAILED":
-                    runtime_error_entries.append(
-                        {
-                            "target": exec_rec.get("workflow_name")
-                            or exec_rec.get("workflow_id")
-                            or "NOT_SET",
-                            "message": exec_rec.get("error_message")
-                            or f"Run {exec_rec.get('id', '?')} failed",
-                            "timestamp": exec_rec.get("ended_at")
-                            or exec_rec.get("started_at")
-                            or "",
-                        }
-                    )
-                for action_name, action_data in (exec_rec.get("actions") or {}).items():
-                    if (action_data.get("status") or "").upper() == "FAILED":
-                        runtime_error_entries.append(
-                            {
-                                "target": action_name,
-                                "message": action_data.get("error")
-                                or f"Action {action_name} failed in run {exec_rec.get('id', '?')}",
-                                "timestamp": action_data.get("ended_at")
-                                or exec_rec.get("started_at")
-                                or "",
-                            }
-                        )
-
+        runtime_warn_entries, runtime_error_entries = _runtime_warning_entries(runs_data)
+        runtime_error_entries += _failed_execution_entries(executions_data)
         catalog["logs"]["runtime_warnings"] = runtime_warn_entries
         catalog["logs"]["runtime_errors"] = runtime_error_entries
-        catalog["stats"]["runtime_warnings"] = len(runtime_warn_entries)
-        catalog["stats"]["runtime_errors"] = len(runtime_error_entries)
+        stats["runtime_warnings"] = len(runtime_warn_entries)
+        stats["runtime_errors"] = len(runtime_error_entries)
 
-        # One reverse-chronological stream over every log the project wrote.
-        # Names decide row ids, so they are made distinct as they are built.
-        taken_names: set[str] = set()
+        catalog["logs"]["events"] = _merge_event_tails(
+            _event_sources(logs_data, runs_data), scanner.EVENT_TAIL_LIMIT
+        )
+        stats["event_levels"] = _event_level_totals(logs_data, runs_data)
 
-        def distinct(name: str) -> str:
-            """Ids are built from these, and two logs may want the same name."""
-            candidate, suffix = name, 2
-            while candidate in taken_names:
-                candidate, suffix = f"{name}~{suffix}", suffix + 1
-            taken_names.add(candidate)
-            return candidate
-
-        event_sources: list[tuple[str, list[dict]]] = [
-            (distinct("project:logs"), (logs_data or {}).get("events", []))
-        ]
-        # A stray directory yields a run entry named after itself, and only the
-        # scanner knows whether it read a workflow config for it.
-        event_sources += [
-            (
-                distinct(f"{'workflow' if data.get('is_workflow', True) else 'project'}:{name}"),
-                data.get("events", []),
-            )
-            for name, data in sorted((runs_data or {}).items())
-        ]
-        catalog["logs"]["events"] = _merge_event_tails(event_sources, scanner.EVENT_TAIL_LIMIT)
-
-        # Totals over every log, so "N in view" can be read against the whole.
-        event_levels: dict[str, int] = {}
-        for counts in [(logs_data or {}).get("level_counts", {})] + [
-            data.get("level_counts", {}) for data in (runs_data or {}).values()
-        ]:
-            for level, n in counts.items():
-                event_levels[level] = event_levels.get(level, 0) + n
-        catalog["stats"]["event_levels"] = event_levels
-
-        # Update stats for new categories
-        catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0
-        catalog["stats"]["total_error_types"] = sum(
+        stats["total_vendors"] = _size(vendors_data)
+        stats["total_error_types"] = sum(
             cat.get("error_count", 0) for cat in (error_types_data or {}).values()
         )
-        catalog["stats"]["total_event_types"] = sum(
+        stats["total_event_types"] = sum(
             cat.get("event_count", 0) for cat in (event_types_data or {}).values()
         )
-        catalog["stats"]["total_examples"] = len(examples_data) if examples_data else 0
-        catalog["stats"]["total_data_loaders"] = len(data_loaders_data) if data_loaders_data else 0
-        catalog["stats"]["total_processing_states"] = (
-            len(processing_states_data) if processing_states_data else 0
-        )
-        catalog["stats"]["total_data_nodes"] = sum(
+        stats["total_examples"] = _size(examples_data)
+        stats["total_data_loaders"] = _size(data_loaders_data)
+        stats["total_processing_states"] = _size(processing_states_data)
+        stats["total_data_nodes"] = sum(
             len(wf.get("nodes", {})) for wf in (workflow_data or {}).values()
         )
 
         return catalog
 
 
-def generate_docs(project_path: str, output_dir: Path) -> bool:
-    """Generate documentation catalog from project workflows and write to output_dir."""
-    project_root = Path(project_path).resolve()
+def _scan_project_artifacts(project_root: Path) -> dict[str, Any]:
+    """Scan every catalog input except workflows and tool functions, in a fixed order."""
+    return {
+        "prompts_data": scanner.scan_prompts(project_root),
+        "schemas_data": scanner.scan_schemas(project_root),
+        "runs_data": scanner.scan_runs(project_root),
+        "logs_data": scanner.scan_logs(project_root),
+        "vendors_data": scanner.scan_vendors(project_root),
+        "error_types_data": scanner.scan_error_types(),
+        "event_types_data": scanner.scan_event_types(),
+        "examples_data": scanner.scan_examples(project_root),
+        "data_loaders_data": scanner.scan_data_loaders(),
+        "processing_states_data": scanner.scan_processing_states(),
+        "workflow_data": scanner.scan_workflow_data(project_root),
+        "readmes_data": scanner.scan_readmes(project_root),
+    }
 
-    # Step 1: Scan project
-    workflows_data = scanner.scan_workflows(project_root)
 
-    if not workflows_data:
-        logger.warning("No workflows found in %s", project_path)
-        click.echo("No workflows found in project!")
-        return False
-
-    # Resolve tool_path from project config
-    tool_paths = get_tool_dirs(project_root)
-
-    # Scan tool functions once — reused by both the catalog data and each
-    # WorkflowSchemaService (avoids N redundant AST parses for N workflows).
-    tool_functions_data = scanner.scan_tool_functions(project_root, tool_paths)
-
-    # Step 1b–1n: Scan all project artifacts
-    prompts_data = scanner.scan_prompts(project_root)
-    schemas_data = scanner.scan_schemas(project_root)
-    runs_data = scanner.scan_runs(project_root)
-    logs_data = scanner.scan_logs(project_root)
-    vendors_data = scanner.scan_vendors(project_root)
-    error_types_data = scanner.scan_error_types()
-    event_types_data = scanner.scan_event_types()
-    examples_data = scanner.scan_examples(project_root)
-    data_loaders_data = scanner.scan_data_loaders()
-    processing_states_data = scanner.scan_processing_states()
-    workflow_data = scanner.scan_workflow_data(project_root)
-    readmes_data = scanner.scan_readmes(project_root)
-
-    # Load existing runs.json executions so failed runs surface in catalog logs
-    executions_data: list[dict[str, Any]] = []
-    runs_path = output_dir / "runs.json"
-    if runs_path.exists():
-        try:
-            with open(runs_path, encoding="utf-8") as f:
-                runs_json = json.load(f)
-            executions_data = runs_json.get("executions", [])
-        except (OSError, json.JSONDecodeError) as e:
-            logger.debug("Failed to load runs.json for execution data: %s", e)
-
-    # Step 2: Generate catalog
-    catalog_gen = CatalogGenerator(
-        workflows_data, project_path=project_path, tool_schemas=tool_functions_data
-    )
-    catalog = catalog_gen.generate(
-        prompts_data=prompts_data,
-        schemas_data=schemas_data,
-        tool_functions_data=tool_functions_data,
-        runs_data=runs_data,
-        logs_data=logs_data,
-        vendors_data=vendors_data,
-        error_types_data=error_types_data,
-        event_types_data=event_types_data,
-        examples_data=examples_data,
-        data_loaders_data=data_loaders_data,
-        processing_states_data=processing_states_data,
-        workflow_data=workflow_data,
-        readmes_data=readmes_data,
-        executions_data=executions_data,
-        artefact_dir=output_dir,
-    )
-
-    # Step 3: Write data files
-    # Ensure output directory exists
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Write catalog.json
-    catalog_path = output_dir / "catalog.json"
-    atomic_json_write(catalog_path, catalog, indent=2, fsync=False)
-
-    # Initialize runs.json only if it doesn't exist
-    # (RunTracker manages all updates to this file during workflow execution)
-    runs_path = output_dir / "runs.json"
+def _load_executions(runs_path: Path) -> list[dict[str, Any]]:
+    """Read the executions already in runs.json so failed runs surface in catalog logs."""
     if not runs_path.exists():
-        atomic_json_write(runs_path, _empty_runs_data(), indent=2, fsync=False)
+        return []
+    try:
+        with open(runs_path, encoding="utf-8") as f:
+            runs_json = json.load(f)
+        executions: list[dict[str, Any]] = runs_json.get("executions", [])
+        return executions
+    except (OSError, json.JSONDecodeError) as e:
+        logger.debug("Failed to load runs.json for execution data: %s", e)
+        return []
 
-    # Print summary
-    stats = catalog["stats"]
+
+def _counted(count: int, noun: str) -> str:
+    return f"{count} {noun}{'s' if count != 1 else ''}"
+
+
+# (stat key, verb, noun, suffix) for summary lines printed only when the count is positive.
+_OPTIONAL_SUMMARY_LINES = (
+    ("total_vendors", "Scanned", "vendor", ""),
+    ("total_error_types", "Cataloged", "error type", ""),
+    ("total_event_types", "Mapped", "event type", ""),
+    ("total_examples", "Found", "example project", ""),
+    ("total_data_loaders", "Indexed", "data loader", ""),
+    ("total_processing_states", "Parsed", "processing type", ""),
+    ("total_data_nodes", "Exported", "data node", " with previews"),
+)
+
+
+def _echo_error_warning_line(label: str, errors: int, warnings: int) -> None:
+    if errors > 0 or warnings > 0:
+        click.echo(f"  {label}: {_counted(errors, 'error')}, {_counted(warnings, 'warning')}")
+
+
+def _echo_summary(stats: dict[str, Any], output_dir: Path) -> None:
     total_workflows = stats["total_workflows"]
     total_actions = stats["total_actions"]
-    total_prompts = stats["total_prompts"]
-    total_schemas = stats["total_schemas"]
-    total_tool_functions = stats["total_tool_functions"]
+    core_lines = (
+        ("Found", total_workflows, "workflow"),
+        ("Compiled", total_actions, "action"),
+        ("Discovered", stats["total_prompts"], "prompt"),
+        ("Loaded", stats["total_schemas"], "schema"),
+        ("Indexed", stats["total_tool_functions"], "tool function"),
+    )
     total_runs = stats["total_runs"]
-    validation_errors = stats.get("validation_errors", 0)
-    validation_warnings = stats.get("validation_warnings", 0)
-    total_vendors = stats.get("total_vendors", 0)
-    total_error_types = stats.get("total_error_types", 0)
-    total_event_types = stats.get("total_event_types", 0)
-    total_examples = stats.get("total_examples", 0)
-    total_data_loaders = stats.get("total_data_loaders", 0)
-    total_processing_states = stats.get("total_processing_states", 0)
-    total_data_nodes = stats.get("total_data_nodes", 0)
 
     # Show path relative to CWD if possible, otherwise absolute
     try:
@@ -739,50 +722,20 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         display_path = output_dir
 
     click.echo("\nBuilding catalog")
-    click.echo(f"  Found {total_workflows} workflow{'s' if total_workflows != 1 else ''}")
-    click.echo(f"  Compiled {total_actions} action{'s' if total_actions != 1 else ''}")
-    click.echo(f"  Discovered {total_prompts} prompt{'s' if total_prompts != 1 else ''}")
-    click.echo(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
-    func_suffix = "s" if total_tool_functions != 1 else ""
-    click.echo(f"  Indexed {total_tool_functions} tool function{func_suffix}")
+    for verb, count, noun in core_lines:
+        click.echo(f"  {verb} {_counted(count, noun)}")
     if total_runs > 0:
-        click.echo(
-            f"  Loaded {total_runs} workflow run{'s' if total_runs != 1 else ''} with metrics"
-        )
-    if validation_errors > 0 or validation_warnings > 0:
-        click.echo(
-            f"  Parsed logs: {validation_errors} error{'s' if validation_errors != 1 else ''}, {validation_warnings} warning{'s' if validation_warnings != 1 else ''}"
-        )
-    runtime_warns = stats.get("runtime_warnings", 0)
-    runtime_errs = stats.get("runtime_errors", 0)
-    if runtime_warns > 0 or runtime_errs > 0:
-        click.echo(
-            f"  Runtime events: {runtime_errs} error{'s' if runtime_errs != 1 else ''}, {runtime_warns} warning{'s' if runtime_warns != 1 else ''}"
-        )
-    if total_vendors > 0:
-        click.echo(f"  Scanned {total_vendors} vendor{'s' if total_vendors != 1 else ''}")
-    if total_error_types > 0:
-        click.echo(
-            f"  Cataloged {total_error_types} error type{'s' if total_error_types != 1 else ''}"
-        )
-    if total_event_types > 0:
-        click.echo(
-            f"  Mapped {total_event_types} event type{'s' if total_event_types != 1 else ''}"
-        )
-    if total_examples > 0:
-        click.echo(f"  Found {total_examples} example project{'s' if total_examples != 1 else ''}")
-    if total_data_loaders > 0:
-        click.echo(
-            f"  Indexed {total_data_loaders} data loader{'s' if total_data_loaders != 1 else ''}"
-        )
-    if total_processing_states > 0:
-        click.echo(
-            f"  Parsed {total_processing_states} processing type{'s' if total_processing_states != 1 else ''}"
-        )
-    if total_data_nodes > 0:
-        click.echo(
-            f"  Exported {total_data_nodes} data node{'s' if total_data_nodes != 1 else ''} with previews"
-        )
+        click.echo(f"  Loaded {_counted(total_runs, 'workflow run')} with metrics")
+    _echo_error_warning_line(
+        "Parsed logs", stats.get("validation_errors", 0), stats.get("validation_warnings", 0)
+    )
+    _echo_error_warning_line(
+        "Runtime events", stats.get("runtime_errors", 0), stats.get("runtime_warnings", 0)
+    )
+    for key, verb, noun, suffix in _OPTIONAL_SUMMARY_LINES:
+        count = stats.get(key, 0)
+        if count > 0:
+            click.echo(f"  {verb} {_counted(count, noun)}{suffix}")
     logger.info(
         "Documentation catalog generated: %d workflows, %d actions",
         total_workflows,
@@ -790,4 +743,41 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     )
     click.echo(f"\nDone. Documentation compiled to {display_path}/")
 
+
+def generate_docs(project_path: str, output_dir: Path) -> bool:
+    """Generate documentation catalog from project workflows and write to output_dir."""
+    project_root = Path(project_path).resolve()
+
+    workflows_data = scanner.scan_workflows(project_root)
+    if not workflows_data:
+        logger.warning("No workflows found in %s", project_path)
+        click.echo("No workflows found in project!")
+        return False
+
+    # Scan tool functions once — reused by both the catalog data and each
+    # WorkflowSchemaService (avoids N redundant AST parses for N workflows).
+    tool_functions_data = scanner.scan_tool_functions(project_root, get_tool_dirs(project_root))
+    artifacts = _scan_project_artifacts(project_root)
+    executions_data = _load_executions(output_dir / "runs.json")
+
+    catalog_gen = CatalogGenerator(
+        workflows_data, project_path=project_path, tool_schemas=tool_functions_data
+    )
+    catalog = catalog_gen.generate(
+        tool_functions_data=tool_functions_data,
+        executions_data=executions_data,
+        artefact_dir=output_dir,
+        **artifacts,
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    atomic_json_write(output_dir / "catalog.json", catalog, indent=2, fsync=False)
+
+    # Initialize runs.json only if it doesn't exist
+    # (RunTracker manages all updates to this file during workflow execution)
+    runs_path = output_dir / "runs.json"
+    if not runs_path.exists():
+        atomic_json_write(runs_path, _empty_runs_data(), indent=2, fsync=False)
+
+    _echo_summary(catalog["stats"], output_dir)
     return True

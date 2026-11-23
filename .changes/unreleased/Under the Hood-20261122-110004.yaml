@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  `agac` imports a command's module only when that command is used, so `agac --help` no longer
+  loads every command (about 0.95 s down to 0.22 s). The help listing, each command's help and
+  behavior, and the error for an unknown command are unchanged; a test holds the listing's
+  summaries equal to the commands' own help.
+time: 2026-11-22T11:00:04Z

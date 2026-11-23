@@ -417,14 +417,14 @@ def _apply_version_template(
         else:
             result = result.replace(f"${{{param_name}-1}}", "")
         return result
-    elif isinstance(value, dict):
+    if isinstance(value, dict):
         return {
             _apply_version_template(k, param_name, current_val, idx, values)
             if isinstance(k, str)
             else k: _apply_version_template(v, param_name, current_val, idx, values)
             for k, v in value.items()
         }
-    elif isinstance(value, list):
+    if isinstance(value, list):
         return [
             _apply_version_template(item, param_name, current_val, idx, values) for item in value
         ]

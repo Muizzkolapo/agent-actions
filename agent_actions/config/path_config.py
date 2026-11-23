@@ -1,7 +1,12 @@
 """Project-specific path configuration loading."""
 
+import copy
+import functools
+import io
 import logging
-from collections.abc import Sequence
+import os
+import time
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -13,6 +18,22 @@ from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 
 logger = logging.getLogger(__name__)
+
+_PROJECT_CONFIG_NAMES = (
+    "agent_actions.yml",
+    "agent_actions.yaml",
+    ".agent_actions.yml",
+    "config/agent_actions.yml",
+)
+
+
+@functools.lru_cache(maxsize=32)
+def _parse_project_yaml(name: str, text: str) -> Any:
+    """*text* parsed, once per distinct text; the result is shared and must not be written to."""
+    stream = io.StringIO(text)
+    # A parse error names the file, as it does when the file itself is the stream.
+    stream.name = name
+    return yaml.safe_load(stream)
 
 
 def load_project_config(project_root: Path) -> dict[str, Any]:
@@ -34,19 +55,13 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
     Raises:
         ConfigValidationError: If YAML file exists but contains invalid syntax
     """
-    config_files = [
-        project_root / "agent_actions.yml",
-        project_root / "agent_actions.yaml",
-        project_root / ".agent_actions.yml",
-        project_root / "config" / "agent_actions.yml",
-    ]
-
-    for config_file in config_files:
+    for config_file in (project_root / name for name in _PROJECT_CONFIG_NAMES):
         if config_file.exists():
             fire_event(ConfigLoadStartEvent(config_file=str(config_file)))
             try:
                 with open(config_file, encoding="utf-8") as f:
-                    config = yaml.safe_load(f) or {}
+                    text = f.read()
+                config = copy.deepcopy(_parse_project_yaml(str(config_file), text)) or {}
             except yaml.YAMLError as e:
                 raise ConfigValidationError(
                     "path_config_yaml",
@@ -329,15 +344,25 @@ def get_seed_data_paths(project_root: Path) -> list[Path]:
     A folder that is missing, absolute, or outside the project root once symlinks
     are followed is a configuration error, never skipped.
     """
+    folders: list[Path] = []
+    for entry, resolved in _listed_seed_entries(project_root):
+        if not resolved.is_dir():
+            raise _missing_listed_folder(entry, project_root)
+        folders.append(resolved)
+    return folders
+
+
+def _listed_seed_entries(project_root: Path) -> Iterator[tuple[str, Path]]:
+    """Each ``seed_data_paths`` entry and its resolved folder, present or not."""
     try:
         config = load_project_config(project_root)
     except (OSError, ConfigValidationError) as exc:
         logger.debug("Could not load seed_data_paths from project config: %s", exc)
-        return []
+        return
 
     raw = config.get("seed_data_paths")
     if raw is None:
-        return []
+        return
     if not isinstance(raw, list) or not all(isinstance(entry, str) and entry for entry in raw):
         raise ConfigurationError(
             "seed_data_paths: must be a list of folder names inside the project root.",
@@ -345,7 +370,6 @@ def get_seed_data_paths(project_root: Path) -> list[Path]:
         )
 
     root = project_root.resolve()
-    folders: list[Path] = []
     for entry in raw:
         outside = ConfigurationError(
             f"seed_data_paths: '{entry}' is outside the project. "
@@ -359,13 +383,14 @@ def get_seed_data_paths(project_root: Path) -> list[Path]:
             resolved.relative_to(root)
         except ValueError:
             raise outside from None
-        if not resolved.is_dir():
-            raise ConfigurationError(
-                f"seed_data_paths: folder '{entry}' does not exist (project root: {project_root}).",
-                context={"entry": entry, "project_root": str(project_root)},
-            )
-        folders.append(resolved)
-    return folders
+        yield entry, resolved
+
+
+def _missing_listed_folder(entry: str, project_root: Path | None) -> ConfigurationError:
+    return ConfigurationError(
+        f"seed_data_paths: folder '{entry}' does not exist (project root: {project_root}).",
+        context={"entry": entry, "project_root": str(project_root)},
+    )
 
 
 @dataclass(frozen=True)
@@ -411,17 +436,46 @@ def _folder_label(path: Path, project_root: Path | None) -> str:
     return str(path)
 
 
-def seed_search_folders(
-    workflow_config_path: str | None, project_root: Path | None = None
-) -> list[SeedFolder]:
-    """Every folder a seed reference is looked for in, in search order.
+@dataclass(frozen=True)
+class _SeedCandidate:
+    path: Path
+    kind: str
+    label: str
+    listed_entry: str | None = None
 
-    The workflow's own folder first, then the project folder named by
-    ``seed_data_path``, then each folder of ``seed_data_paths`` in order. The
-    runtime loader, preflight, the editor and ``inspect`` all search this list,
-    so they cannot disagree about which file a name means. A default folder that
-    does not exist is left out; a listed one that does not exist is an error.
-    """
+
+@dataclass(frozen=True)
+class _SeedCandidates:
+    """Every folder a seed reference may be looked for in, before any is checked for presence."""
+
+    root: Path | None
+    candidates: tuple[_SeedCandidate, ...]
+
+    def still_resolved(self) -> bool:
+        """Whether each listed folder still resolves to the path it was checked at."""
+        return all(
+            c.path.resolve() == c.path for c in self.candidates if c.listed_entry is not None
+        )
+
+    def present(self) -> list[SeedFolder]:
+        folders: list[SeedFolder] = []
+        seen: set[Path] = set()
+        for candidate in self.candidates:
+            is_dir = candidate.path.is_dir()
+            if candidate.listed_entry is not None and not is_dir:
+                raise _missing_listed_folder(candidate.listed_entry, self.root)
+            # One folder is searched once, however many ways it is named: the project
+            # folder listed again, a listed folder in two spellings, or the workflow
+            # folder of a flat project, which is the project folder and stays its own.
+            if is_dir and candidate.path not in seen:
+                seen.add(candidate.path)
+                folders.append(SeedFolder(candidate.path, candidate.kind, candidate.label))
+        return folders
+
+
+def _seed_candidates(
+    workflow_config_path: str | None, project_root: Path | None
+) -> _SeedCandidates:
     from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 
     root = project_root
@@ -433,25 +487,90 @@ def seed_search_folders(
             logger.debug("No project root found from %s", start)
 
     seed_dir_name = get_seed_data_path(root) if root is not None else "seed_data"
-    folders: list[SeedFolder] = []
-    seen: set[Path] = set()
+    candidates: list[_SeedCandidate] = []
 
-    def add(path: Path, kind: str) -> None:
-        # One folder is searched once, however many ways it is named: the project
-        # folder listed again, a listed folder in two spellings, or the workflow
-        # folder of a flat project, which is the project folder and stays its own.
-        if path.is_dir() and path not in seen:
-            seen.add(path)
-            folders.append(SeedFolder(path, kind, _folder_label(path, root)))
+    def add(path: Path, kind: str, listed_entry: str | None = None) -> None:
+        candidates.append(_SeedCandidate(path, kind, _folder_label(path, root), listed_entry))
 
     if workflow_config_path:
         add((_workflow_root(Path(workflow_config_path)) / seed_dir_name).resolve(), "workflow")
     if root is not None:
         add((root / seed_dir_name).resolve(), "project")
-        for listed in get_seed_data_paths(root):
-            add(listed, "listed")
+        for entry, resolved in _listed_seed_entries(root):
+            add(resolved, "listed", entry)
+    return _SeedCandidates(root, tuple(candidates))
 
-    return folders
+
+def seed_search_folders(
+    workflow_config_path: str | None, project_root: Path | None = None
+) -> list[SeedFolder]:
+    """Every folder a seed reference is looked for in, in search order.
+
+    The workflow's own folder first, then the project folder named by
+    ``seed_data_path``, then each folder of ``seed_data_paths`` in order. The
+    runtime loader, preflight, the editor and ``inspect`` all search this list,
+    so they cannot disagree about which file a name means. A default folder that
+    does not exist is left out; a listed one that does not exist is an error.
+    """
+    return _seed_candidates(workflow_config_path, project_root).present()
+
+
+# A project file changed this recently may change again within the same timestamp
+# tick, keeping the same signature, so the folders it names are not kept for it.
+_RACY_WINDOW_NS = 2_000_000_000
+_RECORD_CACHE_LIMIT = 64
+_record_candidates: dict[tuple[str, str], tuple[tuple[Any, ...], _SeedCandidates]] = {}
+
+
+def _project_file_signature(root: Path) -> tuple[Any, ...]:
+    signature: list[Any] = []
+    for name in _PROJECT_CONFIG_NAMES:
+        try:
+            st = os.stat(root / name)
+        except OSError:
+            signature.append(None)
+        else:
+            signature.append((st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino))
+    return tuple(signature)
+
+
+def _is_racy(signature: tuple[Any, ...]) -> bool:
+    newest = max((max(s[0], s[1]) for s in signature if s is not None), default=None)
+    return newest is not None and newest > time.time_ns() - _RACY_WINDOW_NS
+
+
+def record_seed_search_folders(workflow_config_path: str | None) -> list[SeedFolder]:
+    """:func:`seed_search_folders` for a run's records, re-reading the project file only when it changes.
+
+    The project root and the folders the project file names are kept per workflow
+    file until a stat of the project file differs or a listed folder no longer
+    resolves to itself (it became a symlink); each folder's presence is still
+    checked on every call. A project root found without a marker file is never
+    kept. Long-lived readers (preflight, the editor, ``inspect``) use
+    :func:`seed_search_folders`, which reads everything afresh.
+    """
+    if not workflow_config_path:
+        return seed_search_folders(workflow_config_path)
+    key = (workflow_config_path, os.getcwd())
+    hit = _record_candidates.get(key)
+    if hit is not None:
+        signature, candidates = hit
+        if (
+            candidates.root
+            and _project_file_signature(candidates.root) == signature
+            and candidates.still_resolved()
+        ):
+            return candidates.present()
+
+    candidates = _seed_candidates(workflow_config_path, None)
+    root = candidates.root
+    if root is not None and any((root / marker).is_file() for marker in _PROJECT_MARKERS):
+        signature = _project_file_signature(root)
+        if not _is_racy(signature):
+            if len(_record_candidates) >= _RECORD_CACHE_LIMIT:
+                _record_candidates.clear()
+            _record_candidates[key] = (signature, candidates)
+    return candidates.present()
 
 
 def resolve_seed_file(file_spec: str, folders: Sequence[SeedFolder]) -> ResolvedSeedFile:

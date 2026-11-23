@@ -1,7 +1,6 @@
 """Jinja2 AST-based prompt template analysis."""
 
 import logging
-from dataclasses import dataclass
 from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
@@ -12,21 +11,12 @@ from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class FieldUsage:
-    """Information about how a field is used in the template."""
-
-    variable_name: str  # Full variable path: 'seed.exam_syllabus.platform_name'
-    used_in_context: str  # Where it's used: 'variable', 'filter', 'test', 'block'
-    line_number: int | None = None
-
-
 class PromptASTAnalyzer:
     """Analyzes Jinja2 templates via AST parsing to extract variable paths."""
 
     def __init__(self):
         """Initialize Jinja2 environment for AST parsing."""
-        self.env = Environment(extensions=PROMPT_EXTENSIONS)
+        self.env = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML
 
     def _parse(self, template_source: str) -> nodes.Template:
         """Parse template after escaping Jinja syntax in inline code spans."""
@@ -40,13 +30,13 @@ class PromptASTAnalyzer:
         """
         if isinstance(node, nodes.Name):
             return str(node.name)
-        elif isinstance(node, nodes.Getattr):
+        if isinstance(node, nodes.Getattr):
             parent_path = self._build_path_from_node(node.node)
             if not parent_path:
                 # Parent is unsupported (e.g., literal) - skip entire path
                 return ""
             return f"{parent_path}.{node.attr}"
-        elif isinstance(node, nodes.Getitem):
+        if isinstance(node, nodes.Getitem):
             parent_path = self._build_path_from_node(node.node)
             if not parent_path:
                 # Parent is unsupported (e.g., literal) - skip entire path
@@ -59,9 +49,8 @@ class PromptASTAnalyzer:
                 return f"{parent_path}[{key}]"
             # Dynamic key - can't resolve at parse time
             return f"{parent_path}[*]"
-        else:
-            # Unsupported node type (Const, Call, etc.) - return empty to skip
-            return ""
+        # Unsupported node type (Const, Call, etc.) - return empty to skip
+        return ""
 
     def _extract_full_paths(self, template_ast: nodes.Template) -> set[str]:
         """Extract full attribute paths from parsed AST, excluding declared variables."""

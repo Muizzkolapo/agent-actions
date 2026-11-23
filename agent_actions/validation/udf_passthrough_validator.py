@@ -99,9 +99,12 @@ def _bus_tainted_names(func: ast.AST, root: str) -> set[str]:
     while True:
         before = len(tainted)
         for node in ast.walk(func):
-            if isinstance(node, ast.For) and _is_derived(node.iter, root, tainted):
-                tainted |= _target_names(node.target)
-            elif isinstance(node, ast.comprehension) and _is_derived(node.iter, root, tainted):
+            if (
+                isinstance(node, ast.For)
+                and _is_derived(node.iter, root, tainted)
+                or isinstance(node, ast.comprehension)
+                and _is_derived(node.iter, root, tainted)
+            ):
                 tainted |= _target_names(node.target)
             elif isinstance(node, ast.Assign) and _is_derived(node.value, root, tainted):
                 for tgt in node.targets:
