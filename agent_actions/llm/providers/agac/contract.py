@@ -173,7 +173,9 @@ def _feedback_namespaces(agent_config: dict[str, Any]) -> set[str]:
     origin = agent_config.get("_include")
     if not isinstance(origin, dict) or not isinstance(origin.get("loop"), dict):
         return set()
-    names = origin.get("names") if isinstance(origin.get("names"), dict) else {}
+    names = origin.get("names")
+    if not isinstance(names, dict):
+        names = {}
     keys = [key for key in origin["loop"].get("feedback") or [] if isinstance(key, str)]
     return {*keys, *(str(names[key]) for key in keys if key in names)}
 
@@ -383,7 +385,7 @@ class Contract:
         for rule in rules:
             if rule.type == "matches_regex" and not rule.params.get("negate"):
                 value = FakeDataGenerator.from_pattern(str(rule.params["pattern"]), bounds)
-                if kind not in (None, "string"):
+                if kind is not None and kind != "string":
                     value = _as_type(value, kind, schema, rule)
                 if value is not None:
                     break
