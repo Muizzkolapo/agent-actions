@@ -66,11 +66,12 @@ def test_the_commands_that_take_a_workflow_are_the_ones_known():
 
 
 @pytest.mark.parametrize("path", sorted(WITH_A_WORKFLOW))
-def test_every_command_that_takes_a_workflow_takes_it_as_w_workflow_and_agent(path):
+def test_every_command_that_takes_a_workflow_takes_it_as_w_workflow_and_a(path):
     option = _option(WITH_A_WORKFLOW[path], *WORKFLOW_PARAMS)
 
     assert option is not None
-    assert {"-w", "--workflow", "-a", "--agent"} <= set(option.opts)
+    assert {"-w", "--workflow", "-a"} <= set(option.opts)
+    assert "--agent" not in option.opts
 
 
 @pytest.mark.parametrize("path", sorted(WITH_AN_ACTION))
@@ -138,11 +139,19 @@ def test_traces_w_workflow_action_prints_the_traces_and_no_warning(project, flag
     assert result.stderr == ""
 
 
-def test_traces_takes_agent_for_the_workflow(project):
-    result = _run("traces", "--agent", WORKFLOW, "-A", ACTION)
+def test_traces_takes_workflow_for_the_workflow(project):
+    result = _run("traces", "--workflow", WORKFLOW, "-A", ACTION)
 
     assert result.exit_code == 0, result.output
     assert "Page alpha prompt." in result.stdout
+
+
+@pytest.mark.parametrize("path", sorted(WITH_A_WORKFLOW))
+def test_agent_is_no_such_option(path):
+    result = _run(*path.split(), "--agent", WORKFLOW)
+
+    assert result.exit_code == 2
+    assert "No such option: --agent" in result.stderr
 
 
 @pytest.mark.parametrize(

@@ -20,4 +20,4 @@ class TestCommandErrorHandling:
         result = runner.invoke(cli, [command])
 
         assert result.exit_code == 2
-        assert "Missing option '-w' / '--workflow' / '-a' / '--agent'" in result.output
+        assert "Missing option '-w' / '--workflow' / '-a'" in result.output

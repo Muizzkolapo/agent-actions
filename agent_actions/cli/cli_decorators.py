@@ -54,8 +54,8 @@ def workflow_option(
     required: bool = True,
     help: str = "Workflow name: its configuration file name without path or extension",
 ) -> Callable:
-    """The workflow, as ``-w/--workflow`` or ``-a/--agent``, passed to the command as *name*."""
-    return click.option("-w", "--workflow", "-a", "--agent", name, required=required, help=help)
+    """The workflow, as ``-w/--workflow`` or ``-a``, passed to the command as *name*."""
+    return click.option("-w", "--workflow", "-a", name, required=required, help=help)
 
 
 def requires_project(func):

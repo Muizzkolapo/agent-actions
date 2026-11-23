@@ -22,7 +22,7 @@ You can run this command from any subdirectory in your project.
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` names the same option. |
 | `-u, --user-code DIRECTORY` | The path to the user code directory that contains the tools |
 | `--json` | Write the output as JSON, for use by programs |
 | `-v, --verbose` | Show a detailed diagram of the data flow |

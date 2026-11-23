@@ -114,7 +114,7 @@ def test_traces_w_workflow_action_prints_the_prompts(project, flag):
     ],
     ids=" ".join,
 )
-@pytest.mark.parametrize("flag", ["-w", "--workflow", "--agent"])
+@pytest.mark.parametrize("flag", ["-w", "--workflow", "-a"])
 def test_a_command_that_takes_a_workflow_takes_it_under_each_name(project, command, flag):
     result = run_agac(project, *command, flag, WORKFLOW)
 
@@ -142,7 +142,7 @@ def test_a_command_given_no_workflow_names_every_way_to_give_one(project):
     result = run_agac(project, "status")
 
     assert result.returncode == 2
-    assert "Error: Missing option '-w' / '--workflow' / '-a' / '--agent'." in result.stderr
+    assert "Error: Missing option '-w' / '--workflow' / '-a'." in result.stderr
 
 
 @pytest.mark.parametrize("command", ["records", "preview"])
@@ -150,7 +150,7 @@ def test_records_and_preview_given_no_workflow_name_every_way_to_give_one(projec
     result = run_agac(project, command)
 
     assert result.returncode == 2
-    assert "Error: Missing option '-w' / '--workflow' / '-a' / '--agent'." in result.stderr
+    assert "Error: Missing option '-w' / '--workflow' / '-a'." in result.stderr
 
 
 def test_traces_given_no_action_names_the_option_it_lacks(project):

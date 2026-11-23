@@ -55,7 +55,7 @@ agac run --help
 
 ## The Workflow and the Action
 
-Each command that reads a workflow takes its name as `-w` or `--workflow`. `-a` and `--agent` name the same option:
+Each command that reads a workflow takes its name as `-w` or `--workflow`. `-a` names the same option:
 
 ```bash
 agac run -w my_workflow
@@ -82,7 +82,7 @@ If one of these options is missing or wrong, the command prints an error on stde
 
 | Cause | Error |
 |-------|-------|
-| No workflow option, in a command that needs it (including `inspect action` and `inspect context`), other than `inspect` with no subcommand | `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` |
+| No workflow option, in a command that needs it (including `inspect action` and `inspect context`), other than `inspect` with no subcommand | `Error: Missing option '-w' / '--workflow' / '-a'.` |
 | No action option, in `traces` | `Error: Missing option '-A' / '--action'.` |
 
 [`agac inspect`](./inspect), with no subcommand, gives its own error for a missing workflow option:

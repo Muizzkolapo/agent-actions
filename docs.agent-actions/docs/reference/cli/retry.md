@@ -24,7 +24,7 @@ resumes from where it stopped.
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` names the same option. |
 | `--from TEXT` | The action to start the retry from. If you do not give this option, the retry starts from the earliest failure. |
 | `--record TEXT` | Limit the retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what the command would retry, and do not execute |

@@ -17,8 +17,8 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. Every command takes the workflow as `-w/--workflow` and `-a/--agent` alike (`workflow_option`), and an action as `-A/--action` wherever it takes one (`traces`, `records` and `preview` included). | `cli`, `shared` |
-| `workflow_option` | Function | The workflow option of a command: `-w/--workflow`, with `-a/--agent` as the same option. | - |
+| `cli_decorators.py` | Module | CLI decorators for agent-actions commands. `handles_user_errors` passes the command's arguments to the error output as context, except `action_name`: the action a user typed is not the action an error is about. Every command takes the workflow as `-w/--workflow` and `-a` alike (`workflow_option`), and an action as `-A/--action` wherever it takes one (`traces`, `records` and `preview` included). | `cli`, `shared` |
+| `workflow_option` | Function | The workflow option of a command: `-w/--workflow`, with `-a` as the same option. | - |
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
 | `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
 | `enter_project` | Function | The project check and banner `requires_project` applies, as a call: a group callback that Click runs before a subcommand's `--help` (`docs`) calls it only when the group itself runs. | - |
@@ -73,7 +73,7 @@
 | `classify_outcome` | Function | The `RunOutcome` of a workflow, `run_status` told apart further: `FAILED` when every action is terminal and one failed; `PAUSED_FOR_BATCH` when an action is not terminal and one is `batch_submitted`, `PAUSED` when none is; otherwise `RECORD_FAILURES` when an action is `completed_with_failures` (it holds a `failed` or `exhausted` record, `storage.backend.FAILURE_DISPOSITIONS`), else `SUCCESS`. | - |
 | `actions_with_record_failures` | Function | The actions whose status is `completed_with_failures`, in execution order. | - |
 | `report_quota_stop` | Function | Prints a `ProviderQuotaStop` on stderr unless the workflow that raised it has shown it (`_already_displayed`), so the stop is reported once. | - |
-| `main.py` | Module | Main entry point for the Agent Actions CLI. Each command module is imported on first lookup (`_COMMANDS`, `_LazyGroup`), so `agac --help` imports none of them. A usage error is printed as Click words it (`format_message`), so a missing option is named by its flags: `Missing option '-w' / '--workflow' / '-a' / '--agent'.` | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
+| `main.py` | Module | Main entry point for the Agent Actions CLI. Each command module is imported on first lookup (`_COMMANDS`, `_LazyGroup`), so `agac --help` imports none of them. A usage error is printed as Click words it (`format_message`), so a missing option is named by its flags: `Missing option '-w' / '--workflow' / '-a'.` | `cli`, `errors`, `llm_invocation`, `logging`, `shared`, `utilities`, `validation` |
 | `_COMMANDS` | Constant | Each top-level command's `module:attribute` and the one-line summary `agac --help` lists it by until it is imported. | - |
 | `_LazyGroup` | Class | Click group that imports a command on first `get_command`; `format_commands` shortens a command not yet imported from its summary as Click shortens its help. | - |
 | `CLI` | Class | Agent Actions CLI application. | - |

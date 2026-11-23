@@ -144,7 +144,7 @@ The command removes these items:
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` names the same option. |
 | `-f, --force` | Skip the interactive confirmation |
 | `--target` | Also remove `agent_io/target/`, your generated output |
 | `--all` | Remove all directories, which include target, staging and the durable store. Also remove the data that a provider recorded locally about the batches of this workflow. You cannot recover the removed data |
@@ -230,7 +230,7 @@ agac status -w <workflow-name> [options]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` names the same option. |
 | `--json` | Print the status of each action and the status of the run as one JSON document |
 
 **Example:**

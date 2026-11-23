@@ -18,14 +18,14 @@ Use `preview` to check quickly which records an action wrote. You do not have to
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` names the same option. |
 | `-A, --action TEXT` | The name of the action to preview. If you do not specify it, the command lists all actions. |
 | `-n, --limit INT` | The maximum number of records to show (default: 10) |
 | `--offset INT` | The number of records to skip (default: 0) |
 | `-f, --format` | The output format: `table`, `json` or `raw` (default: table) |
 | `--stats` | Show only the storage statistics |
 
-Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '-a' / '--agent'.` See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
+Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '-a'.` See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
 
 ## Examples
 
