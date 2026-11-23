@@ -1,6 +1,6 @@
 # Storage Manifest
 
-**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)** — table schemas, disposition system, checkpoint model, thread safety, schema migration, caveats.
+**[> Architecture Deep Dive (ARCHITECTURE.md)](ARCHITECTURE.md)** — table schemas, storage format, disposition system, checkpoint model, thread safety, caveats.
 
 ## Overview
 

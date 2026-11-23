@@ -1,6 +1,6 @@
 # SQLite Backend Mixins
 
-Plain mixin classes, one per concern, that `SQLiteBackend` (in `../sqlite_backend.py`) composes. `SQLiteBackend` keeps its name, module and import path, its table DDL, connection, schema migration and `close()`; the table-level methods live here. Nothing outside `sqlite_backend.py` should import these modules.
+Plain mixin classes, one per concern, that `SQLiteBackend` (in `../sqlite_backend.py`) composes. `SQLiteBackend` keeps its name, module and import path, its table DDL, connection, storage format check and `close()`; the table-level methods live here. Nothing outside `sqlite_backend.py` should import these modules.
 
 ## Modules
 

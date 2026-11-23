@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS prompt_trace (
 `answered_under` holds the keys of the action's `answered_under` status stamp
 (`config_in_force` in `workflow/executor.py`). A config edit re-runs nothing, so one
 action can hold answers from more than one config; this column says which answered
-each record. An existing store gains it through `_enforce_schema`.
+each record.
 
 Indexes:
 - `idx_trace_action ON prompt_trace(action_name)`
@@ -449,36 +449,6 @@ a warning.
 A change to what the store holds — a column, a table, an encoding — raises the format.
 No code reads a store of an earlier format.
 
-## Schema Migration (_enforce_schema)
-
-When the framework upgrades and adds columns to a table, existing databases need to be updated without losing data. `_enforce_schema()` runs at initialization, before `CREATE TABLE` statements:
-
-```
-For each table in _REQUIRED_COLUMNS:
-  1. PRAGMA table_info(table_name) → get existing columns
-  2. If table doesn't exist yet → skip (CREATE TABLE will handle it)
-  3. Compute: missing = required_columns - existing_columns
-  4. For each missing column:
-       ALTER TABLE "table" ADD COLUMN "column" TEXT DEFAULT NULL
-```
-
-Key design decisions:
-- **Never drops tables** — user data must survive framework upgrades.
-- **Only adds columns** — does not remove or rename existing columns.
-- **All new columns are TEXT DEFAULT NULL** — the most permissive type; application code handles typing.
-- **Table names in `_REQUIRED_COLUMNS` are hardcoded** — not user input, but the implementation still quotes identifiers as defense-in-depth.
-
-The `_REQUIRED_COLUMNS` dictionary lists the columns each table must have:
-
-| Table | Required columns |
-|-------|-----------------|
-| `source_data` | relative_path, source_guid, data, created_at, repeat_of_source_guid |
-| `target_data` | action_name, relative_path, data, record_count, created_at |
-| `record_disposition` | action_name, record_id, disposition, reason, relative_path, input_snapshot, detail, created_at |
-| `prompt_trace` | action_name, record_id, source_guid, run_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, answered_under, created_at |
-
-Note: `checkpoint_output` is not in `_REQUIRED_COLUMNS` because it was added after the migration system and has no legacy schemas to handle.
-
 ---
 
 ## Maintenance Operations
@@ -532,7 +502,7 @@ It also rewrites a path: surrounding whitespace is stripped and a backslash beco
 |------|------|
 | `__init__.py` | Factory: `get_storage_backend(workflow_path, workflow_name, backend_type)` and `BACKENDS` registry |
 | `backend.py` | Abstract base class: `StorageBackend`, disposition constants, `Disposition` enum, `NODE_LEVEL_RECORD_ID`, `FAILURE_DISPOSITIONS`, `RUNNING_CLEAR_DISPOSITIONS` |
-| `backends/sqlite_backend.py` | SQLite implementation: all 5 tables, schema migration, maintenance, thread-safe CRUD |
+| `backends/sqlite_backend.py` | SQLite implementation: table DDL, storage format check, connection, thread-safe CRUD |
 | `backends/sqlite/` | Mixins `SQLiteBackend` composes, one per concern: payload codec, metadata, source data, target data, dispositions, checkpoints, prompt traces, maintenance |
 
 ---
@@ -547,7 +517,7 @@ It also rewrites a path: surrounding whitespace is stripped and a backslash beco
 
 4. **delete_target vs clear_disposition are independent.** `delete_target()` removes rows from `target_data` but does NOT touch `record_disposition`. `clear_disposition()` removes rows from `record_disposition` but does NOT touch `target_data`. Callers must call both if they want a clean reset. The `--fresh` flag in the workflow layer coordinates this. `delete_target_files()`, which deletes some of an action's files, is likewise independent: the walk that deletes the file of an input that is gone leaves its records' dispositions and checkpoint rows. They name records whose input is gone, so they are read again only if it comes back, and the reset it then takes to be answered again clears them.
 
-5. **Schema migration only adds columns.** If a column is renamed or removed in a future version, `_enforce_schema()` will not handle it. The table will have both old and new columns. There is no `DROP COLUMN` or `ALTER COLUMN` path.
+5. **No store is migrated.** `initialize()` adds, renames or removes no column in an existing store. A schema change raises `_STORAGE_FORMAT_VERSION`, and a store of the earlier format is refused (see *Storage Format*).
 
 6. **input_snapshot truncation is lossy.** When `input_snapshot` exceeds 10KB, it is replaced with a JSON wrapper containing only the first 8KB. The original data is not recoverable from the truncated form.
 

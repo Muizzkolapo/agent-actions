@@ -790,7 +790,7 @@ class TestServiceInitSqliteError:
 
 
 class TestSchemaEnforcement:
-    """Tests for _enforce_schema dropping stale tables."""
+    """A store this version wrote keeps its data when it opens again."""
 
     def test_correct_schema_not_dropped(self, tmp_path):
         """Table with all columns is left intact on initialize()."""
