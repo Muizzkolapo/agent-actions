@@ -2,7 +2,8 @@
 
 import json
 import logging
-from collections.abc import Callable, Collection, Iterable, Mapping
+import uuid
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
@@ -303,35 +304,64 @@ class BatchContextManager:
         context_map: dict[str, Any],
         batch_name: str,
     ) -> None:
+        """Store the map in parts, then name them under the map's parts key.
+
+        The parts are written before the parts key names them, and what the key named
+        before (or the map an earlier version saved whole) is deleted after, so a
+        reader finds the earlier map or this one, whole. A save that fails leaves the
+        earlier map as it stood.
+        """
+        key = BatchContextManager._metadata_key(action_name, batch_name)
+        generation = uuid.uuid4().hex[:12]
+        written: list[str] = []
         try:
-            key = BatchContextManager._metadata_key(action_name, batch_name)
-            backend.save_metadata(key, deep_json.dumps(context_map, ensure_ascii=False))
-            logger.debug(
-                "Saved context map for %s/%s (%d entries)",
-                action_name,
-                batch_name,
-                len(context_map),
-            )
+            earlier = _part_keys(backend, key) or []
+            for index, part in enumerate(_encoded_parts(context_map)):
+                part_key = _part_key(key, generation, index)
+                backend.save_metadata(part_key, part)
+                written.append(part_key)
+            header = {"generation": generation, "parts": len(written)}
+            backend.save_metadata(_parts_key(key), json.dumps(header))
         except Exception as e:
+            for part_key in written:
+                try:
+                    backend.delete_metadata(part_key)
+                except Exception:
+                    logger.debug("Could not delete context map part %s", part_key, exc_info=True)
             raise ProcessingError(
                 f"Failed to save context map: {e}",
                 cause=e,
                 context={"action_name": action_name, "batch_name": batch_name},
             ) from e
+        backend.delete_metadata(key)
+        for part_key in earlier:
+            backend.delete_metadata(part_key)
+        logger.debug(
+            "Saved context map for %s/%s (%d entries in %d parts)",
+            action_name,
+            batch_name,
+            len(context_map),
+            len(written),
+        )
 
     @staticmethod
     def load_batch_context_map(
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> dict[str, Any]:
+        """The map as saved: in parts, or as one string by an earlier version."""
         try:
             key = BatchContextManager._metadata_key(action_name, batch_name)
-            raw = backend.load_metadata(key)
-            if raw is None:
-                raise ProcessingError(
-                    f"Context map not found for {action_name}/{batch_name}",
-                    context={"action_name": action_name, "batch_name": batch_name},
-                )
-            context_map: dict[str, Any] = deep_json.loads(raw)
+            part_keys = _part_keys(backend, key)
+            if part_keys is not None:
+                context_map = _joined_parts(backend, part_keys)
+            else:
+                raw = backend.load_metadata(key)
+                if raw is None:
+                    raise ProcessingError(
+                        f"Context map not found for {action_name}/{batch_name}",
+                        context={"action_name": action_name, "batch_name": batch_name},
+                    )
+                context_map = deep_json.loads(raw)
             logger.debug(
                 "Loaded context map for %s/%s (%d entries)",
                 action_name,
@@ -359,4 +389,72 @@ class BatchContextManager:
         backend: "StorageBackend", action_name: str, batch_name: str
     ) -> bool:
         key = BatchContextManager._metadata_key(action_name, batch_name)
-        return backend.delete_metadata(key)
+        for part_key in _part_keys(backend, key) or ():
+            backend.delete_metadata(part_key)
+        named = backend.delete_metadata(_parts_key(key))
+        whole = backend.delete_metadata(key)  # a map an earlier version saved whole
+        return named or whole
+
+
+# A context map is stored in parts of about this many characters, so neither a save
+# nor a load holds the whole map as one string.
+_PART_CHARS = 4_000_000
+
+
+def _encoded_parts(context_map: dict[str, Any]) -> Iterator[str]:
+    """The map as JSON objects of about ``_PART_CHARS`` each, entries in order.
+
+    Each entry is encoded alone and the members are joined as ``json.dumps`` joins
+    them, so the parts read back into the map that one string of it reads back into.
+    """
+    members: list[str] = []
+    size = 0
+    for custom_id, entry in context_map.items():
+        member = deep_json.dumps({custom_id: entry}, ensure_ascii=False)[1:-1]
+        members.append(member)
+        size += len(member)
+        if size >= _PART_CHARS:
+            yield "{" + ", ".join(members) + "}"
+            members = []
+            size = 0
+    if members:
+        yield "{" + ", ".join(members) + "}"
+
+
+# Neither "#" nor ":" can appear in a stored file's name, so no file's key is one of these.
+def _parts_key(key: str) -> str:
+    return f"{key}#parts"
+
+
+def _part_key(key: str, generation: str, index: int) -> str:
+    return f"{key}#{generation}:{index:06d}"
+
+
+def _part_keys(backend: "StorageBackend", key: str) -> list[str] | None:
+    """The keys of the parts the map is stored in; None for a map saved whole, or none saved."""
+    raw = backend.load_metadata(_parts_key(key))
+    if raw is None:
+        return None
+    header = json.loads(raw)
+    if not (
+        isinstance(header, dict)
+        and isinstance(header.get("generation"), str)
+        and isinstance(header.get("parts"), int)
+    ):
+        raise ProcessingError(
+            f"Unreadable context map parts key {_parts_key(key)}: {raw[:200]}",
+            context={"key": key},
+        )
+    return [_part_key(key, header["generation"], index) for index in range(header["parts"])]
+
+
+def _joined_parts(backend: "StorageBackend", part_keys: list[str]) -> dict[str, Any]:
+    context_map: dict[str, Any] = {}
+    for part_key in part_keys:
+        part = backend.load_metadata(part_key)
+        if part is None:
+            raise ProcessingError(
+                f"Context map part {part_key} is missing", context={"part": part_key}
+            )
+        context_map.update(deep_json.loads(part))
+    return context_map
