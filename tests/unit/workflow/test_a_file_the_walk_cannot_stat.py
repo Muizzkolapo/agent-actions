@@ -75,10 +75,9 @@ def _no_ambient_limit(monkeypatch):
 
     The tests exposed to `AGAC_FILE_LIMIT` are the ones passing no `file_limit` at all:
     `_resolve` returns the config value whenever it is set and not greater than the
-    override, so a test asking for 1 was already immune. `AGAC_MAX_RECORDS` is the
-    retired name, cleared so a stale export cannot trip the retirement path.
+    override, so a test asking for 1 was already immune.
     """
-    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT"):
         monkeypatch.delenv(name, raising=False)
 
 

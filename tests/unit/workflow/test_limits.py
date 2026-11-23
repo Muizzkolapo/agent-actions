@@ -33,7 +33,7 @@ from agent_actions.workflow.runner_file_processing import (
 @pytest.fixture(autouse=True)
 def _no_ambient_limits(monkeypatch):
     """A developer shell exporting either variable must not decide these tests."""
-    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT"):
         monkeypatch.delenv(name, raising=False)
 
 

@@ -74,7 +74,6 @@ def _records(count: int) -> list[dict[str, str]]:
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-    monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
 
 
 def _params(tmp_path, upstream_dirs=None):
