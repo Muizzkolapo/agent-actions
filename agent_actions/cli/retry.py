@@ -22,6 +22,7 @@ from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -40,6 +41,7 @@ from agent_actions.cli.run import (
     write_declared_outputs,
 )
 from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.errors import ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
@@ -255,7 +257,7 @@ class RetryCommand:
         )
         backend.initialize()
 
-        store_dir = paths.io_dir / "store" / self.agent_name
+        store_dir = sandbox.store_file(paths.io_dir, self.agent_name).with_suffix("")
         manifest_file = _manifest_path(store_dir)
         prior_manifest = _read_manifest(manifest_file)
 
@@ -1434,6 +1436,10 @@ def _open_pairs(failures: dict[str, list[dict]]) -> frozenset[tuple[str, str]]:
 
 @click.command()
 @workflow_option()
+@sandbox_option(
+    help="Retry the records of sandbox runs (agac run --sandbox), with the offline mock",
+    note="the offline mock answers every LLM action; only sandbox output is read and written",
+)
 @click.option(
     "--from",
     "from_action",

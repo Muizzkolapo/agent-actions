@@ -16,6 +16,7 @@ from agent_actions.cli.args import DEFAULT_POLL_SECONDS, RunCommandArgs
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -28,6 +29,7 @@ from agent_actions.cli.exit_codes import (
     report_quota_stop,
 )
 from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.errors import AgentActionsError, ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
@@ -46,7 +48,7 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
     """The actions with a batch not yet collected, read from the store before any load."""
     import json
 
-    status_file = io_dir / ".agent_status.json"
+    status_file = sandbox.status_file(io_dir)
     try:
         statuses = json.loads(status_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -59,7 +61,7 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
         for action, details in statuses.items()
         if isinstance(details, dict) and details.get("status") in waiting
     }
-    store = io_dir / "store" / f"{workflow_name}.db"
+    store = sandbox.store_file(io_dir, workflow_name)
     if store.exists():
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
         from agent_actions.storage import get_storage_backend
@@ -79,7 +81,7 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
 def check_declared_outputs(workflow: AgentWorkflow, project_root: Path | None) -> None:
     """Refuse the workflow's declared outputs before any action runs, if they cannot be written."""
     declared = (workflow.config.manager.user_config or {}).get("outputs")
-    if not declared:
+    if not declared or sandbox.is_active():
         return
     from agent_actions.connections.export import check_outputs
     from agent_actions.utils.project_root import find_project_root
@@ -92,6 +94,9 @@ def write_declared_outputs(workflow: AgentWorkflow, project_root: Path | None, a
     """Write the workflow's declared outputs once every action has finished."""
     declared = (workflow.config.manager.user_config or {}).get("outputs")
     if not declared:
+        return
+    if sandbox.is_active():
+        click.echo("SANDBOX: the outputs the workflow declares are not written.")
         return
     from agent_actions.connections.export import write_outputs
     from agent_actions.utils.project_root import find_project_root
@@ -116,7 +121,11 @@ def start_tracked_run(
     workflow: AgentWorkflow, agent_name: str, project_root: Path | None
 ) -> tuple[RunTracker, str]:
     """Start a run in the run history, hand its id to the workflow, and open its log files."""
-    tracker = RunTracker(project_root=project_root)
+    run_dir = sandbox.run_dir(
+        Path(workflow.services.core.action_runner.get_action_folder(agent_name))
+    )
+    artefact_dir = run_dir / "artefact" if sandbox.is_active() else None
+    tracker = RunTracker(artefact_dir=artefact_dir, project_root=project_root)
     run_id = tracker.start_workflow_run(
         workflow_id=agent_name,
         workflow_name=agent_name,
@@ -133,9 +142,8 @@ def start_tracked_run(
         name=agent_name, run_id=run_id
     )
 
-    agent_folder = workflow.services.core.action_runner.get_action_folder(agent_name)
     LoggerFactory.initialize(
-        output_dir=agent_folder,
+        output_dir=run_dir,
         workflow_name=agent_name,
         invocation_id=run_id,
         force=True,
@@ -278,6 +286,11 @@ class RunCommand:
             outcome = classify_outcome(state_mgr, workflow.execution_order)
             self._open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
             self._report(outcome, workflow)
+            if sandbox.is_active():
+                click.echo(
+                    "SANDBOX run: no model was called. Read its results with --sandbox, "
+                    f"such as agac records -w {self.args.agent} --sandbox"
+                )
             if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
                 self._write_outputs(workflow, project_root)
 
@@ -377,6 +390,16 @@ class RunCommand:
 
 @click.command()
 @workflow_option()
+@sandbox_option(
+    help=(
+        "Answer every LLM action with the offline mock, agac-provider, and keep the "
+        "output apart from real runs. No API key is needed and no model is called"
+    ),
+    note=(
+        "the offline mock answers every LLM action. The output goes to agent_io/sandbox/ "
+        "and agent_io/store/<workflow>.sandbox.db"
+    ),
+)
 @click.option(
     "-u",
     "--user-code",
@@ -513,6 +536,7 @@ def run(
         agac run -a my_agent --rerun classify --rerun summarize
         agac run -a my_agent --record-limit 2 --file-limit 1
         agac run -a my_agent --wait --poll 60 --wait-timeout 86400
+        agac run -a my_agent --sandbox
     """
     if not wait:
         for given, flag in ((poll, "--poll"), (wait_timeout, "--wait-timeout")):

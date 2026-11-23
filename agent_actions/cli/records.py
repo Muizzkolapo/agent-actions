@@ -10,8 +10,10 @@ import click
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
@@ -72,6 +74,7 @@ def _snapshots(backend: SQLiteBackend, actions: list[str]) -> list[dict[str, Any
 
 @click.command()
 @workflow_option("workflow", help="Workflow name")
+@sandbox_option()
 @click.option(
     "-A", "--action", default=None, help="Only this action's records (every action if omitted)"
 )
@@ -108,7 +111,7 @@ def records(
     paths = ProjectPathsFactory.create_project_paths(
         workflow_name, workflow, auto_create=False, project_root=project_root
     )
-    db_path = paths.io_dir / "store" / f"{workflow_name}.db"
+    db_path = sandbox.store_file(paths.io_dir, workflow_name)
     if not db_path.exists():
         raise click.ClickException(f"No store for workflow '{workflow_name}' at {db_path}")
 

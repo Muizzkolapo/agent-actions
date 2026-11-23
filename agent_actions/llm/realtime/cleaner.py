@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 
+from agent_actions.config.sandbox import SANDBOX_DIR, sandbox_mode, store_file
 from agent_actions.errors import (
     AgentNotFoundError,
     RunInProgressError,
@@ -63,16 +64,20 @@ class Cleaner:
         discard_partial_batch_records()
         released = True
         try:
-            backend = get_storage_backend(
-                workflow_path=str(io_dir.parent), workflow_name=self.agent
-            )
-            try:
-                backend.initialize()
-                for action_name in BatchRegistryManager.list_action_names(backend):
-                    for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
-                        released = release_local_batch_record(batch_id) and released
-            finally:
-                backend.close()
+            for in_sandbox in (False, True):
+                with sandbox_mode(in_sandbox):
+                    if in_sandbox and not store_file(io_dir, self.agent).exists():
+                        continue
+                    backend = get_storage_backend(
+                        workflow_path=str(io_dir.parent), workflow_name=self.agent
+                    )
+                try:
+                    backend.initialize()
+                    for action_name in BatchRegistryManager.list_action_names(backend):
+                        for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
+                            released = release_local_batch_record(batch_id) and released
+                finally:
+                    backend.close()
         except StoreFormatError as e:
             # This version cannot read the store, so nothing can name its batches.
             logger.debug("Removing a store of another storage format: %s", e)
@@ -108,9 +113,9 @@ class Cleaner:
         if (self.remove_target or self.remove_all) and target_path.exists():
             directories.append(target_path)
         if self.remove_all:
-            staging_path = io_dir / "staging"
-            if staging_path.exists():
-                directories.append(staging_path)
+            for path in (io_dir / "staging", io_dir / SANDBOX_DIR):
+                if path.exists():
+                    directories.append(path)
             from agent_actions.storage import BACKENDS
 
             seen = set(directories)

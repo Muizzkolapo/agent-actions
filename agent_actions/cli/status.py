@@ -12,9 +12,11 @@ from agent_actions.cli.args import StatusCommandArgs
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import run_status as status_of_the_run
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.workflow.managers.state import (
     COMPLETED_STATUSES,
@@ -51,7 +53,7 @@ def status_report(agent: str, project_root: Path | None = None) -> dict[str, Any
     paths = ProjectPathsFactory.create_project_paths(
         workflow, agent, auto_create=False, project_root=project_root
     )
-    status_file = paths.io_dir / ".agent_status.json"
+    status_file = sandbox.status_file(paths.io_dir)
     try:
         with open(status_file, encoding="utf-8") as f:
             status_data = json.load(f)
@@ -143,6 +145,7 @@ def _first_line(error: str | None) -> str:
 
 @click.command()
 @workflow_option()
+@sandbox_option()
 @click.option(
     "--json", "as_json", is_flag=True, help="Print each action's status and the run's as JSON"
 )

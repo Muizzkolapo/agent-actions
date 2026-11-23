@@ -13,8 +13,9 @@ from agent_actions.llm.realtime.cleaner import Cleaner
 _NO_SCOPE = (
     "Give --target or --all to say what to clean:\n"
     "  --target     Remove agent_io/target/, the generated output.\n"
-    "  --all        Remove all agent_io directories, the store included,\n"
-    "               and reclaim the local records of the workflow's batches.\n"
+    "  --all        Remove all agent_io directories, the store and the\n"
+    "               sandbox output included, and reclaim the local records\n"
+    "               of the workflow's batches.\n"
     "  -f, --force  Do not ask for confirmation."
 )
 
@@ -23,8 +24,8 @@ _NO_SCOPE = (
     name="clean",
     help=(
         "Remove a workflow's working directories. --target removes the generated "
-        "output under agent_io/target/; --all removes everything including staging "
-        "and the durable store, and reclaims what a provider recorded locally about "
+        "output under agent_io/target/; --all removes everything including staging, "
+        "the durable store and the sandbox output, and reclaims what a provider recorded locally about "
         "this workflow's batches. With neither, nothing is removed."
     ),
 )
@@ -49,8 +50,8 @@ _NO_SCOPE = (
     is_flag=True,
     default=False,
     help=(
-        "Remove all agent_io directories including target, staging and any "
-        "backend-owned store contents, and reclaim what a provider recorded "
+        "Remove all agent_io directories including target, staging, the sandbox "
+        "output and any backend-owned store contents, and reclaim what a provider recorded "
         "locally about this workflow's batches — unrecoverable. Confirms "
         "unless --force."
     ),
