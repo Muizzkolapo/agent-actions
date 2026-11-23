@@ -439,9 +439,6 @@ class TestBackwardCompatibility:
 
     def test_legacy_records_returned_as_is(self, backend):
         """Records without _delta_mode are returned without reconstruction."""
-        import sqlite3
-
-        # Insert a legacy full record directly (no _delta_mode)
         legacy_data = [
             {
                 "_state": "active",
@@ -452,14 +449,7 @@ class TestBackwardCompatibility:
                 },
             }
         ]
-        conn = sqlite3.connect(str(backend.db_path))
-        conn.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, ?)",
-            ("action_1", "file.json", json.dumps(legacy_data), 1),
-        )
-        conn.commit()
-        conn.close()
+        backend._write_target_raw("action_1", "file.json", legacy_data)
 
         result = backend.read_target("action_1", "file.json")
         assert result[0]["content"]["source"]["title"] == "SQL"

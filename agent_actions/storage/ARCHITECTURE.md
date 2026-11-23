@@ -209,10 +209,9 @@ Dictionary rows are insert-only and `AUTOINCREMENT` never reuses a committed id,
 the dictionary a row names cannot change under it. A rolled-back write does free its
 id, so the write path reads the dictionary from the store each time and only readers
 cache it. `clear_prompt_traces` deletes an
-action's dictionaries with its traces; retention pruning keeps them. A TEXT value is a
-row written before compression and reads back as it is, so older stores need no
-migration. Every backend reader decompresses (`decompress_trace_text`); a value that
-will not decompress raises `ValueError` rather than returning bytes. Outside the
+action's dictionaries with its traces; retention pruning keeps them. Every backend
+reader decompresses (`decompress_trace_text`); a value that will not decompress, a
+plain TEXT value included, raises `ValueError` rather than returning it. Outside the
 backend, read the text with `agac traces` — `sqlite3` shows these columns as blobs.
 
 **Payload compression.** `target_data.data`, `source_data.data`,
@@ -227,12 +226,11 @@ transaction, so a rolled-back write leaves no dictionary a reader could load.
 `clear_disposition` called for a whole action drop the dictionary with the last row
 it served; `clear_prompt_traces` drops only trace dictionaries (`prompt_trace.*`, and
 the bare column names a store written before the keys were qualified holds). The DDL column
-type stays `TEXT`: SQLite stores the blob as given, and a row written as text before
-compression still reads back. Unlike a trace, these columns are read on the resume
+type stays `TEXT`: SQLite stores the blob as given. Unlike a trace, these columns are read on the resume
 and retry paths, where empty data would pass for an answer, so every reader goes
 through `decode_payload`, which raises `SerializationError` naming the table, action
-and row for a value it cannot read — a corrupt stream, or a dictionary id the store
-does not hold. The two places that count a stored file the walk could not read as a
+and row for a value it cannot read — a plain TEXT value, a corrupt stream, or a
+dictionary id the store does not hold. The two places that count a stored file the walk could not read as a
 lost file (`runner_file_processing.py`, `managers/output.py`) catch that error where
 they caught `json.JSONDecodeError`: the row is recorded and the action left incomplete,
 not read as empty. `get_disposition(snapshots=False)` leaves `input_snapshot` out and
@@ -242,9 +240,7 @@ columns is gone or guarded:
 `has_target_rows` and `preview_target` fall back to `json_array_length(data)` only
 for a text row and measure a compressed row that lacks its count in Python (the
 writer always stores one; only a store edited from outside holds such a row),
-`records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes in Python only a compressed row whose column is NULL, and
-`checkpointed_without_row_count` names only text rows, since every compressed row
-holds a list. Outside the backend, `agac records` prints stored records and failed
+`records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes in Python only a compressed row whose column is NULL. Outside the backend, `agac records` prints stored records and failed
 records' inputs; `sqlite3` shows these columns as blobs.
 
 **Identity contract.** The table is a bounded historical log; `target_data`
@@ -389,7 +385,7 @@ On resume:
 The flow:
 
 1. **During processing**: `save_checkpoint_records()` upserts each processed record using `INSERT OR REPLACE` keyed on `(action_name, relative_path, source_guid)`, storing every row the record was answered with as one list. The rows of an expansion share their input's `source_guid` until enrichment mints one for each, so they are kept together under it: stored a row apiece, each would replace the one before.
-2. **On resume**: `read_checkpoint_records()` retrieves every checkpointed row for the action/path, its records ordered by insertion ID. A row an earlier version stored holds one record rather than a list, and is read as that record, but it may be only the last row of an expansion: that version kept one row per `source_guid`. `checkpointed_without_row_count()` names those records. The carry answers a record checkpointed with several rows again rather than carry them under the identity they share, and one an earlier version checkpointed rather than carry what may be one row of several (see `processing/ARCHITECTURE.md`).
+2. **On resume**: `read_checkpoint_records()` retrieves every checkpointed row for the action/path, its records ordered by insertion ID. Every row holds a list. The carry answers a record checkpointed with several rows again rather than carry them under the identity they share (see `processing/ARCHITECTURE.md`).
 3. **When a file is written**: `_write_target_raw` deletes that file's checkpoint rows in the transaction that stores it, whoever writes it (the online pipelines, or batch, which never reads them), and a write that fails keeps them. Checkpoint data is transient — it exists only between a record's answer and its file's write. A row left beside a stored file is therefore newer than the stored one: the online path carries it, enriched and collected with the run's own, in place of the stored row (`answered_since_stored`, `checkpointed_answers`), and batch submission sends that record again.
 
 Unlike target_data (which stores all records as one JSON blob), checkpoint_output stores **one row per record** with `source_guid` as the dedup key, holding what that record was answered with. This allows incremental appending without rewriting the entire blob on each checkpoint.

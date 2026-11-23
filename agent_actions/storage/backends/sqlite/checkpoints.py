@@ -114,27 +114,8 @@ class SQLiteCheckpointMixin(SQLitePayloadCodecMixin):
                     where=f"action '{action_name}' file '{relative_path}'"
                     f" record '{stored['source_guid']}'",
                 )
-                # An earlier version stored one row, not a list, per record.
-                rows.extend(answer if isinstance(answer, list) else [answer])
+                rows.extend(answer)
             return rows
-
-    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
-        """Records of an action/path an earlier version checkpointed: one row, not a list.
-
-        Only a row stored as text can be one: every row stored compressed holds a list.
-        """
-        action_name = self._validate_identifier(action_name, "action_name")
-        relative_path = self._validate_identifier(relative_path, "relative_path")
-
-        with self._lock:
-            cursor = self.connection.cursor()
-            cursor.execute(
-                "SELECT source_guid FROM checkpoint_output "
-                "WHERE action_name = ? AND relative_path = ?"
-                " AND typeof(record_data) = 'text' AND substr(record_data, 1, 1) <> '['",
-                (action_name, relative_path),
-            )
-            return {row["source_guid"] for row in cursor.fetchall()}
 
     def clear_checkpoint_records(
         self,

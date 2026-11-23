@@ -17,7 +17,12 @@ def stored_rows(db: Path, sql: str, *params: Any) -> list[tuple[Any, ...]]:
     try:
         rows = backend.connection.execute(sql, params).fetchall()
         return [
-            tuple(backend.payload_text(value, table="store", where=sql) for value in row)
+            tuple(
+                backend.payload_text(value, table="store", where=sql)
+                if isinstance(value, bytes)
+                else value
+                for value in row
+            )
             for row in rows
         ]
     finally:

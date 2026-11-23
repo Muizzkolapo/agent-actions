@@ -556,32 +556,6 @@ class TestCheckpointKeepsEveryRowOfARecord:
 
         assert backend.read_checkpoint_records("action_a", "output.json") == again
 
-    def test_a_row_stored_as_one_record_is_read_as_that_record(self, backend):
-        """A run checkpointed before rows were kept as a list leaves a record, not a list."""
-        row = {"source_guid": "g1", "content": "older"}
-        backend.connection.execute(
-            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
-            "VALUES (?, ?, ?, ?)",
-            ("action_a", "output.json", "g1", json.dumps(row)),
-        )
-        backend.connection.commit()
-
-        assert backend.read_checkpoint_records("action_a", "output.json") == [row]
-
-    def test_a_row_stored_as_one_record_is_named_as_holding_an_unknown_number(self, backend):
-        """That version kept the last row of each record it saved, so its row cannot say
-        whether the record was answered with others."""
-        backend.connection.execute(
-            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
-            "VALUES (?, ?, ?, ?)",
-            ("action_a", "output.json", "g1", json.dumps({"source_guid": "g1"})),
-        )
-        backend.connection.commit()
-        backend.save_checkpoint_records("action_a", "output.json", [{"source_guid": "g2"}])
-        backend.save_checkpoint_records("action_a", "other.json", [{"source_guid": "g3"}])
-
-        assert backend.checkpointed_without_row_count("action_a", "output.json") == {"g1"}
-
 
 class TestWritingAFileClearsItsCheckpointRows:
     """A checkpoint row left beside a file is read as an answer given after the file was
@@ -618,35 +592,6 @@ class TestWritingAFileClearsItsCheckpointRows:
         assert backend.read_checkpoint_records("action_a", "output.json") == [{"source_guid": "g1"}]
 
 
-class TestPreviewTargetNullRecordCount:
-    """Tests for preview_target fallback when record_count IS NULL."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        db_path = tmp_path / "agent_io" / "test.db"
-        backend = SQLiteBackend(str(db_path), "test_workflow")
-        backend.initialize()
-        yield backend
-        backend.close()
-
-    def test_null_record_count_uses_json_length(self, backend):
-        """preview_target computes correct count from JSON when record_count IS NULL."""
-        import json
-
-        records = [{"id": 1}, {"id": 2}, {"id": 3}]
-        # Insert directly with NULL record_count to simulate legacy data
-        backend.connection.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, NULL)",
-            ("node_1", "legacy.json", json.dumps(records)),
-        )
-        backend.connection.commit()
-
-        result = backend.preview_target("node_1")
-        assert result["total_count"] == 3
-        assert len(result["records"]) == 3
-
-
 class TestGetStorageStatsNullRecordCount:
     """Tests for get_storage_stats with NULL record_count values."""
 
@@ -660,7 +605,6 @@ class TestGetStorageStatsNullRecordCount:
 
     def test_null_record_count_returns_zero_not_none(self, backend):
         """Per-node stats return 0 (not None) when all record_count values are NULL."""
-        import json
 
         backend.connection.execute(
             "INSERT INTO target_data (action_name, relative_path, data, record_count) "
@@ -675,7 +619,6 @@ class TestGetStorageStatsNullRecordCount:
 
     def test_mixed_null_and_populated_record_count(self, backend):
         """Per-node stats sum correctly when mixing NULL and populated record_count."""
-        import json
 
         backend.connection.execute(
             "INSERT INTO target_data (action_name, relative_path, data, record_count) "

@@ -18,7 +18,7 @@ Plain mixin classes, one per concern, that `SQLiteBackend` (in `../sqlite_backen
 | `SQLiteTargetDataMixin` | Class | `target_data` access. | — |
 | `dispositions.py` | Module | `SQLiteDispositionMixin`: `set_disposition(s_batch)`, `get_disposition`, `actions_with_dispositions`, `has_disposition`, `get_terminal_record_ids`, `clear_dispositions_batch`, `clear_disposition`. | `storage.backend`, `record` |
 | `SQLiteDispositionMixin` | Class | `record_disposition` access. | — |
-| `checkpoints.py` | Module | `SQLiteCheckpointMixin`: `save_checkpoint_records`, `read_checkpoint_records`, `checkpointed_without_row_count`, `clear_checkpoint_records`. | `errors.validation`, `utils.deep_json` |
+| `checkpoints.py` | Module | `SQLiteCheckpointMixin`: `save_checkpoint_records`, `read_checkpoint_records`, `clear_checkpoint_records`. | `errors.validation`, `utils.deep_json` |
 | `SQLiteCheckpointMixin` | Class | `checkpoint_output` access. | — |
 | `prompt_traces.py` | Module | `SQLitePromptTraceMixin`: `write_prompt_trace`, `update_prompt_trace_response`, `get_prompt_traces`, `get_prompt_trace_summary`, `preview_prompt_traces`, `clear_prompt_traces`; trace fields over `_MAX_TRACE_FIELD_SIZE` are replaced by a marker. | `logging` |
 | `SQLitePromptTraceMixin` | Class | `prompt_trace` access. | — |

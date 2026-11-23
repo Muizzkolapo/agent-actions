@@ -118,19 +118,16 @@ class TestTargetData:
         ]
         assert len(backend.read_target(ACTION, "b.json")) == 3
 
-    def test_a_row_stored_as_text_still_reads_back(self, backend):
-        legacy = _records(2)
+    def test_a_row_stored_as_text_is_an_error_naming_the_file(self, backend):
         backend.connection.execute(
             "INSERT INTO target_data (action_name, relative_path, data, record_count)"
-            " VALUES ('legacy', ?, ?, NULL)",
-            (FILE, json.dumps(legacy)),
+            " VALUES ('plain', ?, ?, 2)",
+            (FILE, json.dumps(_records(2))),
         )
         backend.connection.commit()
-        backend.write_target(ACTION, FILE, _records(1), force_full=True)
 
-        assert _summaries(backend.read_target("legacy", FILE)) == _summaries(legacy)
-        assert backend.has_target_rows("legacy") is True
-        assert backend.preview_target("legacy")["total_count"] == 2
+        with pytest.raises(SerializationError, match=f"action 'plain' file '{FILE}'"):
+            backend.read_target("plain", FILE)
 
     def test_deleting_an_action_and_writing_again_reads_back_elsewhere(self, backend, db):
         backend.write_target(ACTION, FILE, _records(3), force_full=True)
@@ -254,27 +251,12 @@ class TestCheckpoints:
         assert {kind for kind, _ in stored} == {"blob"}
         assert sum(size for _, size in stored) * 3 < len(json.dumps(rows).encode())
         assert backend.read_checkpoint_records(ACTION, FILE) == rows
-        assert backend.checkpointed_without_row_count(ACTION, FILE) == set()
 
         reader = _fresh_reader(db)
         try:
             assert reader.read_checkpoint_records(ACTION, FILE) == rows
         finally:
             reader.close()
-
-    def test_a_row_an_earlier_version_stored_as_one_record_is_still_named(self, backend):
-        backend.save_checkpoint_records(ACTION, FILE, _records(1))
-        backend.connection.execute(
-            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data)"
-            " VALUES (?, ?, 'guid-5', ?)",
-            (ACTION, FILE, json.dumps(_record(5))),
-        )
-        backend.connection.commit()
-
-        assert backend.checkpointed_without_row_count(ACTION, FILE) == {"guid-5"}
-        assert _summaries(backend.read_checkpoint_records(ACTION, FILE)) == _summaries(
-            [_record(0), _record(5)]
-        )
 
     def test_clearing_an_action_and_checkpointing_again_reads_back_elsewhere(self, backend, db):
         backend.save_checkpoint_records(ACTION, FILE, _records(2))
@@ -330,18 +312,16 @@ class TestDispositionSnapshots:
         assert marker["__truncated__"] is True
         assert marker["partial"] == huge[:8192]
 
-    def test_a_snapshot_stored_as_text_still_reads_back(self, backend):
+    def test_a_snapshot_stored_as_text_is_an_error_naming_the_record(self, backend):
         backend.connection.execute(
             "INSERT INTO record_disposition (action_name, record_id, disposition, input_snapshot)"
-            " VALUES (?, 'guid-old', 'failed', ?)",
+            " VALUES (?, 'guid-plain', 'failed', ?)",
             (ACTION, self.SNAPSHOT),
         )
         backend.connection.commit()
-        backend.set_disposition(ACTION, "guid-new", "failed", input_snapshot=self.SNAPSHOT)
 
-        rows = {r["record_id"]: r for r in backend.get_disposition(ACTION)}
-        assert rows["guid-old"]["input_snapshot"] == self.SNAPSHOT
-        assert rows["guid-new"]["input_snapshot"] == self.SNAPSHOT
+        with pytest.raises(SerializationError, match="record 'guid-plain'"):
+            backend.get_disposition(ACTION)
 
     def test_clearing_an_action_and_writing_again_reads_back_elsewhere(self, backend, db):
         backend.set_disposition(ACTION, "guid-1", "failed", input_snapshot=self.SNAPSHOT)
