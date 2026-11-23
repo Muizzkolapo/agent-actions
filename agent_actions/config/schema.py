@@ -894,16 +894,33 @@ class StorageConfig(BaseModel):
 BatchPreparationConcurrency = Annotated[int, Field(ge=1, le=50, strict=True)]
 
 
-class OlderFormatWorkflowKeys(BaseModel):
-    """The top-level keys the run reads as written, in a workflow file of the older format.
+def _agents_format_key(data: Any) -> str | None:
+    """The top-level key that holds agent entries, when *data* is in the `agents:` format."""
+    if not isinstance(data, dict) or "actions" in data:
+        return None
+    for key, value in data.items():
+        if key == "agents":
+            return str(key)
+        if isinstance(value, dict) and "agents" in value:
+            return str(key)
+        if isinstance(value, list) and any(
+            isinstance(entry, dict) and "agent_type" in entry for entry in value
+        ):
+            return str(key)
+    return None
 
-    That format skips :class:`WorkflowConfig`, so these keys are checked here by the
-    same rules.
-    """
 
-    model_config = ConfigDict(extra="ignore")
-
-    batch_preparation_concurrency: BatchPreparationConcurrency | None = None
+def refuse_agents_format(data: Any, workflow_file: str) -> None:
+    """Refuse a workflow file in the `agents:` format: agac reads only the actions format."""
+    key = _agents_format_key(data)
+    if key is None:
+        return
+    raise ConfigurationError(
+        f"Workflow file '{workflow_file}' uses the 'agents:' format (key '{key}'). "
+        "agac reads only the actions format. Write the workflow as a 'name:' "
+        "and an 'actions:' list.",
+        context={"file_path": workflow_file, "key": key, "operation": "parse_workflow"},
+    )
 
 
 class WorkflowConfig(BaseModel):
@@ -1058,5 +1075,6 @@ __all__ = [
     "DefaultsConfig",
     "WorkflowConfig",
     "branch_origins",
+    "refuse_agents_format",
     "dump_defaults",
 ]

@@ -18,7 +18,6 @@ from agent_actions.config.path_config import (
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import (
     ChunkConfig,
-    OlderFormatWorkflowKeys,
     WorkflowConfig,
     dump_defaults,
     refuse_blank_output_field,
@@ -302,9 +301,12 @@ class ConfigManager:
                 "Cannot find agent name: configuration is empty or not a mapping",
                 context={"config_type": type(config).__name__},
             )
-        if "name" in config and "actions" in config:
-            return str(config["name"])
-        return str(next(iter(config)))
+        if "name" not in config:
+            raise ConfigurationError(
+                "Workflow configuration has no 'name' key",
+                context={"config_path": str(self.constructor_path)},
+            )
+        return str(config["name"])
 
     def validate_agent_name(self) -> None:
         if self.user_config is None:
@@ -315,7 +317,7 @@ class ConfigManager:
         config_filename = Path(self.constructor_path).stem
         if self.agent_name != config_filename:
             raise ConfigurationError(
-                "Top-level key does not match the filename",
+                "Workflow 'name' does not match the filename",
                 context={
                     "agent_name": self.agent_name,
                     "config_filename": config_filename,
@@ -333,96 +335,53 @@ class ConfigManager:
             )
         # A raise below must not leave the endpoints of a project loaded earlier.
         clear_project_endpoints()
-        if "name" in self.user_config and "actions" in self.user_config:
-            project_root: Path | None = None
-            try:
-                path_manager = PathManager(project_root=self.project_root)
-                project_root = path_manager.get_project_root()
-                project_config = load_project_config(project_root)
-                project_defaults = project_action_defaults(project_config)
-            except (FileNotFoundError, ProjectRootNotFoundError):
-                project_config = {}
-                project_defaults = {}
-            except (yaml.YAMLError, OSError, ConfigValidationError) as e:
-                raise ConfigurationError(
-                    "Failed to load project defaults",
-                    context={
-                        "config_path": str(self.constructor_path),
-                        "operation": "load_project_defaults",
-                    },
-                    cause=e,
-                ) from e
-            # Beside its reader, like default_agent_config above: the plain loader
-            # stays a dict read, and a refusal names the endpoint and the key itself.
-            load_project_endpoints(project_config)
-            # Validate entire workflow config (actions, defaults, duplicates,
-            # dangling deps, circular deps) in one pass via Pydantic.
-            try:
-                workflow = WorkflowConfig.model_validate(self.user_config)
-            except ValidationError as e:
-                raise self._invalid_workflow(e, self.user_config.get("name", "unknown")) from e
-
-            validated_actions = [
-                action.model_dump(mode="python", exclude_unset=True, by_alias=True)
-                for action in workflow.actions
-            ]
-            merged_defaults = merge_workflow_defaults(
-                project_defaults, dump_defaults(workflow.defaults)
-            )
-            workflow_name = workflow.name
-            config_for_expander = {
-                "name": workflow_name,
-                "actions": validated_actions,
-                "defaults": merged_defaults,
-            }
-
-            agent_config_map = ActionExpander.expand_actions_to_agents(config_for_expander)
-            expanded = agent_config_map.get(workflow_name, [])
-            # Here, not at the _project_root stamp: dependency inference runs before it.
-            observe_suite_judge_context_refs(expanded, project_root)
-            return expanded
-        if self.agent_name is None:
-            raise RuntimeError(
-                "agent_name is None: validate_agent_name() must be called before get_user_agents()"
-            )
-        from agent_actions.output.response.expander_validation import (
-            routing_kind,
-            validate_granularity_for_kind,
-        )
-
+        project_root: Path | None = None
         try:
-            OlderFormatWorkflowKeys.model_validate(self.user_config)
+            path_manager = PathManager(project_root=self.project_root)
+            project_root = path_manager.get_project_root()
+            project_config = load_project_config(project_root)
+            project_defaults = project_action_defaults(project_config)
+        except (FileNotFoundError, ProjectRootNotFoundError):
+            project_config = {}
+            project_defaults = {}
+        except (yaml.YAMLError, OSError, ConfigValidationError) as e:
+            raise ConfigurationError(
+                "Failed to load project defaults",
+                context={
+                    "config_path": str(self.constructor_path),
+                    "operation": "load_project_defaults",
+                },
+                cause=e,
+            ) from e
+        # Beside its reader, like default_agent_config above: the plain loader
+        # stays a dict read, and a refusal names the endpoint and the key itself.
+        load_project_endpoints(project_config)
+        # Validate entire workflow config (actions, defaults, duplicates,
+        # dangling deps, circular deps) in one pass via Pydantic.
+        try:
+            workflow = WorkflowConfig.model_validate(self.user_config)
         except ValidationError as e:
-            raise self._invalid_workflow(e, self.agent_name) from e
-        agents_section = self.user_config[self.agent_name]
-        self._load_project_endpoints()
-        if "agents" in agents_section:
-            listed = agents_section["agents"]
-            if not isinstance(listed, list) or not all(isinstance(a, dict) for a in listed):
-                raise ConfigurationError(
-                    f"Workflow '{self.agent_name}': 'agents' must be a list of agent "
-                    "entries, each a mapping",
-                    context={"agent_name": self.agent_name},
-                )
-        else:
-            listed = [
-                agent
-                for agent in agents_section
-                if isinstance(agent, dict) and "agent_type" in agent
-            ]
-        agents: list[dict[str, Any]] = []
-        for agent in listed:
-            kind = routing_kind(agent)
-            name = agent.get("name") or agent.get("agent_type", "?")
-            validate_granularity_for_kind(kind, agent.get("granularity"), name)
-            agent = {**agent, "kind": kind}
-            if kind in {"tool", "hitl"}:
-                agent["model_vendor"] = kind
-            # A HITL review sees the whole dataset in one step, as in the actions format.
-            if kind == "hitl" and agent.get("granularity") is None:
-                agent["granularity"] = "file"
-            agents.append(agent)
-        return agents
+            raise self._invalid_workflow(e, self.user_config.get("name", "unknown")) from e
+
+        validated_actions = [
+            action.model_dump(mode="python", exclude_unset=True, by_alias=True)
+            for action in workflow.actions
+        ]
+        merged_defaults = merge_workflow_defaults(
+            project_defaults, dump_defaults(workflow.defaults)
+        )
+        workflow_name = workflow.name
+        config_for_expander = {
+            "name": workflow_name,
+            "actions": validated_actions,
+            "defaults": merged_defaults,
+        }
+
+        agent_config_map = ActionExpander.expand_actions_to_agents(config_for_expander)
+        expanded = agent_config_map.get(workflow_name, [])
+        # Here, not at the _project_root stamp: dependency inference runs before it.
+        observe_suite_judge_context_refs(expanded, project_root)
+        return expanded
 
     def _invalid_workflow(self, error: ValidationError, workflow_name: str) -> ConfigurationError:
         field_errors = [
@@ -443,21 +402,11 @@ class ConfigManager:
             cause=error,
         )
 
-    def _load_project_endpoints(self) -> None:
-        """Validate the project's endpoints for a workflow that reads no project defaults."""
-        try:
-            project_root = PathManager(project_root=self.project_root).get_project_root()
-            project_config = load_project_config(project_root)
-        except (FileNotFoundError, ProjectRootNotFoundError):
-            project_config = {}
-        load_project_endpoints(project_config)
-
     def merge_agent_configs(self, user_agents: list[dict[str, Any]]) -> None:
         from agent_actions.output.response.config_schema import AgentConfig
 
         default_agent_config = project_agent_config(self.default_config or {})
         for agent in user_agents:
-            _refuse_or_raise(agent, "agent", "merge_agent_configs")
             try:
                 agent_model = AgentConfig.model_validate(agent)
             except ValidationError as e:

@@ -302,61 +302,33 @@ class TestValidateEntryWithPydantic:
 
 
 class TestValidateAgentConfigBlock:
-    """Tests for format detection and validation dispatch."""
+    """Tests for the validation dispatch."""
 
     @patch.object(ConfigRenderingService, "_run_config_validator")
-    @patch.object(ConfigRenderingService, "_validate_new_format")
-    def test_new_format_detected(self, mock_new, mock_run):
-        """Config with both 'actions' and 'name' keys uses new format path."""
+    @patch.object(ConfigRenderingService, "_validate_actions")
+    def test_the_actions_are_validated(self, mock_validate, mock_run):
         svc = ConfigRenderingService()
         config = {"actions": [], "name": "my_pipeline"}
-        mock_new.return_value = []
+        mock_validate.return_value = []
 
         svc._validate_agent_config_block(config, "agent1", project_root=Path("/proj"))
 
-        mock_new.assert_called_once_with(config, "agent1")
+        mock_validate.assert_called_once_with(config, "agent1")
         mock_run.assert_called_once()
 
     @patch.object(ConfigRenderingService, "_run_config_validator")
-    @patch.object(ConfigRenderingService, "_validate_legacy_format")
-    def test_legacy_format_detected(self, mock_legacy, mock_run):
-        """Config without 'actions'+'name' pair uses legacy format path."""
-        svc = ConfigRenderingService()
-        config = {"agent1": [{"agent_type": "test"}]}
-        mock_legacy.return_value = []
-
-        svc._validate_agent_config_block(config, "agent1", project_root=Path("/proj"))
-
-        mock_legacy.assert_called_once_with(config, "agent1")
-
-    @patch.object(ConfigRenderingService, "_run_config_validator")
-    @patch.object(ConfigRenderingService, "_validate_legacy_format")
+    @patch.object(ConfigRenderingService, "_validate_actions")
     @patch("agent_actions.prompt.renderer.find_project_root", return_value=None)
-    def test_fallback_to_cwd_when_no_project_root(self, mock_fpr, mock_legacy, mock_run):
+    def test_fallback_to_cwd_when_no_project_root(self, mock_fpr, mock_validate, mock_run):
         """When project_root is None and find_project_root returns None, use cwd."""
         svc = ConfigRenderingService()
-        config = {"agent1": []}
-        mock_legacy.return_value = []
+        config = {"actions": [], "name": "my_pipeline"}
+        mock_validate.return_value = []
 
         svc._validate_agent_config_block(config, "agent1")
 
         # ConfigValidator is called with some Path -- we just verify no crash
         mock_run.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# ConfigRenderingService._validate_legacy_format
-# ---------------------------------------------------------------------------
-
-
-class TestValidateLegacyFormat:
-    """Tests for legacy format config validation."""
-
-    def test_missing_agent_key_raises(self):
-        svc = ConfigRenderingService()
-        config = {"other_key": "value"}
-        with pytest.raises(ConfigValidationError, match="No agent configuration found"):
-            svc._validate_legacy_format(config, "missing_agent")
 
 
 # ---------------------------------------------------------------------------
