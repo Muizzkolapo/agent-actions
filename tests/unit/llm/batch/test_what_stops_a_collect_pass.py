@@ -24,7 +24,7 @@ from agent_actions.expectations.service import (
 from agent_actions.llm.batch.core.batch_constants import (
     BatchStatus,
     FilterStatus,
-    RetiredRecoveryState,
+    UnknownRecoveryState,
 )
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
@@ -147,18 +147,18 @@ def _a_suite_that_cannot_be_loaded(tmp_path: Path):
     )
 
 
-def _a_recovery_state_of_a_retired_phase():
-    RecoveryState(phase="reprompt")
+def _a_recovery_state_of_an_unknown_phase():
+    RecoveryState(phase="made_up")
 
 
-def _a_registry_entry_of_a_retired_recovery_type():
+def _a_registry_entry_of_an_unknown_recovery_type():
     BatchJobEntry.from_dict(
         {
             "batch_id": "b",
             "status": "completed",
             "timestamp": "t",
             "provider": "mock",
-            "recovery_type": "reprompt",
+            "recovery_type": "made_up",
         }
     )
 
@@ -184,8 +184,8 @@ RAISE_SITES = pytest.mark.parametrize(
         pytest.param(_a_schema_whose_rules_have_the_wrong_shape, ExpectationConfigurationError),
         pytest.param(_a_suite_with_no_project_root, ExpectationConfigurationError),
         pytest.param(_a_suite_that_cannot_be_loaded, ExpectationConfigurationError),
-        pytest.param(_a_recovery_state_of_a_retired_phase, RetiredRecoveryState),
-        pytest.param(_a_registry_entry_of_a_retired_recovery_type, RetiredRecoveryState),
+        pytest.param(_a_recovery_state_of_an_unknown_phase, UnknownRecoveryState),
+        pytest.param(_a_registry_entry_of_an_unknown_recovery_type, UnknownRecoveryState),
         pytest.param(_a_registry_whose_cache_cannot_be_loaded, RuntimeError),
         pytest.param(_a_store_that_is_not_open, RuntimeError),
     ],
@@ -219,15 +219,15 @@ class TestAnErrorDeclaredFatalWhereItIsRaisedStopsThePass:
         assert visited == ["a.json"]
         service._fail_abandoned_records.assert_not_called()
 
-    def test_a_retired_entry_the_registry_refuses_to_load_stays_declared(self):
+    def test_an_unknown_entry_the_registry_refuses_to_load_stays_declared(self):
         """The registry raises its own refusal, naming the action, from the entry's."""
         backend = MagicMock()
         backend.load_metadata.return_value = (
             '{"x": {"batch_id": "b", "status": "completed", "timestamp": "t", '
-            '"provider": "mock", "recovery_type": "reprompt"}}'
+            '"provider": "mock", "recovery_type": "made_up"}}'
         )
 
-        with pytest.raises(RetiredRecoveryState) as raised:
+        with pytest.raises(UnknownRecoveryState) as raised:
             BatchRegistryManager(backend, "act").get_all_jobs()
 
         assert is_action_fatal(raised.value)

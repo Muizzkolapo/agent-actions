@@ -8,7 +8,7 @@ import click
 import pytest
 
 from agent_actions.llm.batch.batch_cli import _resolve_action
-from agent_actions.llm.batch.core.batch_constants import RetiredRecoveryState
+from agent_actions.llm.batch.core.batch_constants import UnknownRecoveryState
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
@@ -100,16 +100,16 @@ def test_an_unowned_batch_id_falls_through_to_auto_select():
 
 def test_one_actions_unreadable_registry_names_that_action():
     """The sweep reads every action, so a refusal has to say which one is stuck."""
-    legacy = {
-        "pages_reprompt_1.json": {
-            "batch_id": "b-legacy",
+    unknown = {
+        "pages_made_up_1.json": {
+            "batch_id": "b-unknown",
             "status": "completed",
             "timestamp": "2026-09-01T09:00:00Z",
             "provider": "openai",
-            "recovery_type": "reprompt",
+            "recovery_type": "made_up",
         }
     }
-    backend = _Backend({"extract": _registry("b-1"), "score": legacy})
-    with pytest.raises(RetiredRecoveryState) as exc:
+    backend = _Backend({"extract": _registry("b-1"), "score": unknown})
+    with pytest.raises(UnknownRecoveryState) as exc:
         _resolve_action(backend, WORKFLOW, None, batch_id="b-1")
     assert "score" in str(exc.value)
