@@ -9,6 +9,7 @@ import sqlite3
 
 import pytest
 
+from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors.configuration import ConfigurationError
 from agent_actions.storage.backend import StorageBackend
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
@@ -111,3 +112,42 @@ def test_a_store_without_the_metadata_table_is_refused(tmp_path):
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
     conn.close()
     assert tables == {"target_data"}
+
+
+def test_opening_a_current_store_does_not_wait_for_a_run_that_is_writing(tmp_path, monkeypatch):
+    db_path = _store(tmp_path)
+    _create(db_path)
+    monkeypatch.setattr(StorageDefaults, "SQLITE_LOCK_TIMEOUT_SECONDS", 0.2)
+    writer = sqlite3.connect(db_path)
+    writer.execute("BEGIN IMMEDIATE")
+    try:
+        backend = SQLiteBackend(str(db_path), "wf")
+        backend.initialize()
+        backend.close()
+    finally:
+        writer.rollback()
+        writer.close()
+
+
+def test_a_read_only_open_of_a_file_with_no_tables_is_not_a_format_refusal(tmp_path):
+    db_path = _store(tmp_path)
+    db_path.parent.mkdir(parents=True)
+    sqlite3.connect(db_path).close()
+
+    readonly = SQLiteBackend.create_readonly(db_path)
+    readonly.close()
+
+
+def test_the_cli_message_carries_the_clean_hint_and_no_generic_advice(tmp_path):
+    from agent_actions.logging.errors import format_user_error
+
+    db_path = _store(tmp_path)
+    _create(db_path)
+    _set_version(db_path, "3")
+    with pytest.raises(ConfigurationError) as refused:
+        SQLiteBackend(str(db_path), "wf").initialize()
+
+    message = format_user_error(refused.value)
+
+    assert "agac clean -a wf --all" in message
+    assert "Check your configuration" not in message

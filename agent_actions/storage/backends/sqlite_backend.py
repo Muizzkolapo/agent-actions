@@ -241,9 +241,12 @@ class SQLiteBackend(
             conn.row_factory = sqlite3.Row
 
         try:
-            instance._refuse_other_format(
-                instance._recorded_format(conn.cursor()), str(db_path), instance.workflow_name
-            )
+            # A file with no tables is a store not yet created, not one of another format.
+            cursor = conn.cursor()
+            if instance._has_tables(cursor):
+                instance._refuse_other_format(
+                    instance._recorded_format(cursor), str(db_path), instance.workflow_name
+                )
         except BaseException:
             conn.close()
             raise
@@ -320,17 +323,21 @@ class SQLiteBackend(
             self._open_connection()
             cursor = self.connection.cursor()
             try:
-                # One transaction, so another process sees no tables without the format.
-                cursor.execute("BEGIN IMMEDIATE")
-                cursor.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type = 'table'"
-                    " AND name NOT LIKE 'sqlite_%' LIMIT 1"
-                )
-                if cursor.fetchone() is not None:
+                # A store that has tables is only read here, so a reader never waits for
+                # the write lock a run holds.
+                if self._has_tables(cursor):
                     self._refuse_other_format(
                         self._recorded_format(cursor), str(self.db_path), self.workflow_name
                     )
-                self._create_tables(cursor)
+                    return
+                # One transaction, so another process sees no tables without the format.
+                cursor.execute("BEGIN IMMEDIATE")
+                if self._has_tables(cursor):
+                    self._refuse_other_format(
+                        self._recorded_format(cursor), str(self.db_path), self.workflow_name
+                    )
+                else:
+                    self._create_tables(cursor)
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -375,6 +382,13 @@ class SQLiteBackend(
             " VALUES ('storage_format_version', ?)",
             (str(self._STORAGE_FORMAT_VERSION),),
         )
+
+    @staticmethod
+    def _has_tables(cursor: sqlite3.Cursor) -> bool:
+        cursor.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' LIMIT 1"
+        )
+        return cursor.fetchone() is not None
 
     @staticmethod
     def _recorded_format(cursor: sqlite3.Cursor) -> str | None:
