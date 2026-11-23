@@ -1,9 +1,9 @@
 """Preflight defect detection for expect blocks."""
 
 import pytest
-import yaml
 
 from agent_actions.validation.expectations_validator import find_expectation_defects
+from tests.helpers.schema_project import schema_project
 
 FIELDS = {"write_q": {"options", "answer", "answer_explanation"}}
 
@@ -20,15 +20,8 @@ def default_config(name="write_q", **action_keys):
     return {name: {"name": name, "expect": {"repair": "none"}, **action_keys}}
 
 
-def write_schema_file(tmp_path, name, data):
-    (tmp_path / "agent_actions.yml").write_text(yaml.safe_dump({"schema_path": "schema"}))
-    schema_dir = tmp_path / "schema"
-    schema_dir.mkdir(exist_ok=True)
-    (schema_dir / f"{name}.yml").write_text(yaml.safe_dump(data))
-
-
 def write_suite(tmp_path, suite_name, expectations):
-    write_schema_file(tmp_path, suite_name, {"expectations": expectations})
+    schema_project(tmp_path, {suite_name: {"expectations": expectations}})
 
 
 def test_clean_suite_reports_no_defects():
@@ -178,12 +171,15 @@ def test_clean_named_suite_reports_no_defects(tmp_path):
 
 
 def test_suite_rules_ride_beside_schema_fields_in_one_file(tmp_path):
-    write_schema_file(
+    schema_project(
         tmp_path,
-        "scenario",
         {
-            "fields": [{"id": "options", "type": "array", "items": {"type": "string"}}],
-            "expectations": [{"type": "item_count", "field": "options", "params": {"equals": 4}}],
+            "scenario": {
+                "fields": [{"id": "options", "type": "array", "items": {"type": "string"}}],
+                "expectations": [
+                    {"type": "item_count", "field": "options", "params": {"equals": 4}}
+                ],
+            }
         },
     )
     defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
@@ -195,17 +191,49 @@ def test_named_suite_is_skipped_without_project_context():
     assert defects == {}
 
 
+def both_config(name="write_q"):
+    """A suite over an inline list, as a defaults list under an action's suite merges."""
+    inline = [{"type": "not_null", "field": "ghost"}]
+    return {name: {"name": name, "expect": {"suite": "scenario", "expectations": inline}}}
+
+
+def test_a_suite_beside_an_inline_list_is_checked_as_the_run_reads_it(tmp_path):
+    write_suite(tmp_path, "scenario", [{"type": "vibe_check", "field": "options"}])
+    defects = find_expectation_defects(both_config(), FIELDS, project_root=tmp_path)
+    (message,) = defects["write_q"]
+    assert "unknown type 'vibe_check'" in message
+
+
+def test_an_inline_list_under_a_suite_is_not_checked(tmp_path):
+    write_suite(tmp_path, "scenario", [{"type": "not_null", "field": "options"}])
+    assert find_expectation_defects(both_config(), FIELDS, project_root=tmp_path) == {}
+    assert find_expectation_defects(both_config(), FIELDS) == {}
+
+
+def test_named_suite_sharing_its_name_with_another_schema_file_is_reported(tmp_path):
+    rules = [{"type": "not_null", "field": "options"}]
+    write_suite(tmp_path, "quality", rules)
+    schema_project(tmp_path, {"quality": {"expectations": rules}}, where="schema/sub")
+    defects = find_expectation_defects(suite_config("quality"), FIELDS, project_root=tmp_path)
+    (message,) = defects["write_q"]
+    assert message.startswith(
+        "suite 'quality' could not be loaded: Schema 'quality' is ambiguous — found in "
+        "2 locations (names must be globally unique):"
+    )
+    assert f"{tmp_path / 'schema' / 'quality.yml'}\n" in message
+    assert f"{tmp_path / 'schema' / 'sub' / 'quality.yml'}\n" in message
+    assert "Hint: Rename the colliding files so every schema name is unique." in message
+
+
 def test_named_suite_without_an_expectations_block_is_reported(tmp_path):
-    write_schema_file(tmp_path, "scenario", {"fields": [{"id": "options", "type": "string"}]})
+    schema_project(tmp_path, {"scenario": {"fields": [{"id": "options", "type": "string"}]}})
     defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
     assert "no expectations" in defects["write_q"][0]
 
 
 def test_named_suite_with_invalid_yaml_syntax_is_reported_not_crashed(tmp_path):
-    (tmp_path / "agent_actions.yml").write_text(yaml.safe_dump({"schema_path": "schema"}))
-    schema_dir = tmp_path / "schema"
-    schema_dir.mkdir()
-    (schema_dir / "scenario.yml").write_text(
+    schema_project(tmp_path, {})
+    (tmp_path / "schema" / "scenario.yml").write_text(
         "name: scenario\nexpectations:\n  - type: not_null\n    field: [unterminated\n"
     )
     defects = find_expectation_defects(suite_config("scenario"), FIELDS, project_root=tmp_path)
@@ -230,7 +258,7 @@ def test_defaulted_expect_with_a_clean_schema_suite_reports_no_defects(tmp_path)
 
 
 def test_defaulted_expect_on_a_schema_without_expectations_block_is_reported(tmp_path):
-    write_schema_file(tmp_path, "write_q_schema", {"fields": [{"id": "options", "type": "string"}]})
+    schema_project(tmp_path, {"write_q_schema": {"fields": [{"id": "options", "type": "string"}]}})
     defects = find_expectation_defects(
         default_config(schema_name="write_q_schema"), FIELDS, project_root=tmp_path
     )
@@ -286,6 +314,25 @@ def test_defaulted_expect_with_no_schema_at_all_is_reported(tmp_path):
 
 def test_defaulted_expect_is_skipped_without_project_context():
     defects = find_expectation_defects(default_config(schema_name="write_q_schema"), FIELDS)
+    assert defects == {}
+
+
+def test_defaulted_expect_reads_an_inlined_schema_without_project_context():
+    action = {
+        "name": "write_q",
+        "expect": {},
+        "schema": {
+            "fields": [{"id": "options", "type": "string"}],
+            "expectations": [{"type": "no_such_type", "field": "options"}],
+        },
+    }
+    defects = find_expectation_defects({"write_q": action}, FIELDS)
+    (message,) = defects["write_q"]
+    assert "unknown type 'no_such_type'" in message
+
+
+def test_defaulted_expect_with_no_inlined_schema_is_skipped_without_project_context():
+    defects = find_expectation_defects(default_config(), FIELDS)
     assert defects == {}
 
 

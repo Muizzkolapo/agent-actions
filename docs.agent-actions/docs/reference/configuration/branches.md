@@ -173,7 +173,7 @@ def check_question(data, *args):
     ...
 ```
 
-**Schema files.** The `context` list of each `llm_judge` rule uses the short names. This applies to a rule on a field and to a rule in the `expectations:` block of the schema file. Each instance gets its own copy of the compiled schema, with the final names. A rule in a named `suite:` is not renamed.
+**Schema files.** The `context` list of each `llm_judge` rule uses the short names. This applies to a rule on a field and to a rule in the `expectations:` block of the schema file. Each instance gets its own copy of the compiled schema, with the final names. A rule in a named `suite:` is not renamed. Thus a `context` reference in a suite must use the final name, for example `c__write.text`, or the final name of the bound action. The load refuses a short name in a suite, and tells you the final name to write. As an alternative, move the rule into the schema of the action or into an inline `expectations:` list.
 
 ```yaml
 # schema/review.yml

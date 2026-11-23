@@ -371,6 +371,7 @@ class ConfigManager:
 
     def get_user_agents(self) -> list[dict[str, Any]]:
         from agent_actions.output.response.expander import ActionExpander
+        from agent_actions.output.response.expander_merge import observe_suite_judge_context_refs
 
         if self.user_config is None:
             raise RuntimeError(
@@ -379,6 +380,7 @@ class ConfigManager:
         # A raise below must not leave the endpoints of a project loaded earlier.
         clear_project_endpoints()
         if "name" in self.user_config and "actions" in self.user_config:
+            project_root: Path | None = None
             try:
                 path_manager = PathManager(project_root=self.project_root)
                 project_root = path_manager.get_project_root()
@@ -422,7 +424,10 @@ class ConfigManager:
             }
 
             agent_config_map = ActionExpander.expand_actions_to_agents(config_for_expander)
-            return agent_config_map.get(workflow_name, [])  # type: ignore[return-value]
+            expanded = agent_config_map.get(workflow_name, [])
+            # Here, not at the _project_root stamp: dependency inference runs before it.
+            observe_suite_judge_context_refs(expanded, project_root)
+            return expanded
         if self.agent_name is None:
             raise RuntimeError(
                 "agent_name is None: validate_agent_name() must be called before get_user_agents()"

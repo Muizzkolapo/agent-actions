@@ -909,8 +909,8 @@ def handle_repair_recovery(
             set(state.missing_ids), state.record_failure_counts
         )
 
-    # Parked last: everything above can throw, and the outer loop answers a
-    # non-RuntimeError by logging and moving to the next file. Through park_halt
+    # Parked last: everything above can throw, and the outer loop answers an error
+    # not declared fatal by logging and moving to the next file. Through park_halt
     # so a policy that decided nothing cannot write None over one that did.
     park_halt(context, pending)
     return _finalize_and_cleanup(
@@ -1089,7 +1089,7 @@ def raise_pending_exhaustion(context: HaltCarrier) -> None:
     file once at the end, so raising earlier takes down every record the round
     had already graduated. Callers park on the statement before the finaliser,
     because anything that throws in between reaches the outer loop, which logs
-    a non-RuntimeError and moves on — forgetting the halt.
+    an error not declared fatal and moves on — forgetting the halt.
 
     Also called before every early return that would otherwise skip a finaliser
     while a halt is parked. Those paths write nothing, so raising there costs no

@@ -697,11 +697,15 @@ that would actually run.
 
 The batch does not have to be out at the provider. The retry also refuses to run for a batch
 that finished but whose results were never collected. A collect pass leaves this state when
-it stops on an error. An example is when the provider drops the connection while the run
-reads the results of a file. Then the action reads `failed`, the records of the file still
-wait, and the finished batch is still in the registry. `retry` does not report this state as
-nothing to retry. Run the workflow again to collect the batch. Then retry the records that are
-still failed.
+it stops on an error that is fatal to the action. An example is a store that fails to write
+the file. Then the action reads `failed`, the records of the file still wait, and the
+finished batch is still in the registry. `retry` does not report this state as nothing to
+retry. Run the workflow again to collect the batch. Then retry the records that are still
+failed.
+
+An error that is a failure of one file only does not leave this state. An example is an error
+from the provider while the run reads the results of a file. The run marks the records of that
+file as failed, and `retry` sends them again.
 
 ### A record left deferred after its batch was collected
 

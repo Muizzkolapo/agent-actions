@@ -1,0 +1,8 @@
+kind: Bug Fix
+body: >-
+  `agac validate-udfs`, and other callers that give preflight no project root, now report the
+  defects in the rules of a bare `expect:` block when the schema of the action is inlined in its
+  config. Before, preflight skipped every bare block when it had no project root. Preflight still
+  skips a bare block whose schema is not inlined, because it reads that schema by name from the
+  project root. `agac run` always has a project root, so its preflight does not change.
+time: 2026-11-23T12:01:00.000000+00:00

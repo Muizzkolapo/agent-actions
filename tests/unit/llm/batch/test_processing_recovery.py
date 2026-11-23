@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.errors.base import exhaustion_halt
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import (
     BatchIdentity,
@@ -682,7 +683,7 @@ class TestDownstreamBugs:
         svc._workflow_name = "test_action"
         svc._provider_status = MagicMock(return_value=BatchStatus.COMPLETED)
         svc._process_single_batch_file = MagicMock(
-            side_effect=RuntimeError("Reprompt validation exhausted")
+            side_effect=exhaustion_halt("Reprompt validation exhausted")
         )
 
         with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):

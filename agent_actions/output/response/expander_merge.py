@@ -1,11 +1,15 @@
 """Config merge and initialization functions extracted from ActionExpander."""
 
 import copy
+import logging
+from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.input.context.normalizer import split_optional_observe
 from agent_actions.output.response.config_fields import get_default
+
+logger = logging.getLogger(__name__)
 
 
 def merge_directive_value(existing: Any, new_value: Any) -> Any:
@@ -49,12 +53,16 @@ def deep_merge_context_scope(
 def inherited_context_scope(
     action: dict[str, Any], defaults: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """The ``context_scope`` *action* gets: its own directives merged over the defaults'."""
+    """The ``context_scope`` *action* gets: its own directives merged over the defaults'.
+
+    A copy: the merge can return either level's dict as it is, and the loader adds
+    an action's judged refs to its scope, which must not reach a sibling.
+    """
     defaults_scope = defaults.get("context_scope")
     action_scope = action.get("context_scope")
     if not defaults_scope and not action_scope:
         return None
-    return deep_merge_context_scope(defaults_scope, action_scope)
+    return copy.deepcopy(deep_merge_context_scope(defaults_scope, action_scope))
 
 
 # The settings the chunker reads out of chunk_config, which are also writable as
@@ -136,20 +144,45 @@ def _schema_rule_entries(expect: dict[str, Any], schema: Any) -> list[Any]:
     return entries
 
 
-def collect_judge_context_refs(expect: dict[str, Any] | None, schema: Any = None) -> list[str]:
+def _suite_rule_entries(suite: Any, project_root: Path | None) -> list[Any]:
+    """The rules of a named suite; none without a root or when the suite does not load.
+
+    Preflight and the run report a suite that does not load, each with its own message.
+    """
+    if project_root is None or not isinstance(suite, str):
+        return []
+    from agent_actions.expectations.loader import SuiteLoadError, load_schema_rules
+
+    try:
+        entries, _ = load_schema_rules(suite, project_root)
+    except SuiteLoadError as exc:
+        logger.debug("No judged context refs read from suite '%s': %s", suite, exc)
+        return []
+    return entries
+
+
+def collect_judge_context_refs(
+    expect: dict[str, Any] | None, schema: Any = None, project_root: Path | None = None
+) -> list[str]:
     """The context: refs named by every llm_judge rule this action will run.
 
-    Reads the action's inline list, or — when it has none — the rules of its
-    resolved schema, which is where the co-located form declares them. A named
-    ``suite:`` is still out of reach here: it needs a project root this layer
-    does not have.
+    Reads the rules the run reads, in its order: the named ``suite:`` (only when
+    *project_root* is given), else the inline list, else the rules of the
+    resolved schema, which is where the co-located form declares them. A merged
+    block can hold both a suite and a list. A ref that is not a string is left
+    for preflight to report.
     """
     # An empty dict is the bare block, not the absence of one — the runtime reads
     # the action's own schema for it, so its refs have to be observed as well.
     if expect is None:
         return []
     declared = expect.get("expectations")
-    entries = declared if isinstance(declared, list) else _schema_rule_entries(expect, schema)
+    if expect.get("suite") is not None:
+        entries = _suite_rule_entries(expect["suite"], project_root)
+    elif isinstance(declared, list):
+        entries = declared
+    else:
+        entries = _schema_rule_entries(expect, schema)
     refs: list[str] = []
     for entry in entries:
         if not isinstance(entry, dict) or entry.get("type") != "llm_judge":
@@ -157,8 +190,33 @@ def collect_judge_context_refs(expect: dict[str, Any] | None, schema: Any = None
         params = entry.get("params")
         context = params.get("context") if isinstance(params, dict) else None
         if isinstance(context, list):
-            refs.extend(context)
+            refs.extend(ref for ref in context if isinstance(ref, str))
     return refs
+
+
+def observe_judge_context_refs(agent: dict[str, Any], refs: list[str]) -> None:
+    """Union *refs* into the agent's observe, so dependency inference reads the source action."""
+    if refs:
+        scope = agent.get("context_scope") or {}
+        agent["context_scope"] = {
+            **scope,
+            "observe": merge_directive_value(scope.get("observe", []), refs),
+        }
+
+
+def observe_suite_judge_context_refs(
+    agents: list[dict[str, Any]], project_root: Path | None
+) -> None:
+    """Observe the judged context refs of each agent's named suite.
+
+    The expander adds every other form's refs. A suite loads from the project
+    root, which the expander does not have, so the loader calls this after it.
+    """
+    for agent in agents:
+        expect = agent.get("expect")
+        if isinstance(expect, dict) and expect.get("suite") is not None:
+            refs = collect_judge_context_refs(expect, agent.get("schema"), project_root)
+            observe_judge_context_refs(agent, refs)
 
 
 def _cannot_repair(agent: dict[str, Any]) -> bool:

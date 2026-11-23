@@ -293,6 +293,7 @@ class _Levels:
     agent: dict[str, Any]
     workflow_scope: Any
     workflow_expect: Any = None
+    root: Path | None = None
 
     @classmethod
     def load(cls, data: dict[str, Any], project_root: Path | None) -> _Levels | None:
@@ -303,7 +304,8 @@ class _Levels:
             project_agent_config,
         )
 
-        project_config = load_project_config(resolve_project_root(project_root))
+        root = resolve_project_root(project_root)
+        project_config = load_project_config(root)
         written = data.get("defaults")
         try:
             workflow = dump_defaults(DefaultsConfig.model_validate(written or {}))
@@ -313,7 +315,13 @@ class _Levels:
             return None
         scope = written.get("context_scope") if isinstance(written, dict) else None
         expect = written.get("expect") if isinstance(written, dict) else None
-        return cls(defaults=defaults, agent=agent, workflow_scope=scope, workflow_expect=expect)
+        return cls(
+            defaults=defaults,
+            agent=agent,
+            workflow_scope=scope,
+            workflow_expect=expect,
+            root=root,
+        )
 
     def of(self, action: dict[str, Any]) -> dict[str, Any]:
         """The defaults the expander gives *action*."""
@@ -417,10 +425,14 @@ def _check_reads(data: dict[str, Any], inclusions: Sequence[Inclusion], levels: 
             levels.of(action),
             levels.scope(action),
             braces=not prefixed,
+            project_root=levels.root,
         ):
             if name not in known:
                 if reader is not None and prefixed and name not in SPECIAL_NAMESPACES:
                     via = _scope_origin(action, name, extractor, workflow_file, levels)
+                    suite = _suite_reading(action, name, levels)
+                    if suite is not None and name in reader.names:
+                        _refuse_short_name_in_suite(action, name, reader, suite, via)
                     _refuse_unknown_short_name(action, name, reader, via)
                 continue
             source = owner.get(name)
@@ -516,6 +528,36 @@ def _refuse_unknown_short_name(
     )
 
 
+def _suite_reading(action: dict[str, Any], name: str, levels: _Levels) -> str | None:
+    """The named suite of *action* when its judge contexts read *name*."""
+    expect = _resolved_expect(action, levels.of(action))
+    suite = expect.get("suite") if expect is not None else None
+    if not isinstance(suite, str):
+        return None
+    refs = collect_judge_context_refs(expect, action.get("schema"), levels.root)
+    return suite if name in (ref.split(".", 1)[0] for ref in refs) else None
+
+
+def _refuse_short_name_in_suite(
+    action: dict[str, Any], name: str, reader: Inclusion, suite: str, via: str
+) -> None:
+    """Refuse a short name in a named suite's judge context inside an ``as:`` include.
+
+    The include renames inline and own-schema rules, not a suite's: the suite file
+    serves every instance, and the run reads it as written.
+    """
+    local = action[_ORIGIN_KEY]["local_name"]
+    where = _branch_where(reader.branch.name, reader.workflow_file, f"'{local}'", reader.prefix)
+    raise ConfigurationError(
+        f"{where}: reads '{name}' in an llm_judge context of suite '{suite}'{via}. An include "
+        "with 'as:' does not rename the rules of a named suite, so a context reference in the "
+        f"suite must use the final name: write '{reader.names[name]}' in place of '{name}'. "
+        "Or move the rule into the schema of the action or into an inline expectations: "
+        "list, where the include renames it.",
+        context=_context(reader, action_name=local, suite=suite),
+    )
+
+
 def _scope_origin(
     action: dict[str, Any],
     name: str,
@@ -529,7 +571,8 @@ def _scope_origin(
     Empty when the action's own config reads it; else the most specific level that reads it.
     """
     own = _normalised_reads(action.get("context_scope")) or {}
-    if name in _reads(action, extractor, workflow_file, {}, own):
+    root = levels.root
+    if name in _reads(action, extractor, workflow_file, {}, own, project_root=root):
         return ""
     found = action.get(_ORIGIN_KEY)
     origin: dict[str, Any] = found if isinstance(found, dict) else {}
@@ -541,12 +584,12 @@ def _scope_origin(
     if name in _scope_reads(levels.workflow_scope, extractor):
         return " (from 'context_scope' under the workflow's 'defaults:')"
     instance_expect = {"expect": instance.get("expect") if isinstance(instance, dict) else None}
-    if name in _reads(action, extractor, workflow_file, instance_expect, own):
+    if name in _reads(action, extractor, workflow_file, instance_expect, own, project_root=root):
         return f" (from 'expect' under 'defaults:' of include '{origin['instance']}')"
     workflow_expect = {"expect": levels.workflow_expect}
-    if name in _reads(action, extractor, workflow_file, workflow_expect, own):
+    if name in _reads(action, extractor, workflow_file, workflow_expect, own, project_root=root):
         return " (from 'expect' under the workflow's 'defaults:')"
-    if name in _reads(action, extractor, workflow_file, levels.of(action), own):
+    if name in _reads(action, extractor, workflow_file, levels.of(action), own, project_root=root):
         return f" (from 'expect' under {agent_level})"
     return f" (from 'context_scope' under {agent_level})"
 
@@ -580,7 +623,12 @@ def _refuse_removed_reads(
         origin = action.get(_ORIGIN_KEY)
         reader = by_instance[origin["instance"]] if isinstance(origin, dict) else None
         for name in _reads(
-            action, extractor, workflow_file, levels.of(action), levels.scope(action)
+            action,
+            extractor,
+            workflow_file,
+            levels.of(action),
+            levels.scope(action),
+            project_root=levels.root,
         ):
             if name not in removed:
                 continue
@@ -1107,10 +1155,12 @@ def _reads(
     defaults: dict[str, Any],
     scope: dict[str, list[Any]],
     braces: bool = True,
+    project_root: Path | None = None,
 ) -> list[str]:
     """Every name *action* reads, in the order its config states them.
 
     *scope* stands for its ``context_scope``, and *defaults* give its ``expect`` block.
+    A named ``suite:`` is read from *project_root*.
     Without *braces*, single-brace prompt text (``{name.field}``) is not taken as a read
     here; the static checks report it as they do in a workflow without an include.
     """
@@ -1145,15 +1195,19 @@ def _reads(
     consumption = action.get("version_consumption")
     if isinstance(consumption, dict) and isinstance(consumption.get("source"), str):
         names.append(consumption["source"])
+    expect = _resolved_expect(action, defaults)
+    if expect is not None:
+        for ref in collect_judge_context_refs(expect, action.get("schema"), project_root):
+            names.append(ref.split(".", 1)[0])
+    return list(dict.fromkeys(name for name in names if isinstance(name, str)))
+
+
+def _resolved_expect(action: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any] | None:
+    """The ``expect`` block the expander gives *action* under *defaults*."""
     own = action.get("expect")
-    expect = adapt_inherited_expect(
+    return adapt_inherited_expect(
         merge_expect(defaults.get("expect"), own), own, _repair_view(action, defaults)
     )
-    if expect is not None:
-        for ref in collect_judge_context_refs(expect, action.get("schema")):
-            if isinstance(ref, str):
-                names.append(ref.split(".", 1)[0])
-    return list(dict.fromkeys(name for name in names if isinstance(name, str)))
 
 
 def _single_brace(reference: str) -> bool:
