@@ -22,7 +22,7 @@ expect:
         votes: 5
         rule: >
           Every fact in the summary is stated in the ticket.
-        context: [source.ticket_text]
+        context: [load_ticket.ticket_text]
 ```
 
 `repair: none` checks and reports. It makes no repair round, so the calibration costs only the judge votes.

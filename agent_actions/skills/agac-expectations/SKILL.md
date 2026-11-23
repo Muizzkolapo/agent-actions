@@ -99,12 +99,12 @@ expect:
         rule: >
           Every fact in the summary is stated in the ticket. A fact that the ticket
           does not state fails the rule, even if it is true.
-        context: [source.ticket_text]
+        context: [load_ticket.ticket_text]
       hint: "Remove or correct the facts that the ticket does not state."
 ```
 
 1. `votes: 3` runs 3 independent judge calls and takes a strict majority. A tie fails. The detail keeps the tally and the dissent, for example `2/3 judge votes passed: ...`.
-2. `context:` gives the judge other fields of the record. Name only what the rule needs.
+2. `context:` gives the judge fields of upstream actions, written as `action.field`. Name only what the rule needs. A staged input field (`source.ticket_text`) is refused ("names unknown action 'source'"), so let an upstream action write it first. Here `load_ticket` is that action; any upstream action that already holds the text works too.
 3. Judge calls follow the run mode of the action. Set `judge_mode: batch` or `judge_mode: online` under `expect:` to choose. `judge_mode: batch` needs `run_mode: batch`.
 4. Write the rule as a pass condition that a careful reader can check from the field and the context alone. Give one example that passes and one that fails, if the rule has a known trap.
 
