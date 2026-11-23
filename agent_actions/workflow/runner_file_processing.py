@@ -1100,7 +1100,7 @@ def process_from_storage_backend(
     # input were gone. #1026 fixed the same shape for the two filesystem walks by widening
     # files_seen; this walker counts differently, hence a separate tally.
     lost = 0
-    # Listed entries none of whose upstreams could be read: not found, only lost.
+    # Entries the check read but the processing read lost: not found, only lost.
     unreadable = 0
 
     upstream_to_read = params.upstream_data_dirs
@@ -1187,8 +1187,14 @@ def process_from_storage_backend(
             backend.forget_reconstructed(action_name, relative_path)
 
     # Sorted, not upstream-major: a file limit truncates this list, and the union of
-    # several upstreams is otherwise ordered by which one was read first.
-    paths = sorted(listed)
+    # several upstreams is otherwise ordered by which one was read first. An entry none
+    # of whose upstreams the check could read is only lost: not found, not processed.
+    paths = [
+        path
+        for path in sorted(listed)
+        if merged_versions is not None
+        or any((action_name, path) not in failed_reads for action_name in listed[path])
+    ]
     files_processed = 0
 
     # A guard `filter` anywhere upstream makes those records dead — they must not
