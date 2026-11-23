@@ -1,4 +1,4 @@
-"""A prompt template with no `{% cache_point %}` sends the request it sent before the tag existed."""
+"""A prompt template with no `{% cache_point %}` sends the request the default cache rules give."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ MARK = {"type": "ephemeral"}
 MODEL = "claude-sonnet-4-6"
 PER_RECORD = "Summarise the page {{ source.page_content }}."
 STATIC = "Summarise the page."
-# The user message of each prompt, as the requests carried it before the tag existed.
+# The user message of each prompt, with no cache point in the template.
 PER_RECORD_TEXT = (
     "\n<|begin_of_user_instruction|>: Summarise the page alpha. :<|end_of_user_instruction|>\n"
     '<|begin_of_text|>: {"source": {"page_content": "alpha"}} :<|end_of_text|>\n'
@@ -77,7 +77,7 @@ def _config(prompt: str, caching: bool) -> dict[str, Any]:
         "enable_prompt_caching": caching,
         "prompt": prompt,
         "context_scope": {"observe": ["source.page_content"]},
-        # The request as it was, the printed field sent again in the context block.
+        # Every observed field goes in the context block, also the field the prompt prints.
         "context_block": "all",
     }
 

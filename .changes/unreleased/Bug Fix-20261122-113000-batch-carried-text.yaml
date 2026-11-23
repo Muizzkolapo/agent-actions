@@ -1,3 +1,0 @@
-kind: Bug Fix
-body: 'A repair or retry round of a `json_mode: false` batch action puts the answers it carries from a recovery state that an earlier version saved under the action''s `output_field`, as it does the answers it retrieves. Before, such a carried answer stayed a bare string, so one output mixed two shapes.'
-time: 2026-11-22T11:30:00Z

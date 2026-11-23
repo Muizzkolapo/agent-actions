@@ -140,7 +140,6 @@ def test_all_ignores_backend_that_owns_no_paths(tmp_path, monkeypatch):
             return []
 
         def _save_metadata_raw(self, *_a, **_kw) -> None: ...
-        def _save_and_delete_metadata_raw(self, *_a, **_kw) -> None: ...
         def load_metadata(self, *_a, **_kw):
             return None
 
@@ -200,7 +199,6 @@ def test_all_picks_up_extra_backend_paths(tmp_path, monkeypatch):
             return []
 
         def _save_metadata_raw(self, *_a, **_kw) -> None: ...
-        def _save_and_delete_metadata_raw(self, *_a, **_kw) -> None: ...
         def load_metadata(self, *_a, **_kw):
             return None
 

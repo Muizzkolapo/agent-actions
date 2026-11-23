@@ -71,7 +71,7 @@ The request to the model holds the rendered prompt and then a context block: the
 
 - A field counts as printed only when an output tag prints it as it is, as `{{ ns.field }}` or `{{ ns["field"] }}`, at the top level of the template. A tag inside `{% if %}`, `{% for %}`, a block or a macro does not count, and a tag with a filter (`{{ ns.field | tojson }}`) does not count. Such a field stays in the context block.
 - A request whose prompt does not hold the printed text, such as a repair prompt that does not repeat the first prompt, gets the field in the context block.
-- `context_block: all` sends every observed field in the context block, as before. `context_block: none` sends an empty context block. Set it on an action or in `defaults:`.
+- `context_block: all` sends every observed field in the context block, also the fields that the prompt prints. `context_block: none` sends an empty context block. Set it on an action or in `defaults:`.
 - Ollama (`ollama_local`, `ollama_cloud`) sends the record in a user message of its own, apart from the prompt in the system message. Under `auto`, that message keeps every observed field. Set `none` to leave it out.
 - The same rule applies online and in batch, for every vendor. The prompt-size check counts what is sent. The `llm_context` of a [prompt trace](../data-io/prompt-traces.md) is the context block that was sent.
 
