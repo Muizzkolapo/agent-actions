@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS target_data (
     action_name TEXT NOT NULL,
     relative_path TEXT NOT NULL,
     data TEXT NOT NULL,                -- list[dict] of ALL records for this path as JSON, stored compressed
-    record_count INTEGER,
+    record_count INTEGER NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path)
 )
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS target_data (
 
 No additional indexes — the UNIQUE constraint provides one.
 
-The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` reads it rather than the blob, and has to read it carefully: a store that gained the column by migration holds it as `TEXT`, where `'0' > 0` is true, and a row written before the column existed has it `NULL`. So it casts the count and, for a row still stored as text, falls back to `json_array_length(data)`; a compressed row always carries its count. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
+The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` and `preview_target()` read it rather than the blob. The column is `NOT NULL`, so every stored file carries its count. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
 
 ### 3. record_disposition — per-record processing status
 
@@ -236,9 +236,7 @@ not read as empty. `get_disposition(snapshots=False)` leaves `input_snapshot` ou
 decodes nothing; every run path that reads only ids and dispositions asks for that,
 so a forensic column it never uses cannot fail it. SQL that looked inside these
 columns is gone or guarded:
-`has_target_rows` and `preview_target` fall back to `json_array_length(data)` only
-for a text row and measure a compressed row that lacks its count in Python (the
-writer always stores one; only a store edited from outside holds such a row),
+`has_target_rows` and `preview_target` read `record_count`, and
 `records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes in Python only a compressed row whose column is NULL. Outside the backend, `agac records` prints stored records and failed
 records' inputs; `sqlite3` shows these columns as blobs.
 

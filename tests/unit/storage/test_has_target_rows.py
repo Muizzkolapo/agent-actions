@@ -10,6 +10,7 @@ over the same store — because a backend that does not override inherits the wa
 """
 
 import json
+import sqlite3
 
 import pytest
 
@@ -101,6 +102,14 @@ def test_sqlite_answers_without_reading_a_row(backend, monkeypatch):
     monkeypatch.setattr(backend, "_read_target_raw", _refuse)
 
     assert backend.has_target_rows("act") is True
+
+
+def test_the_store_refuses_a_file_without_its_count(backend):
+    """The probe reads only record_count, so a file stored without one would hide its rows."""
+    with pytest.raises(sqlite3.IntegrityError, match="record_count"):
+        backend.connection.execute(
+            "INSERT INTO target_data (action_name, relative_path, data) VALUES ('act', 'a.json', x'00')"
+        )
 
 
 class TestBaseClassWalk:

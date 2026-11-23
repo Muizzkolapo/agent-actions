@@ -77,7 +77,7 @@ class SQLiteBackend(
             action_name TEXT NOT NULL,
             relative_path TEXT NOT NULL,
             data TEXT NOT NULL,
-            record_count INTEGER,
+            record_count INTEGER NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(action_name, relative_path)
         )

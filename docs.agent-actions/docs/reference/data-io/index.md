@@ -72,7 +72,7 @@ CREATE TABLE target_data (
     action_name   TEXT NOT NULL,
     relative_path TEXT NOT NULL,
     data          TEXT NOT NULL,         -- JSON array of records
-    record_count  INTEGER,
+    record_count  INTEGER NOT NULL,
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path)
 )

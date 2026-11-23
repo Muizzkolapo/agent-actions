@@ -1,6 +1,5 @@
 """Tests for SQLite storage backend."""
 
-import json
 import sqlite3
 
 import pytest
@@ -590,46 +589,6 @@ class TestWritingAFileClearsItsCheckpointRows:
             backend.write_target("action_a", "output.json", [{"source_guid": "g1"}])
 
         assert backend.read_checkpoint_records("action_a", "output.json") == [{"source_guid": "g1"}]
-
-
-class TestGetStorageStatsNullRecordCount:
-    """Tests for get_storage_stats with NULL record_count values."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        db_path = tmp_path / "agent_io" / "test.db"
-        backend = SQLiteBackend(str(db_path), "test_workflow")
-        backend.initialize()
-        yield backend
-        backend.close()
-
-    def test_null_record_count_returns_zero_not_none(self, backend):
-        """Per-node stats return 0 (not None) when all record_count values are NULL."""
-
-        backend.connection.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, NULL)",
-            ("node_1", "file.json", json.dumps([{"id": 1}])),
-        )
-        backend.connection.commit()
-
-        stats = backend.get_storage_stats()
-        assert stats["nodes"]["node_1"] == 0
-        assert isinstance(stats["nodes"]["node_1"], int)
-
-    def test_mixed_null_and_populated_record_count(self, backend):
-        """Per-node stats sum correctly when mixing NULL and populated record_count."""
-
-        backend.connection.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, NULL)",
-            ("node_1", "legacy.json", json.dumps([{"id": 1}])),
-        )
-        backend.write_target("node_1", "new.json", [{"id": 2}, {"id": 3}])
-
-        stats = backend.get_storage_stats()
-        # SUM ignores NULLs: only the non-NULL row (2) is summed
-        assert stats["nodes"]["node_1"] == 2
 
 
 class TestSetDispositionRecordIdValidation:
