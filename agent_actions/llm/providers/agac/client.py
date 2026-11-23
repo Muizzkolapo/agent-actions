@@ -21,6 +21,7 @@ from agent_actions.logging.events import (
 )
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.utils import deep_json
+from agent_actions.utils.constants import RECORD_ID_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +94,12 @@ class AgacClient(BaseClient):
         return "action"
 
     @staticmethod
-    def _extract_identifier(context_data: Any) -> str:
-        """Extract identifier from context data for attempt tracking."""
+    def _extract_identifier(agent_config: Any, context_data: Any) -> str:
+        """The record whose attempts are counted: the call's record id, else the context's guid."""
+        if isinstance(agent_config, dict):
+            record_id = agent_config.get(RECORD_ID_KEY)
+            if isinstance(record_id, str) and record_id:
+                return record_id
         identifier = "default"
         if isinstance(context_data, dict):
             identifier = context_data.get("source_guid", identifier)
@@ -145,10 +150,10 @@ class AgacClient(BaseClient):
             List of response dicts matching schema
         """
         action = AgacClient._action_name(agent_config)
-        # Per action, not per record: a version fan-out sends several actions
+        # Per action and record: a version fan-out sends several actions
         # for one record, and a shared counter would hand them attempt 1, 2 and
         # 3 in whatever order they happened to arrive.
-        identifier = f"{action}:{AgacClient._extract_identifier(context_data)}"
+        identifier = f"{action}:{AgacClient._extract_identifier(agent_config, context_data)}"
         attempt = AgacClient._get_attempt_count(identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
         # Seeds the generator. The action name makes sibling versions of one
@@ -229,10 +234,10 @@ class AgacClient(BaseClient):
             List with single response dict containing output_field
         """
         action = AgacClient._action_name(agent_config)
-        # Per action, not per record: a version fan-out sends several actions
+        # Per action and record: a version fan-out sends several actions
         # for one record, and a shared counter would hand them attempt 1, 2 and
         # 3 in whatever order they happened to arrive.
-        identifier = f"{action}:{AgacClient._extract_identifier(context_data)}"
+        identifier = f"{action}:{AgacClient._extract_identifier(agent_config, context_data)}"
         attempt = AgacClient._get_attempt_count(identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
         # Seeds the generator. The action name makes sibling versions of one

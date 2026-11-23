@@ -17,6 +17,8 @@ SCHEMA_KEY = "schema"
 # The key an action's expectation verdict is attached under.
 VERDICT_KEY = "expect"
 CHUNK_CONFIG_KEY = "chunk_config"
+# The record a model call answers, set on that call's config. Only the mock reads it.
+RECORD_ID_KEY = "_record_id"
 
 # Reserved agent/action names that cannot be used in workflows.
 # These names are reserved for built-in functionality and config directives.
