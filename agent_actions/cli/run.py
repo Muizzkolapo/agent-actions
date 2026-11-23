@@ -205,6 +205,8 @@ class RunCommand:
             outcome = classify_outcome(state_mgr, workflow.execution_order)
             self._open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
             self._report(outcome, workflow)
+            if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
+                self._write_outputs(workflow, project_root)
 
         except ProviderQuotaStop as stop:
             outcome = RunOutcome.QUOTA_STOP
@@ -236,6 +238,18 @@ class RunCommand:
                 logger.debug("Failed to flush event handlers: %s", e, exc_info=True)
 
         return outcome
+
+    def _write_outputs(self, workflow: AgentWorkflow, project_root: Path | None) -> None:
+        """Write the workflow's declared outputs once every action has finished."""
+        declared = (workflow.config.manager.user_config or {}).get("outputs")
+        if not declared:
+            return
+        from agent_actions.connections.export import write_outputs
+        from agent_actions.utils.project_root import find_project_root
+
+        root = project_root or find_project_root(str(Path.cwd())) or Path.cwd()
+        for table, count in write_outputs(workflow.storage_backend, declared, root).items():
+            click.echo(f"Wrote {count} rows to {table}")
 
     def _report(self, outcome: RunOutcome, workflow: AgentWorkflow) -> None:
         """Print the sentence for *outcome*; the exit code is read from the outcome alone."""

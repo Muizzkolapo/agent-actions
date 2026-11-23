@@ -15,6 +15,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.input.loaders.database_source import (
+    DEFAULT_CHUNK_ROWS,
+    snapshot_fingerprint,
+    snapshot_query,
+)
 from agent_actions.utils import deep_json
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.project_root import find_project_root
@@ -26,6 +31,7 @@ class DataSourceType(str, Enum):
     STAGING = "staging"
     LOCAL = "local"
     API = "api"
+    DATABASE = "database"
 
 
 class DataSourceConfig(BaseModel):
@@ -42,6 +48,13 @@ class DataSourceConfig(BaseModel):
     )
     query: dict[str, str] | None = Field(
         default=None, description="Query parameters for API requests"
+    )
+    sql: str | None = Field(default=None, description="The query to read (for type=database)")
+    connection: str | None = Field(
+        default=None, description="Name of a project connection (for type=database)"
+    )
+    chunk_rows: int = Field(
+        default=DEFAULT_CHUNK_ROWS, ge=1, description="Rows per snapshot file (for type=database)"
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -318,6 +331,35 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
         ) from e
 
 
+def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourceResolutionResult:
+    """Resolve a database data source -- read the query once and keep its rows on disk.
+
+    A snapshot is kept per (connection, sql). Delete ``_remote_cache/database/``
+    inside agent_io to read the query again.
+    """
+    if not config.connection or not config.sql or not config.sql.strip():
+        raise ConfigurationError(
+            "Database data source requires a 'connection' and an 'sql' query",
+            context={
+                "data_source": config.model_dump(exclude={"headers"}),
+                "operation": "resolve_database_data_source",
+            },
+        )
+
+    fingerprint = snapshot_fingerprint(config.connection, config.sql)
+    snapshot_dir = agent_folder / _REMOTE_CACHE_DIR / "database" / fingerprint / "data"
+    if snapshot_dir.exists():
+        logger.info("Using the stored snapshot of '%s': %s", config.connection, snapshot_dir)
+        return DataSourceResolutionResult(directories=[snapshot_dir])
+
+    from agent_actions.connections import open_connection
+
+    project_root = find_project_root(str(agent_folder)) or agent_folder.resolve().parent
+    with open_connection(config.connection, project_root) as connector:
+        snapshot_query(connector, config.sql, snapshot_dir, config.chunk_rows)
+    return DataSourceResolutionResult(directories=[snapshot_dir])
+
+
 def is_api_data_source(data_source: Any) -> bool:
     """Whether *data_source* names an API, whose resolution may fetch over the network."""
     return bool(data_source) and _parse_data_source(data_source).type == DataSourceType.API
@@ -346,6 +388,9 @@ def resolve_start_node_data_source(
 
     if config.type == DataSourceType.API:
         return _resolve_api(config, agent_folder, agent_name)
+
+    if config.type == DataSourceType.DATABASE:
+        return _resolve_database(config, agent_folder)
 
     raise ConfigurationError(
         f"Unsupported data source type: {config.type}",

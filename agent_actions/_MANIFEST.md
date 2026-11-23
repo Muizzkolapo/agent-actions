@@ -6,6 +6,7 @@
 |------------|-------------|
 | [cli](cli/_MANIFEST.md) | Command-line interface for agent-actions. |
 | [config](config/_MANIFEST.md) | Workflow configuration loading, validation, and path resolution. |
+| [connections](connections/_MANIFEST.md) | Named database connections a workflow reads input from and writes results to. |
 | [errors](errors/_MANIFEST.md) | Centralized error exports for agent-actions. |
 | [expectations](expectations/_MANIFEST.md) | Declarative output expectations: typed rules, results, and the service that runs them. |
 | [guards](guards/_MANIFEST.md) | Guard expression parsing and configuration. |
