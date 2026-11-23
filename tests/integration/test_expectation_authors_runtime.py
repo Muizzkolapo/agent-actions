@@ -32,6 +32,8 @@ FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
 # Verdicts each fixture reaches. The fake provider answers an LLM action with a
 # record that meets the action's deterministic rules, so those verdicts pass. A
 # tool action is the project's own code, and its rule fails as written.
+# `repair_auto` and `verdict_guard` declare a rule their schema's enum cannot
+# meet, so a repair round runs out and a guard drops the record.
 ACCEPTED: dict[str, dict[str, list[str]]] = {
     "custom_check": {"summarize": []},
     "field_scoped_rules": {"summarize": []},
@@ -39,11 +41,11 @@ ACCEPTED: dict[str, dict[str, list[str]]] = {
     "judge_votes_and_budget": {"summarize": []},
     "pair_and_pattern_rules": {"summarize": []},
     "record_expression": {"summarize": []},
-    "repair_auto": {"summarize": []},
+    "repair_auto": {"summarize": ["density_is_known"]},
     "row_condition_on_optional_field": {"summarize": []},
     "shared_suite": {"summarize": [], "resummarize": []},
     "tool_action": {"flatten": ["summary_present"]},
-    "verdict_guard": {"summarize": []},
+    "verdict_guard": {"summarize": ["density_is_known"]},
 }
 
 REFUSED = [
@@ -171,6 +173,45 @@ class TestAnAcceptedBlockReachesExecution:
             for rule in ACCEPTED[author][action]:
                 assert outcomes[rule]["passed"] is False, rule
                 assert outcomes[rule]["detail"], rule
+
+
+def test_a_failing_record_gets_a_repair_round_until_the_iterations_run_out(run):
+    r = run("repair_auto")
+
+    attempts = [
+        (attempt, prompt)
+        for db in r._dbs()
+        for attempt, prompt in stored_rows(
+            db,
+            "select attempt, compiled_prompt from prompt_trace where action_name = 'summarize'",
+        )
+    ]
+    assert sorted(attempt for attempt, _ in attempts) == [0, 1], r.output
+    repair_prompt = dict(attempts)[1]
+    assert "density_is_known" in repair_prompt
+    assert r.verdicts["summarize"]["failed"] == ["density_is_known"]
+
+
+def test_a_guard_on_the_verdict_drops_the_record_that_failed(run):
+    r = run("verdict_guard")
+
+    dispositions = {
+        (action, disposition, reason)
+        for db in r._dbs()
+        for action, disposition, reason in stored_rows(
+            db,
+            "select action_name, disposition, reason from record_disposition "
+            "where record_id != '__node__'",
+        )
+    }
+    published = [
+        record
+        for db in r._dbs()
+        for (blob,) in stored_rows(db, "select data from target_data where action_name = 'publish'")
+        for record in json.loads(blob)
+    ]
+    assert ("publish", "filtered", "guard_filter") in dispositions, r.output
+    assert published == []
 
 
 class TestARefusedBlockNeverRuns:
