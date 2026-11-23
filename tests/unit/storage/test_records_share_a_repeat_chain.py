@@ -48,9 +48,6 @@ class TestBaseClassDefault:
             def _write_target_raw(self, *a, **kw):
                 return ""
 
-            def _save_and_delete_metadata_raw(self, *a, **kw):
-                pass
-
             def _save_metadata_raw(self, *a, **kw):
                 pass
 

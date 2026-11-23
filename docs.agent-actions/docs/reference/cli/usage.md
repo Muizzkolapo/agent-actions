@@ -18,7 +18,7 @@ The command reads the sums that each run keeps in the durable store. It opens th
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` names the same option. |
 | `--run TEXT` | Show one run only. The value is the `id` of the run in `artefact/runs.json`. If you omit it, the command adds all the runs. |
 | `--json` | Print the report as JSON |
 

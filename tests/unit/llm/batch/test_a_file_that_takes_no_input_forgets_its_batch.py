@@ -25,7 +25,7 @@ def _keys(backend, file_name):
         key
         for key in (
             RecoveryStateManager._metadata_key(ACTION, file_name),
-            BatchContextManager._metadata_key(ACTION, file_name),
+            BatchContextManager._metadata_key(ACTION, file_name) + "#parts",
             BatchContextManager._inputs_key(ACTION, file_name),
         )
         if backend.load_metadata(key) is not None
@@ -37,7 +37,7 @@ def test_its_context_map_inputs_and_recovery_state_go_and_another_files_stay(tmp
     backend.initialize()
     for file_name in ("a.json", "b.json"):
         backend.save_metadata(RecoveryStateManager._metadata_key(ACTION, file_name), "{}")
-        backend.save_metadata(BatchContextManager._metadata_key(ACTION, file_name), "{}")
+        BatchContextManager.save_batch_context_map(backend, ACTION, {}, file_name)
         backend.save_metadata(BatchContextManager._inputs_key(ACTION, file_name), "[]")
 
     _service(backend)._forget_the_batch_of(backend, ACTION, "b.json")
@@ -56,7 +56,7 @@ def _write_for(backend, tmp_path, run_inputs):
 def _store_with_state_for_b(tmp_path):
     backend = SQLiteBackend(str(tmp_path / "store.db"), workflow_name="w")
     backend.initialize()
-    backend.save_metadata(BatchContextManager._metadata_key(ACTION, "b.json"), "{}")
+    BatchContextManager.save_batch_context_map(backend, ACTION, {}, "b.json")
     return backend
 
 

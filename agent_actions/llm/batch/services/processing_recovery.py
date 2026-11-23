@@ -34,7 +34,7 @@ from agent_actions.llm.batch.services.retry_serialization import (
     deserialize_results,
     serialize_results,
 )
-from agent_actions.llm.batch.services.shared import retrieve_and_reconcile, wrap_carried_text
+from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 from agent_actions.logging.core.manager import fire_event
@@ -199,7 +199,6 @@ def process_recovery_batch(
         )
 
     accumulated = deserialize_results(state.accumulated_results)
-    wrap_carried_text(accumulated, agent_config)
 
     # One wrapper for all of them: a halt parked inside any handler must not be
     # lost to an unrelated failure on the way to the finaliser.

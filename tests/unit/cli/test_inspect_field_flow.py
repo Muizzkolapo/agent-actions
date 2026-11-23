@@ -21,11 +21,11 @@ class TestInspectActionCommand:
 
         assert result.exit_code == 0
         assert "details for a specific action" in result.output.lower()
-        assert "--agent" in result.output
+        assert "--workflow" in result.output
         assert "--json" in result.output
 
     def test_action_requires_agent_option(self, cli_runner):
-        """Test that --agent option is required."""
+        """Test that --workflow option is required."""
         result = cli_runner.invoke(cli, ["inspect", "action", "test_action"])
 
         assert result.exit_code != 0

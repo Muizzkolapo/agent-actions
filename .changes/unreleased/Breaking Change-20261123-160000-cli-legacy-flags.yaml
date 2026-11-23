@@ -1,0 +1,8 @@
+kind: Breaking Change
+body: >-
+  In `agac traces`, `agac records` and `agac preview`, `-a` names the workflow, as it does in
+  every other command, and `-A` or `--action` names the action. The deprecation warning for
+  `-a` is gone. No command takes `--agent`: type `-w`, `--workflow` or `-a` for the workflow.
+  `agac clean` with neither `--target` nor `--all` removes nothing: it prints the choices and
+  exits 2. No `agac clean` flag and no `reset_workflow.py --full` removes `agent_io/source/`.
+time: 2026-11-23T16:00:00.000000+00:00

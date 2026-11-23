@@ -1,7 +1,5 @@
 """``workflow_metadata`` key/value access for the SQLite store."""
 
-from collections.abc import Mapping
-
 from agent_actions.storage.backends.sqlite.common import SQLiteHost
 
 
@@ -9,25 +7,17 @@ class SQLiteMetadataMixin(SQLiteHost):
     """Reads and writes the ``workflow_metadata`` table."""
 
     def _save_metadata_raw(self, key: str, value: str) -> None:
-        """Store a metadata key-value pair. Latest value wins (INSERT OR REPLACE)."""
-        with self._lock:
-            self.connection.execute(
-                "INSERT OR REPLACE INTO workflow_metadata (key, value, updated_at) "
-                "VALUES (?, ?, CURRENT_TIMESTAMP)",
-                (key, value),
-            )
-            self.connection.commit()
+        """Store a metadata key-value pair. Latest value wins (INSERT OR REPLACE).
 
-    def _save_and_delete_metadata_raw(self, saves: Mapping[str, str], deletes: list[str]) -> None:
+        A failed commit is rolled back, so a later commit on this connection cannot
+        store the value after the caller was told the save failed.
+        """
         with self._lock:
             try:
-                self.connection.executemany(
+                self.connection.execute(
                     "INSERT OR REPLACE INTO workflow_metadata (key, value, updated_at) "
                     "VALUES (?, ?, CURRENT_TIMESTAMP)",
-                    list(saves.items()),
-                )
-                self.connection.executemany(
-                    "DELETE FROM workflow_metadata WHERE key = ?", [(key,) for key in deletes]
+                    (key, value),
                 )
                 self.connection.commit()
             except BaseException:

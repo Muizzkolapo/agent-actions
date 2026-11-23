@@ -36,7 +36,7 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `references/context-scoping.md` | `agent_config/{workflow}.yml` | Reads | `actions[].context_scope` |
 | `references/prompt-engineering.md` | `prompt_store/{workflow}.md` | Reads | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Writes (deletes) | — |
-| `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/{source,store,target}/` | Writes (`--full` wipes) | — |
+| `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/{store,target}/` | Writes (`--full` wipes) | — |
 | `scripts/reset_workflow.py` | `.agac/batch_state/` | Writes (`--full` reclaims) | — |
 | `scripts/inspect_action.py` | `agent_config/{workflow}.yml` | Reads (via `agac inspect`) | — |
 | `agac-operations/scripts/run_health.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Reads | — |

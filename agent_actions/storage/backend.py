@@ -4,7 +4,7 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
@@ -437,16 +437,6 @@ class StorageBackend(ABC):
     def save_metadata(self, key: str, value: str) -> None:
         """Store a metadata key-value pair. Clears related caches."""
         self._save_metadata_raw(key, value)
-        self._forget_cached_metadata(key)
-
-    def save_and_delete_metadata(self, saves: Mapping[str, str], deletes: Iterable[str]) -> None:
-        """Store *saves* and delete *deletes* in one transaction: all of it lands, or none."""
-        deletes = list(deletes)
-        self._save_and_delete_metadata_raw(saves, deletes)
-        for key in [*saves, *deletes]:
-            self._forget_cached_metadata(key)
-
-    def _forget_cached_metadata(self, key: str) -> None:
         if key == "execution_order":
             self._execution_order_cache = None
         elif key == "dependency_graph":
@@ -455,11 +445,6 @@ class StorageBackend(ABC):
     @abstractmethod
     def _save_metadata_raw(self, key: str, value: str) -> None:
         """Store a metadata key-value pair to the backend."""
-        ...
-
-    @abstractmethod
-    def _save_and_delete_metadata_raw(self, saves: Mapping[str, str], deletes: list[str]) -> None:
-        """Apply the saves and deletes in one transaction; on an error, apply none of them."""
         ...
 
     @abstractmethod

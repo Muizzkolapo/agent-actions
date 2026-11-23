@@ -403,7 +403,7 @@ agac command-name [options]
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name (required). `-a` names the same option. |
 | `--json` | Show the output as JSON |
 
 **Examples:**

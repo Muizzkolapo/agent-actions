@@ -2,7 +2,7 @@
 
 Pins three behaviors:
 
-1. `batch status` / `batch retrieve` expose `-a/--agent` and `--action`.
+1. `batch status` / `batch retrieve` expose `-w/--workflow` and `--action`.
 2. The CLI resolves the registry from the per-workflow SQLite DB
    (`agent_workflow/<wf>/agent_io/store/<wf>.db`) and looks it up by the
    real action name (`batch_registry:{action_name}`).
@@ -40,14 +40,14 @@ def single_workflow_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
 
 class TestFlagSurface:
-    def test_status_advertises_agent_and_action_flags(self):
+    def test_status_advertises_workflow_and_action_flags(self):
         result = CliRunner().invoke(cli, ["batch", "status", "--help"])
-        assert "--agent" in result.output, "batch status must accept -a/--agent"
+        assert "--workflow" in result.output, "batch status must accept -w/--workflow"
         assert "--action" in result.output, "batch status must accept --action"
 
-    def test_retrieve_advertises_agent_and_action_flags(self):
+    def test_retrieve_advertises_workflow_and_action_flags(self):
         result = CliRunner().invoke(cli, ["batch", "retrieve", "--help"])
-        assert "--agent" in result.output, "batch retrieve must accept -a/--agent"
+        assert "--workflow" in result.output, "batch retrieve must accept -w/--workflow"
         assert "--action" in result.output, "batch retrieve must accept --action"
 
 
