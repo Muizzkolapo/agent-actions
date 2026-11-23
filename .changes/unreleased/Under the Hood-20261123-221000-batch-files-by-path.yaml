@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: >-
+  A batch keys an input file only by its path under the action's input root. The code
+  that kept a nested file under its basename, for a store an earlier version wrote, is
+  removed, with the `batch_file_names:<action>` record it kept. The store refuses a store
+  at a storage format other than 4, so no store that this code was for can be opened.
+time: 2026-11-23T22:10:00.000000+00:00
