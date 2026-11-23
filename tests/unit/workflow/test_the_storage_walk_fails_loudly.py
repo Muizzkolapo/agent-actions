@@ -80,7 +80,8 @@ class TestALostEntryIsCountedAndNamed:
 
     def test_a_partial_loss_counts_both_the_read_and_the_lost(self, tmp_path):
         """The count has to be found-not-processed, or a partial failure looks complete."""
-        runner = _runner(reading=[{"content": {}}, sqlite3.Error("row gone")])
+        # Checked r1, checked r2 (lost), then r1 read again to process it.
+        runner = _runner(reading=[{"content": {}}, sqlite3.Error("row gone"), {"content": {}}])
         found, _, errors = process_from_storage_backend(runner, _params(tmp_path))
 
         assert found == 2, f"one read + one lost is still two entries, got {found}"
@@ -89,7 +90,8 @@ class TestALostEntryIsCountedAndNamed:
 
 class TestAHealthyWalkIsUnchanged:
     def test_nothing_lost_counts_only_what_was_read(self, tmp_path):
-        runner = _runner(reading=[{"content": {}}, {"content": {}}])
+        # Each entry is read to check it before any is processed, then to process it.
+        runner = _runner(reading=[{"content": {}}] * 4)
         found, _, errors = process_from_storage_backend(runner, _params(tmp_path))
 
         assert found == 2

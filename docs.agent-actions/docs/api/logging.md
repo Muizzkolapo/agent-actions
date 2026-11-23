@@ -491,6 +491,7 @@ fire_event(StepCompleteEvent(
 - `elapsed_time` (float): The wall time of the level
 - `completed` / `partial` / `skipped` / `failed` / `unfinished` (int): The number of actions for each outcome. Their sum is the size of the level
 - `batch_pending` (List[str]): The actions whose batch jobs are not complete yet. If the list is not empty, the level paused and did not finish
+- `peak_rss_mb` (float | None): The most resident memory the process has held so far, in MB, read when the level ends. It is `None` where the platform does not report it (Windows). Compare it across steps to find the step that raised it
 
 ---
 

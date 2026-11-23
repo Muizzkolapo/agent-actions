@@ -110,10 +110,11 @@ class TestStorageBackendMerge:
             ["data.json"],  # node_1
             ["data.json"],  # node_2
         ]
+        # Each file is read once to check it before any is processed, then to process it.
         runner.storage_backend.read_target.side_effect = [
             [{"source_guid": "abc", "field_1": "A"}],  # node_1/data.json
             [{"source_guid": "abc", "field_2": "B"}],  # node_2/data.json
-        ]
+        ] * 2
 
         # Mock _process_single_file to capture the processed data
         processed_data = []
@@ -155,10 +156,11 @@ class TestStorageBackendMerge:
             ["file_a.json"],  # node_1
             ["file_b.json"],  # node_2
         ]
+        # Each file is read once to check it before any is processed, then to process it.
         runner.storage_backend.read_target.side_effect = [
             [{"data": "a"}],
             [{"data": "b"}],
-        ]
+        ] * 2
 
         processed_data = []
 
@@ -192,9 +194,10 @@ class TestStorageBackendMerge:
         runner.storage_backend.list_target_files.side_effect = [
             ["subdir/nested/file.json"],  # node_1
         ]
+        # Read once to check it before any file is processed, then to process it.
         runner.storage_backend.read_target.side_effect = [
             [{"data": "value"}],
-        ]
+        ] * 2
 
         # Capture the source_relative_path passed to strategy
         captured_params = []

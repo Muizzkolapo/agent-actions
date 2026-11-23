@@ -348,6 +348,10 @@ class StorageBackend(ABC):
             self._reconstruction_cache[cache_key] = result
         return plain_copy(self._reconstruction_cache[cache_key])
 
+    def forget_reconstructed(self, action_name: str, relative_path: str) -> None:
+        """Drop one file's reconstructed rows from the cache; the next read rebuilds them."""
+        self._reconstruction_cache.pop((action_name, relative_path), None)
+
     def target_rows_per_source_guid(self, action_name: str) -> dict[str, int]:
         """How many stored rows this action holds for each identity.
 

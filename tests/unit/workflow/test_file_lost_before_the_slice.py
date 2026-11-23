@@ -57,6 +57,9 @@ class _Backend:
             raise self._read_exception or SerializationError("bad blob")
         return self._by_action[action_name][relative_path]
 
+    def forget_reconstructed(self, _action_name, _relative_path):
+        pass
+
     def load_metadata(self, _key):
         return None
 
