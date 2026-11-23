@@ -82,9 +82,9 @@ A failed action has priority: when one action failed and another action holds fa
 A filtered record, a record that a guard skipped, or a record below a failed record does not change the code.
 
 :::warning[CAUTION]
-In earlier versions, a paused run and a run that finished with failed or exhausted records
-exited `0`. They now exit `4` and `3`. A script that stops on each non-zero code (`set -e`)
-must accept `4` after it submits a batch, or use `--wait`.
+A paused run exits `4`. A run that finished with failed or exhausted records exits `3`.
+A script that stops on each non-zero code (`set -e`) must accept `4` after it submits a
+batch, or use `--wait`.
 :::
 
 ## When the Quota of a Provider Is at Its Limit {/* #quota-stop */}

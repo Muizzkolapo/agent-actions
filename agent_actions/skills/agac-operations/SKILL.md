@@ -67,7 +67,7 @@ See run (docs: `reference/cli/run`), retry (docs: `reference/cli/retry`), dispos
 
 You can set `run_mode` in `defaults:` and override it on one action. `llm_judge` calls follow the action's mode, or `expect: {judge_mode: batch | online}`. See Run modes (docs: `reference/execution/run-modes`) and Batch recovery (docs: `reference/execution/batch-recovery`).
 
-CAUTION: The batch and online paths had differences in earlier releases (the text of a `json_mode: false` action, judge calls, the context-window check). Current releases make them alike. After you upgrade agent-actions, run your sample in batch mode once, and compare it with an online run of the same records.
+The batch and online paths read an answer, call the judge and check the context window in the same way. Before a large batch run, run your sample in batch mode once, and compare it with an online run of the same records.
 
 ## Resume and recovery
 

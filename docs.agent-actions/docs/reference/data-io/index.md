@@ -6,7 +6,7 @@ sidebar_position: 1
 # Data I/O
 
 :::note[Storage backend]
-SQLite. All source and target records are in a single SQLite database for each workflow, at `agent_io/store/<workflow>.db`. `agent_io/staging/` holds your input as on-disk files. The framework does not write `agent_io/source/`.
+SQLite. All source and target records are in a single SQLite database for each workflow, at `agent_io/store/<workflow>.db`. `agent_io/staging/` holds your input as on-disk files.
 :::
 
 Every workflow needs data to flow in, through and out. Agent Actions uses a standardized layout that makes this flow predictable and traceable.
@@ -105,7 +105,7 @@ The `source_guid` field gives lineage tracking. You can trace any output record 
 
 ## Storage Backend
 
-All workflow data is in `agent_io/store/<workflow>.db`. The framework manages this file. The file is created on the first `agac run`. It is migrated in place when columns are added. `--fresh` truncates the file (it does not delete it).
+All workflow data is in `agent_io/store/<workflow>.db`. The framework manages this file. The file is created on the first `agac run`. `--fresh` truncates the file (it does not delete it).
 
 ### SQLite Database Schema
 
