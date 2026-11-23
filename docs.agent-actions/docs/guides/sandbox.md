@@ -55,6 +55,7 @@ The two kinds of run share these items:
 - The input: `agent_io/staging/` or the data source of the workflow.
 - The run lock, `agent_io/store/<workflow>.db.lock`. A sandbox run and a real run of one workflow cannot run at the same time. The second run stops with `Another run of workflow '<workflow>' is in progress`.
 - The local records of the mock batch provider, under `.agac/batch_state/`.
+- The rendered workflow file, under `artefact/rendered_workflows/`.
 
 `--fresh` with `--sandbox` clears the sandbox output only.
 
