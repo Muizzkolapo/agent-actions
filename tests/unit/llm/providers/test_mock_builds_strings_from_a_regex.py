@@ -7,6 +7,7 @@ caller can fall back to generate-and-check.
 
 from __future__ import annotations
 
+import logging
 import random
 import re
 
@@ -31,6 +32,8 @@ PATTERNS = [
     r"[\d.]{1,5}%",
     r"^[a-z]+?\.[A-Z]{2,}$",
     r"\(\d{3}\) \d{3}-\d{4}",
+    r"[\n-\r]+",
+    r"a{1000}",
 ]
 
 
@@ -60,3 +63,69 @@ def test_one_seed_gives_one_sample():
 def test_a_pattern_outside_the_subset_is_refused(pattern):
     with pytest.raises(UnsupportedPattern):
         generate(pattern, random.Random(0))
+
+
+@pytest.mark.parametrize("pattern", [r"[\d-z]", r"a{2}{3}", r"{3}", r"x+{2}"])
+def test_a_pattern_python_refuses_is_refused(pattern):
+    with pytest.raises(UnsupportedPattern):
+        generate(pattern, random.Random(0))
+
+
+@pytest.mark.parametrize("pattern", [r"a{1001}", r"a{2,5000}", r"a{1001,}", r"a{,99999}"])
+def test_a_repeat_count_above_the_cap_is_refused(pattern):
+    with pytest.raises(UnsupportedPattern):
+        generate(pattern, random.Random(0))
+
+
+NESTED = "(?:" * 400 + "a" + ")" * 400
+TOO_DEEP_FOR_RE = "(?:" * 2000 + "a" + ")" * 2000
+
+
+@pytest.mark.parametrize("pattern", [NESTED, TOO_DEEP_FOR_RE], ids=["nested", "deeper"])
+def test_a_pattern_nested_too_deep_is_refused(pattern):
+    with pytest.raises(UnsupportedPattern):
+        generate(pattern, random.Random(0))
+
+
+@pytest.mark.parametrize("pattern", [NESTED, TOO_DEEP_FOR_RE], ids=["nested", "deeper"])
+def test_a_schema_pattern_nested_too_deep_falls_back_to_plain_text(pattern):
+    from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
+
+    FakeDataGenerator.set_context(seed=1)
+
+    assert FakeDataGenerator.from_pattern(pattern) is None
+    assert isinstance(
+        FakeDataGenerator.generate_from_schema({"type": "string", "pattern": pattern}, 1), str
+    )
+
+
+def _answer_with_rule_pattern(pattern: str) -> dict:
+    from agent_actions.llm.providers.agac.client import AgacClient
+
+    AgacClient.reset()
+    config = {
+        "name": "extract",
+        "json_mode": True,
+        "expect": {
+            "repair": "none",
+            "expectations": [
+                {"type": "matches_regex", "field": "code", "params": {"pattern": pattern}}
+            ],
+        },
+    }
+    schema = {"type": "object", "properties": {"code": {"type": "string"}}}
+    [record] = AgacClient.call_json(None, config, "Extract.", "{}", {"name": "o", "schema": schema})
+    return record
+
+
+@pytest.mark.parametrize("pattern", [NESTED, TOO_DEEP_FOR_RE], ids=["nested", "deeper"])
+def test_a_rule_pattern_nested_too_deep_still_gets_a_record(pattern):
+    assert isinstance(_answer_with_rule_pattern(pattern)["code"], str)
+
+
+def test_a_rule_pattern_python_cannot_compile_is_named_as_unmeetable(caplog):
+    caplog.set_level(logging.WARNING)
+
+    _answer_with_rule_pattern(TOO_DEEP_FOR_RE)
+
+    assert any("no value can meet it" in r.getMessage() for r in caplog.records)

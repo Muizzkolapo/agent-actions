@@ -540,7 +540,7 @@ class FakeDataGenerator:
             try:
                 text = regex_gen.generate(pattern, rng)
                 matched = re.search(pattern, text) is not None
-            except (regex_gen.UnsupportedPattern, re.error):
+            except (regex_gen.UnsupportedPattern, re.error, RecursionError):
                 return None
             if matched and (bounds is None or bounds[0] <= len(text) <= bounds[1]):
                 return text

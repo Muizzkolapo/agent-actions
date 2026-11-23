@@ -9,12 +9,16 @@ with :mod:`re`, because a pattern inside the subset can still match nothing.
 
 from __future__ import annotations
 
+import functools
 import random
+import re
 import string
 from typing import Any
 
 # Repeats an unbounded quantifier may add above its minimum.
 UNBOUNDED_EXTRA = 3
+# The largest count a braced repeat may name.
+MAX_REPEAT = 1000
 
 _DIGITS = string.digits
 _WORD = string.ascii_letters + string.digits + "_"
@@ -33,7 +37,25 @@ class UnsupportedPattern(ValueError):
 
 def generate(pattern: str, rng: random.Random) -> str:
     """One string built from *pattern*, drawn with *rng*."""
-    return _render(_Parser(pattern).parse(), rng)
+    node = _parsed(pattern)
+    if isinstance(node, UnsupportedPattern):
+        raise UnsupportedPattern(str(node))
+    return _render(node, rng)
+
+
+@functools.lru_cache(maxsize=256)
+def _parsed(pattern: str) -> Node | UnsupportedPattern:
+    """The tree of *pattern*, or why it is refused; kept, because a mock asks many times."""
+    try:
+        # What Python refuses is refused here too, so the parser reads only valid syntax.
+        re.compile(pattern)
+        return _Parser(pattern).parse()
+    except UnsupportedPattern as e:
+        return e
+    except re.error as e:
+        return UnsupportedPattern(f"Python refuses the pattern: {e}")
+    except RecursionError:
+        return UnsupportedPattern("the pattern is nested too deep")
 
 
 def _complement(chars: str) -> str:
@@ -130,8 +152,10 @@ class _Parser:
                 break
             first = False
             if char == "\\":
-                members.append(self._escape(_SET_ESCAPES))
-                continue
+                char = self._escape(_SET_ESCAPES)
+                if len(char) != 1:
+                    members.append(char)
+                    continue
             if self._peek() == "-" and self.pos + 1 < len(self.pattern):
                 end = self.pattern[self.pos + 1]
                 if end != "]":
@@ -198,6 +222,8 @@ class _Parser:
             return None
         if high_text and not high_text.isdigit():
             return None
+        if any(int(count) > MAX_REPEAT for count in (low_text, high_text) if count):
+            raise UnsupportedPattern(f"a repeat count above {MAX_REPEAT}")
         low = int(low_text) if low_text else 0
         if not comma:
             high = low

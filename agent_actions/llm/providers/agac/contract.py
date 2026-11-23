@@ -10,8 +10,10 @@ and field, and the best attempt is returned.
 from __future__ import annotations
 
 import copy
+import functools
 import json
 import logging
+import re
 import threading
 from dataclasses import dataclass, field
 from typing import Any
@@ -181,12 +183,20 @@ class Contract:
             return record
         fields = _field_schemas(schema)
         echoes = self._echoes(fields)
-        if not self.rules:
+        rules = [rule for rule in self.rules if _can_pass(rule)]
+        # No record meets these, so no try is spent on them.
+        unmet = [
+            (_target(rule), f"{rule.resolved_id} (no value can meet it)")
+            for rule in self.rules
+            if not _can_pass(rule)
+        ]
+        if not rules:
             record.update(echoes)
+            self._report(unmet, fields)
             return record
 
-        suite = Suite(name=f"{self.action}:mock", expectations=self.rules)
-        plans = self._plans(fields, echoes)
+        suite = Suite(name=f"{self.action}:mock", expectations=rules)
+        plans = self._plans(rules, fields, echoes)
         best: dict[str, Any] = record
         best_failed: tuple[list[tuple[str, str]], list[tuple[str, str]]] | None = None
         for _ in range(TRIES):
@@ -194,6 +204,7 @@ class Contract:
                 record[name] = self._value(name, fields.get(name, {}), plan, attempt, echoes)
             refused, failed = self._failures(suite, record, plans, fields)
             if not refused and not failed:
+                self._report(unmet, fields)
                 return record
             # A record the schema refuses is worse than one that fails only rules.
             rank = (len(refused), len(failed))
@@ -201,7 +212,7 @@ class Contract:
                 # Each try replaces a field's value whole, so a shallow copy keeps this one.
                 best, best_failed = dict(record), (refused, failed)
             record = FakeDataGenerator.generate_from_schema(schema, attempt)
-        self._report([*best_failed[0], *best_failed[1]] if best_failed else [], fields)
+        self._report([*unmet, *(best_failed[0] + best_failed[1] if best_failed else [])], fields)
         return best
 
     def _failures(
@@ -240,11 +251,12 @@ class Contract:
                 found[name] = values[name]
         return found
 
+    @staticmethod
     def _plans(
-        self, fields: dict[str, dict[str, Any]], echoes: dict[str, Any]
+        rules: list[Expectation], fields: dict[str, dict[str, Any]], echoes: dict[str, Any]
     ) -> dict[str, _FieldPlan]:
         plans: dict[str, _FieldPlan] = {}
-        for rule in self.rules:
+        for rule in rules:
             selector = rule.field
             if isinstance(selector, str):
                 if selector.endswith(WILDCARD_SUFFIX):
@@ -482,6 +494,22 @@ def _passes(rule: Expectation, value: Any) -> bool:
     except Exception:
         logger.debug("Rule '%s' raised on a mock value", rule.resolved_id, exc_info=True)
         return False
+
+
+def _can_pass(rule: Expectation) -> bool:
+    """False for a rule whose pattern Python cannot compile: its check fails on every value."""
+    if rule.type != "matches_regex":
+        return True
+    return _compiles(str(rule.params.get("pattern")))
+
+
+@functools.lru_cache(maxsize=256)
+def _compiles(pattern: str) -> bool:
+    try:
+        re.compile(pattern)
+    except (re.error, RecursionError):
+        return False
+    return True
 
 
 def _forbids(rule: Expectation, value: str) -> bool:
