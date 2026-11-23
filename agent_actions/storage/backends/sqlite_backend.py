@@ -66,7 +66,7 @@ class SQLiteBackend(
             source_guid TEXT NOT NULL,
             data TEXT NOT NULL,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            repeat_of_source_guid TEXT DEFAULT NULL,
+            repeat_of_source_guid TEXT NOT NULL DEFAULT '',
             UNIQUE(relative_path, source_guid)
         )
     """

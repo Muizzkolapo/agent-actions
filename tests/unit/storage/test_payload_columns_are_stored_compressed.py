@@ -214,13 +214,14 @@ class TestSourceData:
 
     def test_a_repeat_chain_is_found_in_compressed_rows(self, backend):
         backend.write_source(
-            FILE, [_source(1), _source(2, repeat_of_source_guid="guid-1"), _source(3)]
+            FILE,
+            [
+                _source(1),
+                _source(2, repeat_of_source_guid="guid-1"),
+                _source(3),
+                _source(8, repeat_of_source_guid="guid-3"),
+            ],
         )
-        backend.connection.execute(
-            "INSERT INTO source_data (relative_path, source_guid, data) VALUES (?, 'guid-8', ?)",
-            (FILE, json.dumps(_source(8, repeat_of_source_guid="guid-3"))),
-        )
-        backend.connection.commit()
 
         assert backend.records_share_a_repeat_chain(["guid-1"]) is True
         assert backend.records_share_a_repeat_chain(["guid-2"]) is True

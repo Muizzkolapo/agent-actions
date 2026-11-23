@@ -49,14 +49,14 @@ CREATE TABLE IF NOT EXISTS source_data (
     source_guid TEXT NOT NULL,
     data TEXT NOT NULL,               -- the full input record as JSON, stored compressed
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    repeat_of_source_guid TEXT DEFAULT NULL,  -- the guid this row repeats; '' when none
+    repeat_of_source_guid TEXT NOT NULL DEFAULT '',  -- the guid this row repeats; '' when none
     UNIQUE(relative_path, source_guid)
 )
 ```
 
 Indexes: `idx_source_path ON source_data(relative_path)`, `idx_source_repeat_of ON source_data(repeat_of_source_guid)`
 
-`repeat_of_source_guid` copies the row's own field out of `data`, which SQLite cannot read once compressed, so `records_share_a_repeat_chain` asks the index in both directions. NULL means the row was written before the column existed (or by a version that does not write it, or holds a value other than a non-empty string): only those rows have their payload read.
+`repeat_of_source_guid` copies the row's own field out of `data`, which SQLite cannot read once compressed, so `records_share_a_repeat_chain` asks the index in both directions and decodes no row. The column is never NULL: `write_source` stores `''` for a row that repeats nothing, and refuses a row whose `repeat_of_source_guid` is present but not a non-empty string (`DataValidationError`).
 
 Deduplication: `INSERT OR IGNORE` when `enable_deduplication=True` (default), `INSERT OR REPLACE` otherwise. Keyed on `(relative_path, source_guid)`.
 
@@ -237,7 +237,7 @@ decodes nothing; every run path that reads only ids and dispositions asks for th
 so a forensic column it never uses cannot fail it. SQL that looked inside these
 columns is gone or guarded:
 `has_target_rows` and `preview_target` read `record_count`, and
-`records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes in Python only a compressed row whose column is NULL. Outside the backend, `agac records` prints stored records and failed
+`records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes nothing. Outside the backend, `agac records` prints stored records and failed
 records' inputs; `sqlite3` shows these columns as blobs.
 
 **Identity contract.** The table is a bounded historical log; `target_data`
