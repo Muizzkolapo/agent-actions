@@ -14,7 +14,7 @@ class TestCommandErrorHandling:
         """Create a Click test runner."""
         return CliRunner()
 
-    @pytest.mark.parametrize("command", ["run", "schema", "clean", "status"])
+    @pytest.mark.parametrize("command", ["run", "schema", "status"])
     def test_missing_agent_argument(self, runner, command):
         """The command exits as a usage error when the workflow is missing."""
         result = runner.invoke(cli, [command])

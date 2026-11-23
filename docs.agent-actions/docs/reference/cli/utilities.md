@@ -127,17 +127,26 @@ agac example install contract_reviewer my_project
 
 ## clean
 
-The `clean` command removes the working directories of a workflow under `agent_io/`. By default, it removes only `agent_io/source/`. The framework does not write this directory. Thus, on a project without this directory, a plain `clean` finds nothing to remove. The command does not touch your staged input. It removes other items only if you select them with an option.
+The `clean` command removes the working directories of a workflow under `agent_io/`. You must select what to remove with `--target` or `--all`.
 
 If `clean` finds something to remove during a run or a retry of the workflow, it removes nothing. It exits 1 with `Another run of workflow '<workflow>' is in progress` (see [Concurrent runs](./run.md#concurrent-runs)). `clean` holds the same lock from before it asks for confirmation until it finishes. It keeps the lock file. After `--all`, `agent_io/store/` holds only the empty `<workflow>.db.lock`.
 
 ```bash
-agac clean -w <workflow-name> [options]
+agac clean -w <workflow-name> --target|--all [-f]
+```
+
+If you do not give `--target` or `--all`, the command removes nothing. It prints the choices on stderr and stops with exit code 2:
+
+```text
+Error: Give --target or --all to say what to clean:
+  --target     Remove agent_io/target/, the generated output.
+  --all        Remove all agent_io directories, the store included,
+               and reclaim the local records of the workflow's batches.
+  -f, --force  Do not ask for confirmation.
 ```
 
 The command removes these items:
-- `agent_io/source/`: The framework does not write this directory. The command removes it if it is present (always).
-- `agent_io/target/`: Your generated output (only with `--target` or `--all`).
+- `agent_io/target/`: Your generated output (with `--target` or `--all`).
 - `agent_io/staging/` and the durable store: Your input data and run history (only with `--all`).
 - The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data.
 
@@ -146,15 +155,12 @@ The command removes these items:
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name (required). `-a` names the same option. |
 | `-f, --force` | Skip the interactive confirmation |
-| `--target` | Also remove `agent_io/target/`, your generated output |
+| `--target` | Remove `agent_io/target/`, your generated output |
 | `--all` | Remove all directories, which include target, staging and the durable store. Also remove the data that a provider recorded locally about the batches of this workflow. You cannot recover the removed data |
 
 **Examples:**
 ```bash
-# Remove regenerable preprocessed inputs (with confirmation)
-agac clean -w my_workflow
-
-# Also remove generated output
+# Remove generated output (with confirmation)
 agac clean -w my_workflow --target
 
 # Remove everything, including staging inputs and the durable store

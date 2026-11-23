@@ -110,7 +110,7 @@
 | `StatusCommand` | Class | Implementation of the status command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the status command. | - |
 | `status` | Function | Display the status of an agent workflow. | - |
-| `clean.py` | Module | Clean command for the Agent Actions CLI. | `cli`, `llm_invocation`, `validation` |
+| `clean.py` | Module | Clean command for the Agent Actions CLI. With neither `--target` nor `--all` it removes nothing and exits 2 with the choices (a Click usage error), checked before the workflow and the project. It never removes `agent_io/source/`. | `cli`, `llm_invocation`, `validation` |
 | `clean_cli` | Function | CLI entrypoint for 'clean'. | - |
 | `preview.py` | Module | Preview command for viewing SQLite storage data. Unwraps namespaced `content[action_name]` when displaying action output. | `cli`, `storage`, `validation` |
 | `PreviewCommand` | Class | Implementation of the preview command. | - |
@@ -156,9 +156,8 @@
 | `ListUDFsCommand.execute()` | `tools/{workflow}/*.py` | Reads | — |
 | `PreviewCommand.execute()` | `agent_io/target/{action}/` | Reads | — |
 | `BaseInspectCommand._load_inspector()` | `agent_config/{workflow}.yml` | Reads | — |
-| `clean_cli()` | `agent_io/source/` | Writes | — |
-| `clean_cli()` | `agent_io/staging/` | Writes | — |
-| `clean_cli()` | `agent_io/target/{action}/` | Writes | — |
+| `clean_cli()` | `agent_io/staging/` | Writes | `--all` |
+| `clean_cli()` | `agent_io/target/{action}/` | Writes | `--target`, `--all` |
 | `clean_cli()` | `.agac/batch_state/` | Deletes | `--all` |
 
 ## Dependencies

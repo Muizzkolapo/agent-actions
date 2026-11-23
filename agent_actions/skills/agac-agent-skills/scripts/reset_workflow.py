@@ -6,7 +6,7 @@ workflow, while keeping source data and the SQLite store intact. Records already
 completed in the store are carried forward, not regenerated — use --full for a
 true from-scratch rebuild.
 
---full: wipes source/, target/, everything in store/ but the run lock file, and
+--full: wipes target/, everything in store/ but the run lock file, and
 .agent_status.json, then recreates target/, and reclaims what a provider recorded locally under .agac/ about this
 workflow's batches, since the store being removed is what names them. It holds the
 run lock `agac run` takes, so it exits while a run is in progress (without
@@ -168,7 +168,7 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
 
 def _full_reset(root: Path, base: Path, workflow: str, status: Path, had_store: bool) -> None:
     print(
-        f"Full reset: wiping source, store, target, and status under {base}, "
+        f"Full reset: wiping store, target, and status under {base}, "
         "and reclaiming this workflow's local batch records"
     )
     # The store is what names these batches. Removing it over a record that
@@ -177,8 +177,7 @@ def _full_reset(root: Path, base: Path, workflow: str, status: Path, had_store: 
     reclaimed = release_batch_records(root, base, workflow) if had_store else True
     if not reclaimed:
         print("Keeping store/: it is what names the batches whose records stayed.")
-    for sub in ("target", "source"):
-        remove(base / sub)
+    remove(base / "target")
     # Only a store that was there before the lock: one a run made since has not been
     # read for the batches it names.
     if reclaimed and had_store:
@@ -212,7 +211,7 @@ def main() -> None:
         with held_run_lock(base, args.workflow):
             _full_reset(root, base, args.workflow, status, had_store)
     else:
-        print(f"Soft reset: clearing {status} (keeps DB and source)")
+        print(f"Soft reset: clearing {status} (keeps DB)")
         remove(status)
         print(
             f"Done. Run `agac run -a {args.workflow} -u tools` to re-drive the workflow "
