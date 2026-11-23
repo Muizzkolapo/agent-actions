@@ -371,6 +371,64 @@ class TestUnsatisfiable:
         assert len(self._warnings(caplog)) == 2
 
 
+class TestOncePerRun:
+    """A run is told apart by the id the run puts on its events, and by its workflow."""
+
+    SCHEMA = TestUnsatisfiable.SCHEMA
+    CONTRADICTION = TestUnsatisfiable.CONTRADICTION
+
+    def _warnings(self, caplog) -> int:
+        return len(TestUnsatisfiable._warnings(None, caplog))
+
+    def _answer(self, run: str, session: str | None = None, rules=None) -> None:
+        from agent_actions.logging.core.manager import get_manager
+
+        config = _config(rules or self.CONTRADICTION)
+        if session:
+            config["workflow_session_id"] = session
+        with get_manager().context(correlation_id=run):
+            AgacClient.call_json(
+                None, config, SEEDS[0], "{}", {"name": "out", "schema": self.SCHEMA}
+            )
+
+    @pytest.mark.parametrize("mode", ["online", "batch"])
+    def test_a_new_run_logs_an_unmet_constraint_again(self, mode, caplog):
+        from agent_actions.logging.core.manager import get_manager
+
+        caplog.set_level(logging.WARNING)
+        for run in ("run-1", "run-1", "run-2"):
+            with get_manager().context(correlation_id=run):
+                ANSWER[mode](self.SCHEMA, self.CONTRADICTION, SEEDS[0])
+
+        assert self._warnings(caplog) == 2
+
+    def test_each_workflow_of_a_run_logs_its_own(self, caplog):
+        caplog.set_level(logging.WARNING)
+        self._answer("run-1", session="workflow_a")
+        self._answer("run-1", session="workflow_b")
+
+        assert self._warnings(caplog) == 2
+
+    def test_the_rules_are_read_once_per_action_in_a_run(self, monkeypatch):
+        from agent_actions.expectations import service
+
+        built: list[str] = []
+        real = service.create_expectation_service_from_config
+
+        def counting(expect, action_name, agent_config):
+            built.append(action_name)
+            return real(expect, action_name=action_name, agent_config=agent_config)
+
+        monkeypatch.setattr(service, "create_expectation_service_from_config", counting)
+        for _ in range(3):
+            self._answer("run-1")
+        changed = [{**self.CONTRADICTION[0], "params": {"values": ["low"]}}]
+        self._answer("run-1", rules=changed)
+        self._answer("run-2")
+
+        assert built == ["extract", "extract", "extract"]
+
+
 class TestAPatternOnAFieldThatIsNotAString:
     """The real check matches against `str(value)`, so a number can meet a pattern."""
 

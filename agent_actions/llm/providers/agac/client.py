@@ -12,7 +12,7 @@ import time
 import uuid
 from typing import Any, ClassVar
 
-from agent_actions.llm.providers.agac.contract import Contract, reset_reports
+from agent_actions.llm.providers.agac.contract import Contract, reset_runs
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.client_base import BaseClient, warn_schema_without_json_mode
 from agent_actions.llm.providers.generation_params import VendorParamSpec
@@ -62,7 +62,7 @@ class AgacClient(BaseClient):
         """Reset attempt tracking (useful between tests)."""
         cls._attempt_counts.clear()
         FakeDataGenerator.set_context()  # Reset generator context too
-        reset_reports()
+        reset_runs()
         logger.debug("AgacClient state reset")
 
     @classmethod

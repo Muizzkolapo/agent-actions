@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import copy
 import functools
+import hashlib
 import json
 import logging
 import re
 import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,6 +28,7 @@ from agent_actions.expectations.runner import run_suite
 from agent_actions.expectations.types import Expectation, Suite
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.utils import deep_json
+from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.jsonschema_cache import checked_validator
 
 logger = logging.getLogger(__name__)
@@ -52,21 +55,83 @@ _SCHEMA_CONSTRAINTS = (
     "maxItems",
 )
 
-_reported: set[tuple[str, str]] = set()
-_reported_lock = threading.Lock()
+# Runs one process keeps apart; past this many, the oldest is forgotten.
+_MAX_RUNS = 16
 
 
-def reset_reports() -> None:
-    """Forget which unmet constraints were logged, so the next run logs them again."""
-    with _reported_lock:
-        _reported.clear()
+@dataclass
+class _RunState:
+    reported: set[tuple[str, str]] = field(default_factory=set)
+    rules: dict[tuple[str, str], list[Expectation]] = field(default_factory=dict)
+
+
+_runs: OrderedDict[str, _RunState] = OrderedDict()
+_runs_lock = threading.Lock()
+
+
+def reset_runs() -> None:
+    """Forget every run: the unmet constraints it logged and the rules it read."""
+    with _runs_lock:
+        _runs.clear()
+
+
+def run_key(workflow_session_id: Any) -> str:
+    """The run a request belongs to: its workflow, and the id the run puts on its events.
+
+    Each run sets a new event id when it starts, so each run logs its unmet constraints.
+    """
+    from agent_actions.logging.core.manager import get_manager
+
+    return f"{workflow_session_id or ''}:{get_manager().get_context('correlation_id') or ''}"
+
+
+def _run_state(run: str) -> _RunState:
+    """The state of *run*; call it with ``_runs_lock`` held."""
+    state = _runs.get(run)
+    if state is None:
+        state = _runs[run] = _RunState()
+        while len(_runs) > _MAX_RUNS:
+            _runs.popitem(last=False)
+    else:
+        _runs.move_to_end(run)
+    return state
 
 
 def rules_for(agent_config: dict[str, Any], action: str) -> list[Expectation]:
-    """The rules the run checks the action's output against, less those the mock cannot run."""
+    """The rules the run checks the action's output against, less those the mock cannot run.
+
+    Read once for each action in a run: a ``suite:`` is a file read.
+    """
     expect = agent_config.get("expect")
     if not isinstance(expect, dict):
         return []
+    run = run_key(agent_config.get("workflow_session_id"))
+    key = (action, _fingerprint(agent_config, expect))
+    with _runs_lock:
+        cached = _run_state(run).rules.get(key)
+    if cached is not None:
+        return cached
+    rules = _read_rules(agent_config, expect, action)
+    with _runs_lock:
+        _run_state(run).rules[key] = rules
+    return rules
+
+
+def _fingerprint(agent_config: dict[str, Any], expect: dict[str, Any]) -> str:
+    """What the action's suite is read from, as one hash."""
+    sources = [
+        expect,
+        agent_config.get(SCHEMA_KEY),
+        agent_config.get(SCHEMA_NAME_KEY),
+        agent_config.get("_project_root"),
+    ]
+    text = json.dumps(sources, sort_keys=True, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _read_rules(
+    agent_config: dict[str, Any], expect: dict[str, Any], action: str
+) -> list[Expectation]:
     # Imported here: the service imports the pipeline's error types, which a provider
     # module must not load at import time.
     from agent_actions.expectations.service import create_expectation_service_from_config
@@ -141,6 +206,7 @@ class Contract:
     rules: list[Expectation]
     context: dict[str, Any]
     observe: list[str]
+    workflow_session_id: str | None = None
 
     @classmethod
     def for_request(cls, agent_config: dict[str, Any], action: str, context_data: Any) -> Contract:
@@ -150,6 +216,7 @@ class Contract:
             rules=rules_for(agent_config, action),
             context=parse_context(context_data) if observe else {},
             observe=observe,
+            workflow_session_id=agent_config.get("workflow_session_id"),
         )
 
     def to_task(self) -> dict[str, Any]:
@@ -158,6 +225,7 @@ class Contract:
             "action": self.action,
             "rules": [rule.model_dump(exclude_none=True) for rule in self.rules],
             "observe": self.observe,
+            "workflow_session_id": self.workflow_session_id,
         }
 
     @classmethod
@@ -174,6 +242,7 @@ class Contract:
             rules=rules,
             context=parse_context(context_data),
             observe=[ref for ref in spec.get("observe") or [] if isinstance(ref, str)],
+            workflow_session_id=spec.get("workflow_session_id"),
         )
 
     def generate(self, schema: dict[str, Any], attempt: int) -> Any:
@@ -350,11 +419,13 @@ class Contract:
         grouped: dict[str, list[str]] = {}
         for target, detail in failed:
             grouped.setdefault(target, []).append(detail)
+        run = run_key(self.workflow_session_id)
         for target, details in grouped.items():
-            with _reported_lock:
-                if (self.action, target) in _reported:
+            with _runs_lock:
+                reported = _run_state(run).reported
+                if (self.action, target) in reported:
                     continue
-                _reported.add((self.action, target))
+                reported.add((self.action, target))
             logger.warning(
                 "agac-provider could not meet every constraint on action '%s' field '%s' "
                 "after %d tries; constraints: %s; still failing: %s",
