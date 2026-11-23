@@ -215,7 +215,10 @@ class ConfigManager:
         try:
             if rendered is None:
                 rendered = render_pipeline_with_templates(
-                    config_path, self.template_dir, project_root=self.project_root
+                    config_path,
+                    self.template_dir,
+                    project_root=self.project_root,
+                    workflow=config_type == "workflow",
                 )
             loaded = yaml.safe_load(rendered)
             if not isinstance(loaded, dict):

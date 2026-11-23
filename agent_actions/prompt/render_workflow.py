@@ -647,6 +647,7 @@ def render_pipeline_with_templates(
     compile_schemas: bool = True,
     strict: bool = False,
     project_root: Path | None = None,
+    workflow: bool = True,
 ) -> str:
     """
     Render and compile a YAML pipeline configuration.
@@ -724,7 +725,8 @@ def render_pipeline_with_templates(
         ) from e
 
     workflow_file = workflow_label(yaml_path, project_root)
-    refuse_agents_format(data, workflow_file)
+    if workflow:
+        refuse_agents_format(data, workflow_file)
 
     # Step 2a: Put the actions of each included branch file in place of its include entry
     data, inclusions = expand_includes(data, yaml_path, project_root=project_root)

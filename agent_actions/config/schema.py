@@ -901,7 +901,7 @@ def _agents_format_key(data: Any) -> str | None:
     for key, value in data.items():
         if key == "agents":
             return str(key)
-        if isinstance(value, dict) and "agents" in value:
+        if isinstance(value, dict) and isinstance(value.get("agents"), list):
             return str(key)
         if isinstance(value, list) and any(
             isinstance(entry, dict) and "agent_type" in entry for entry in value
