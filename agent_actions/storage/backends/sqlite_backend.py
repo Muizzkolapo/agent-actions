@@ -27,7 +27,6 @@ from agent_actions.storage.backend import (  # noqa: F401
     Disposition,
     DispositionRow,
     StorageBackend,
-    batch_file_names_key,
 )
 from agent_actions.storage.backends.sqlite.checkpoints import SQLiteCheckpointMixin
 from agent_actions.storage.backends.sqlite.codec import SQLitePayloadCodecMixin

@@ -14,7 +14,7 @@ import logging
 import sqlite3
 import stat as stat_module
 import tempfile
-from collections.abc import Callable, Collection
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1326,18 +1326,12 @@ def _process_stored_entry(
     )
 
 
-def forget_files_of_inputs_gone(
-    storage_backend: Any, action_name: str, gone: list[str], inputs: Collection[str]
-) -> None:
+def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: list[str]) -> None:
     """Delete *gone*, files an action stores from input that is gone.
 
-    The names recorded for batch input files not among *inputs* go too. Raises what
-    the store raises.
+    Raises what the store raises.
     """
-    from agent_actions.llm.batch.infrastructure.context import forget_batch_file_names
-
     storage_backend.delete_target_files(action_name, gone)
-    forget_batch_file_names(storage_backend, action_name, inputs)
     more = len(gone) - _ERROR_SAMPLE_SIZE
     logger.warning(
         "'%s' has no input for %s%s any more, so what it stored for them is deleted. "
@@ -1356,15 +1350,11 @@ def _forget_files_no_input_maps_to(
     """Delete what the action stores for an input no file of a complete walk maps to.
 
     A reset relies on the re-run writing each file again, and a file whose input is
-    gone is never written. A file is stored under its path, a first stage's with a
-    `.json` suffix, or the name recorded for a batch input file, each as the store
-    lists it. Not under a repair, which touches only the records it named. A failure
-    only warns: the rows stay.
+    gone is never written. A file is stored under its path, a first stage's or a batch
+    input file's with a `.json` suffix, each as the store lists it. Not under a repair,
+    which touches only the records it named. A failure only warns: the rows stay.
     """
-    from agent_actions.llm.batch.infrastructure.context import (
-        batch_output_name,
-        recorded_batch_file_names,
-    )
+    from agent_actions.llm.batch.infrastructure.context import batch_output_name
 
     backend = runner.storage_backend
     if backend is None or runner.retried_records or not reached.complete:
@@ -1375,15 +1365,7 @@ def _forget_files_no_input_maps_to(
         kept = {backend.stored_path(name) for name in names}
         gone = [name for name in backend.list_target_files(action_name) if name not in kept]
         if gone:
-            recorded = recorded_batch_file_names(backend, action_name)
-            kept |= {
-                backend.stored_path(batch_output_name(recorded[p]))
-                for p in reached.paths
-                if p in recorded
-            }
-            gone = [name for name in gone if name not in kept]
-        if gone:
-            forget_files_of_inputs_gone(backend, action_name, gone, reached.paths)
+            forget_files_of_inputs_gone(backend, action_name, gone)
     except Exception as e:
         logger.warning(
             "Could not delete what '%s' stores for input that is gone: %s", action_name, e

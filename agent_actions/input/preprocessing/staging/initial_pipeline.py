@@ -98,7 +98,6 @@ class BatchProcessingContext:
     # of a record this run left out is not read as one that is gone. None means
     # unrecorded, and nothing is inferred from it.
     run_inputs: list[dict[str, Any]] | None = None
-    file_type_filter: set[str] | None = None
 
 
 def _save_source_items_helper(
@@ -438,7 +437,6 @@ def process_initial_stage(ctx: InitialStageContext):
             workflow_metadata=ctx.workflow_metadata,
             retried_records=ctx.retried_records,
             run_inputs=offered_to_repair,
-            file_type_filter=ctx.file_type_filter,
         )
         written = _process_batch_mode(batch_ctx)
     else:
@@ -881,45 +879,10 @@ def _prepare_online_data(ctx: DataPreparationContext):
     return data_chunk, src_text
 
 
-def _staged_at_the_top(
-    base_directory: str, file_type_filter: set[str] | None
-) -> Callable[[str], bool]:
-    """Whether a file the walk processes directly under *base_directory* stores as *legacy*.
-
-    The walk's own skip rule decides, so a file it leaves out, or one it cannot read this
-    run, owns no name.
-    """
-    from agent_actions.llm.batch.infrastructure.context import batch_output_name
-    from agent_actions.workflow.runner_file_processing import should_skip_item
-
-    root = Path(base_directory)
-
-    def walked(entry: Path) -> bool:
-        try:
-            return not should_skip_item(entry, root, set(), file_type_filter)
-        except OSError as e:
-            logger.debug("Could not read %s while naming a batch file: %s", entry, e)
-            return False
-
-    def owns(legacy: str) -> bool:
-        stored = batch_output_name(legacy)
-        try:
-            entries = list(root.iterdir())
-        except OSError as e:
-            logger.debug("Could not list %s for top-level inputs: %s", base_directory, e)
-            return False
-        return any(batch_output_name(entry.name) == stored and walked(entry) for entry in entries)
-
-    return owns
-
-
 def _process_batch_mode(ctx: BatchProcessingContext):
     """Process data in batch mode by submitting to batch service."""
     from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
-    from agent_actions.llm.batch.infrastructure.context import (
-        BatchContextManager,
-        batch_file_identity,
-    )
+    from agent_actions.llm.batch.infrastructure.context import BatchContextManager
     from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
     from agent_actions.llm.batch.service import create_registry_manager_factory
     from agent_actions.llm.batch.services.submission import BatchSubmissionService
@@ -954,16 +917,9 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     )
     relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
     output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
-    batch_name = batch_file_identity(
-        relative_path.as_posix(),
-        ctx.agent_name,
-        ctx.storage_backend,
-        base_owner=_staged_at_the_top(ctx.base_directory, ctx.file_type_filter),
-        registry=registry_manager_factory,
-    )
     submission_service.submit_batch_job(
         ctx.agent_config,
-        batch_name,
+        relative_path.as_posix(),
         ctx.data_chunk,
         ctx.output_directory,
         source_data=ctx.data_chunk,
