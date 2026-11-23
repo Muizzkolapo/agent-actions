@@ -288,8 +288,9 @@ def answered_by_repair(storage_backend: Any, action_name: str) -> frozenset[str]
 
 
 # What a run mints for a row whatever it holds: its identifiers, and the history's stamps.
-# `lineage_sources` is the node ids of the rows a row was made from, minted again for a
-# row an action keeps; like `lineage`, nothing reads it to compute a row.
+# `lineage_sources` is the node ids in the lineage of each row a row was made from, and a
+# descendant copies it; it is minted again for a row an action keeps, and like `lineage`,
+# nothing reads it to compute a row.
 _MINTED_PER_RUN: frozenset[str] = frozenset(
     {"target_id", "node_id", "lineage", "lineage_sources", "_state_history", "_delta_mode"}
 )
