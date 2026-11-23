@@ -29,21 +29,21 @@ from tests.helpers.store import stored_rows
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
 
-# Verdicts the fake provider produces. A rule with a closed vocabulary fails by
-# construction against schema-shaped noise, and that failure is the end-to-end
-# signal — not a defect in the fixture.
+# Verdicts each fixture reaches. The fake provider answers an LLM action with a
+# record that meets the action's deterministic rules, so those verdicts pass. A
+# tool action is the project's own code, and its rule fails as written.
 ACCEPTED: dict[str, dict[str, list[str]]] = {
     "custom_check": {"summarize": []},
-    "field_scoped_rules": {"summarize": ["density_accepted_values"]},
-    "inline_rules": {"summarize": ["density_is_known"]},
+    "field_scoped_rules": {"summarize": []},
+    "inline_rules": {"summarize": []},
     "judge_votes_and_budget": {"summarize": []},
     "pair_and_pattern_rules": {"summarize": []},
     "record_expression": {"summarize": []},
-    "repair_auto": {"summarize": ["density_is_known"]},
+    "repair_auto": {"summarize": []},
     "row_condition_on_optional_field": {"summarize": []},
-    "shared_suite": {"summarize": ["density_is_known"], "resummarize": ["density_is_known"]},
+    "shared_suite": {"summarize": [], "resummarize": []},
     "tool_action": {"flatten": ["summary_present"]},
-    "verdict_guard": {"summarize": ["density_is_known"]},
+    "verdict_guard": {"summarize": []},
 }
 
 REFUSED = [
@@ -232,21 +232,19 @@ def test_the_batch_author_submits_and_is_collected(run):
 
 def test_the_batch_author_reaches_the_verdict_its_online_twin_does(run):
     """`field_scoped_rules` is this fixture online: rules declared on the fields
-    they test, nothing judged. Its `accepted_values` rule fails against
-    schema-shaped noise and its `not_null` rule passes, and the batch half has
-    to land in the same place. A batch answering with none of its schema's
-    fields fails both instead, on fields that were never generated — a verdict
-    about the provider rather than about what an author wrote.
+    they test, nothing judged. Online, the fake provider meets its
+    `accepted_values` rule and its `not_null` rule, and the batch half has to
+    land in the same place. A batch answering with none of its schema's fields
+    fails both instead, on fields that were never generated — a verdict about
+    the provider rather than about what an author wrote.
     """
     run(BATCH_ONLY)
     verdict = run(BATCH_ONLY, again=True).verdicts["summarize"]
 
-    assert verdict["failed"] == ["density_is_known"]
+    assert verdict["failed"] == []
     outcomes = {o["id"]: o for o in verdict["outcomes"]}
     assert outcomes["summary_present"]["passed"] is True
-    assert "is not one of" in outcomes["density_is_known"]["detail"], (
-        "the density rule reported an absent field, not a value it rejected"
-    )
+    assert outcomes["density_is_known"]["passed"] is True
 
 
 def test_the_batch_judge_is_sent_the_field_its_rule_references(run):

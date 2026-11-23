@@ -6,6 +6,8 @@ fields:
   - id: exam_density
     type: string
     description: "How densely the page carries exam-worthy material."
+    # Disjoint from the values repair_exhaustion accepts, so no answer meets that rule.
+    enum: [dense, sparse]
   - id: density_reason
     type: string
     description: "Why that rating."

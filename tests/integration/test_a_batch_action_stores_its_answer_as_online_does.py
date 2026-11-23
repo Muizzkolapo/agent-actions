@@ -107,8 +107,8 @@ def model_writes_the_reply(monkeypatch):
 
     answer = FakeDataGenerator.generate_openai_response.__func__
 
-    def batch_reply(cls, custom_id, schema, prompt=None, attempt=1):
-        response = answer(cls, custom_id, schema, prompt, attempt)
+    def batch_reply(cls, custom_id, schema, prompt=None, attempt=1, **kwargs):
+        response = answer(cls, custom_id, schema, prompt, attempt, **kwargs)
         response["choices"][0]["message"]["content"] = REPLY
         return response
 

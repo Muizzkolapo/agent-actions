@@ -12,6 +12,7 @@ import time
 import uuid
 from typing import Any, ClassVar
 
+from agent_actions.llm.providers.agac.contract import Contract, reset_reports
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.client_base import BaseClient, warn_schema_without_json_mode
 from agent_actions.llm.providers.generation_params import VendorParamSpec
@@ -61,6 +62,7 @@ class AgacClient(BaseClient):
         """Reset attempt tracking (useful between tests)."""
         cls._attempt_counts.clear()
         FakeDataGenerator.set_context()  # Reset generator context too
+        reset_reports()
         logger.debug("AgacClient state reset")
 
     @classmethod
@@ -180,9 +182,8 @@ class AgacClient(BaseClient):
 
         if schema:
             actual_schema = FakeDataGenerator.unwrap_schema(schema)
-            fake_data = FakeDataGenerator.generate_from_schema(
-                actual_schema, attempt, prompt=seed_key
-            )
+            contract = Contract.for_request(agent_config, action, context_data)
+            fake_data = contract.generate(actual_schema, attempt)
             logger.debug(
                 "Generated fake data from schema: attempt=%d, fields=%d",
                 attempt,

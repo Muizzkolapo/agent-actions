@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.paths import PathManagerError
+from agent_actions.llm.providers.agac.client import AgacClient
+from agent_actions.llm.providers.agac.contract import Contract, observed_refs, rules_for
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
@@ -105,6 +107,22 @@ class AgacBatchClient(BaseBatchClient):
     def _get_default_model(self) -> str:
         """Return default model name."""
         return "agac-model"
+
+    def prepare_tasks(
+        self, data: list[dict[str, Any]], agent_config: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Each task also carries the action's rules, which the answer must meet as online."""
+        tasks = super().prepare_tasks(data, agent_config)
+        action = AgacClient._action_name(agent_config)
+        spec = Contract(
+            action=action,
+            rules=rules_for(agent_config, action),
+            context={},
+            observe=observed_refs(agent_config),
+        ).to_task()
+        for task in tasks:
+            task["contract"] = spec
+        return tasks
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: dict[str, Any] | None = None
@@ -307,7 +325,11 @@ class AgacBatchClient(BaseBatchClient):
 
             # Straight off the task this client wrote, which holds both.
             openai_response = FakeDataGenerator.generate_openai_response(
-                custom_id, task.get("schema"), task.get("prompt"), attempt
+                custom_id,
+                task.get("schema"),
+                task.get("prompt"),
+                attempt,
+                contract=Contract.from_task(task.get("contract"), task.get("user_content")),
             )
             # A text-mode request that ends by offering its answer's shapes, as a side
             # call's may (a judge's does), gets one of them, seeded by the request alone.
