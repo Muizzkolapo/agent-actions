@@ -99,8 +99,8 @@ def _batch_answers_unparsed():
     """The batch provider's answer for each page of the failing file does not parse."""
     generate = FakeDataGenerator.generate_openai_response.__func__
 
-    def unparsed(cls, custom_id, schema, prompt=None, attempt=1):
-        response = generate(cls, custom_id, schema, prompt, attempt)
+    def unparsed(cls, custom_id, schema, prompt=None, attempt=1, **kwargs):
+        response = generate(cls, custom_id, schema, prompt, attempt, **kwargs)
         if any(page in (prompt or "") for page in PAGES[FAILING]):
             response["choices"][0]["message"]["content"] = "not json"
         return response

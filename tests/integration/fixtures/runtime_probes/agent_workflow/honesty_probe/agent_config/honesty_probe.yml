@@ -9,6 +9,7 @@ defaults:
   model_name: mock
   api_key: OLLAMA_API_KEY
   data_source: { type: local, folder: ./staging, file_type: [json] }
+# `(?!)` is a pattern no string matches, so the mock cannot meet these rules either.
 actions:
   - name: repaired
     intent: "return_last ships a record that still fails"
@@ -24,7 +25,7 @@ actions:
         - id: never_matches
           type: matches_regex
           field: summary
-          params: { pattern: '^NEVER_MATCHES$' }
+          params: { pattern: '(?!)' }
   - name: observed
     intent: "repair none with a failing error rule"
     schema: probe_page_summary
@@ -36,7 +37,7 @@ actions:
         - id: never_matches
           type: matches_regex
           field: summary
-          params: { pattern: '^NEVER_MATCHES$' }
+          params: { pattern: '(?!)' }
   - name: warned
     intent: "a warn rule fails on every record"
     schema: probe_page_summary
@@ -49,4 +50,4 @@ actions:
           type: matches_regex
           field: summary
           severity: warn
-          params: { pattern: '^NEVER_MATCHES$' }
+          params: { pattern: '(?!)' }

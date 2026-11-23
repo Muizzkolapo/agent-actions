@@ -282,8 +282,8 @@ def _submit_and_collect(monkeypatch):
     """Submit the batch, with `{}` as the answer for the blank page, then collect it."""
     answer = FakeDataGenerator.generate_openai_response.__func__
 
-    def empty_for_the_blank_page(cls, custom_id, schema, prompt=None, attempt=1):
-        response = answer(cls, custom_id, schema, prompt, attempt)
+    def empty_for_the_blank_page(cls, custom_id, schema, prompt=None, attempt=1, **kwargs):
+        response = answer(cls, custom_id, schema, prompt, attempt, **kwargs)
         if BLANK in (prompt or ""):
             response["choices"][0]["message"]["content"] = "{}"
         return response

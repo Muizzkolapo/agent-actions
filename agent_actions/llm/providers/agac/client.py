@@ -61,6 +61,9 @@ class AgacClient(BaseClient):
         """Reset attempt tracking (useful between tests)."""
         cls._attempt_counts.clear()
         FakeDataGenerator.set_context()  # Reset generator context too
+        from agent_actions.llm.providers.agac.contract import reset_runs
+
+        reset_runs()
         logger.debug("AgacClient state reset")
 
     @classmethod
@@ -180,9 +183,11 @@ class AgacClient(BaseClient):
 
         if schema:
             actual_schema = FakeDataGenerator.unwrap_schema(schema)
-            fake_data = FakeDataGenerator.generate_from_schema(
-                actual_schema, attempt, prompt=seed_key
-            )
+            # Imported here: every vendor loads this module, and only the mock reads rules.
+            from agent_actions.llm.providers.agac.contract import Contract
+
+            contract = Contract.for_request(agent_config, action, context_data)
+            fake_data = contract.generate(actual_schema, attempt)
             logger.debug(
                 "Generated fake data from schema: attempt=%d, fields=%d",
                 attempt,

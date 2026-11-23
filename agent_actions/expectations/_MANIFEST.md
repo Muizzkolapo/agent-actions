@@ -49,6 +49,7 @@ their results, and the service that runs them around generation.
 | `utils` | outbound | `judge.py` reuses `json_parsing.strip_code_fences` to unwrap a fenced verdict; it deliberately does not reuse `parse_llm_json`, whose best-effort repair would scavenge a verdict out of prose |
 | `cli` | inbound | `cli/expect.py` reports stored verdicts through `report.tally_action` |
 | `llm.batch` | inbound | `preparator.py` reads `judged_context_refs` and keeps `narrow_context` of each record's LLM context on its context-map row; the judge, repair and result-writing steps hand it back as the context source |
+| `llm.providers.agac` | inbound | The mock's `contract.py` resolves an action's suite through `create_expectation_service_from_config`, runs single checks from `registry` and the whole record through `run_suite`, so its answers meet the rules the run checks |
 | `llm` | outbound | `judge.py` builds a `llm.side_calls.SideCall` per judgement and runs it on a `SideCallExecutor`; the executor makes the model call and unwraps the provider payload |
 
 ## Notes

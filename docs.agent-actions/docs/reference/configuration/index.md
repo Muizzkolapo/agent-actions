@@ -390,7 +390,7 @@ The vendor name for Gemini is `gemini`. The name `google` is an alias for it.
 | Ollama (local) | `ollama_local` | ✅ | llama3, mistral |
 | Ollama (cloud) | `ollama_cloud` | ✅ | gpt-oss:120b-cloud |
 | llamafile | `llamafile` | ❌ | any GGUF model that the server loads |
-| Mock (no network, no key) | `agac-provider` | ✅ | any name. The answers come from the schema |
+| Mock (no network, no key) | `agac-provider` | ✅ | any name. The answers come from the schema and the expectation rules of the action. See [Testing rules with the mock provider](../validation/expectations.md#testing-rules-with-the-mock-provider) |
 
 ### Named local runtimes
 

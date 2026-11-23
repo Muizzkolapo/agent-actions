@@ -1,6 +1,6 @@
 """A record out of expectation iterations under `on_exhausted: fail` reads the same in both modes.
 
-Two staged records, a field check that fails the second record it is asked about (once), and
+Two staged records, a field check that fails record `p2` in the first process that checks it, and
 `expect: {repair: retry, max_iterations: 1, on_exhausted: fail}` on `summarize` with a
 reader below it. Online and batch run the same workflow through `agac run` against the agac
 provider mock; only `run_mode` differs. What each leaves stored must match: the record's
@@ -40,7 +40,7 @@ actions:
     intent: "Summarise"
     schema: exhaust_fail_summary
     prompt: $p.Summarize
-    context_scope: { observe: [source.page_content] }
+    context_scope: { observe: [source.page_content, source.page_id] }
     expect: { repair: retry, max_iterations: 1, on_exhausted: ON_EXHAUSTED }
   - name: publish
     dependencies: [summarize]
@@ -53,11 +53,14 @@ actions:
 _SUMMARY = """\
 name: exhaust_fail_summary
 fields:
+  - id: page_id
+    type: string
   - id: summary
     type: string
     expectations:
       - id: summary_ok
-        type: every_other_call_fails
+        type: fails_in_the_first_process
+        params: { row_condition: "page_id == 'p2'" }
 additionalProperties: true
 """
 
@@ -69,23 +72,24 @@ fields:
 additionalProperties: true
 """
 
+# The mock answers `page_id` from the observed `source.page_id`, so the row condition picks
+# p2. The check fails in the first process that calls it, the mock's tries included; a later
+# process, such as a retry, passes.
 _CHECK = """\
-from itertools import count
+import os
 from pathlib import Path
 
 from agent_actions import expectation_check
 
-_calls = count(1)
-_failed_once = Path(__file__).with_name("failed_once")
+_first = Path(__file__).with_name("first_process")
 
 
-@expectation_check("every_other_call_fails")
-def every_other_call_fails(value, params):
-    # The second record it is asked about fails, once. A later process, such as a retry,
-    # finds the mark and passes.
-    if next(_calls) % 2 == 0 and not _failed_once.exists():
-        _failed_once.write_text("x")
-        return False, "the second record fails"
+@expectation_check("fails_in_the_first_process")
+def fails_in_the_first_process(value, params):
+    if not _first.exists():
+        _first.write_text(str(os.getpid()))
+    if _first.read_text() == str(os.getpid()):
+        return False, "the record fails in the first run that checks it"
     return True, ""
 """
 

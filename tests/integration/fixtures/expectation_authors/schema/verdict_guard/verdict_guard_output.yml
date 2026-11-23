@@ -4,6 +4,7 @@ fields:
     type: string
   - id: exam_density
     type: string
+    enum: [high, medium, low]
     expectations:
       - id: density_is_known
         type: accepted_values
