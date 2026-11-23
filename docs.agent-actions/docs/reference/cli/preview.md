@@ -19,6 +19,7 @@ Use `preview` to check quickly which records an action wrote. You do not have to
 | Option | Description |
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` names the same option. |
+| `--sandbox` | Read the output of sandbox runs (`agac run --sandbox`) in place of the output of real runs. See [Sandbox Runs](../../guides/sandbox.md) |
 | `-A, --action TEXT` | The name of the action to preview. If you do not specify it, the command lists all actions. |
 | `-n, --limit INT` | The maximum number of records to show (default: 10) |
 | `--offset INT` | The number of records to skip (default: 0) |

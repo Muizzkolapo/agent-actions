@@ -140,6 +140,7 @@ The report sorts the rules by how frequently they failed. Thus the rule that cos
 | Option | Description |
 |--------|-------------|
 | `-w`, `--workflow` | The workflow name (required). `-a` names the same option. |
+| `--sandbox` | Read the output of sandbox runs (`agac run --sandbox`) in place of the output of real runs. See [Sandbox Runs](../../guides/sandbox.md) |
 | `-A`, `--action` | Limit the report to one action |
 | `--json` | Write the report as JSON on stdout |
 | `--fail-under` | Exit with a non-zero code if the pass percentage of any action is less than this value |

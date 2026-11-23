@@ -25,6 +25,7 @@ resumes from where it stopped.
 | Option | Description |
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` names the same option. |
+| `--sandbox` | Retry the records of a sandbox run (`agac run --sandbox`). The mock provider answers each LLM action, and the retry reads and writes only the sandbox output. See [Sandbox Runs](../../guides/sandbox.md) |
 | `--from TEXT` | The action to start the retry from. If you do not give this option, the retry starts from the earliest failure. |
 | `--record TEXT` | Limit the retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what the command would retry, and do not execute |

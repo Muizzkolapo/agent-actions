@@ -601,7 +601,7 @@ Use the tiers in this order of preference:
 
 ## Testing rules with the mock provider
 
-On `model_vendor: agac-provider`, the mock reads the rules of the action as well as its schema. It reads the same rules as the run: the inline `expectations:` list, the rules of the schema file and a named `suite:`. Thus a workflow that you switch to the mock usually passes its rules, and a repair loop usually ends on the first generation. Some rules can still fail: an `expression` rule, a custom check, a pattern outside the subset below, and constraints that contradict. The mock does this online and in a batch in the same way.
+On `model_vendor: agac-provider`, the mock reads the rules of the action as well as its schema. `agac run --sandbox` sends each LLM action to the mock with no edit to the workflow (see [Sandbox Runs](../../guides/sandbox.md)). It reads the same rules as the run: the inline `expectations:` list, the rules of the schema file and a named `suite:`. Thus a workflow that you switch to the mock usually passes its rules, and a repair loop usually ends on the first generation. Some rules can still fail: an `expression` rule, a custom check, a pattern outside the subset below, and constraints that contradict. The mock does this online and in a batch in the same way.
 
 For each top-level field that a rule names, the mock makes a value that meets the schema and the rules of that field:
 

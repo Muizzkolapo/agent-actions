@@ -19,6 +19,7 @@ The store keeps these payloads compressed. Thus `sqlite3` shows `target_data.dat
 | Option | Description |
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` names the same option. |
+| `--sandbox` | Read the output of sandbox runs (`agac run --sandbox`) in place of the output of real runs. See [Sandbox Runs](../../guides/sandbox.md) |
 | `-A, --action TEXT` | Only the records of this action. If you omit it, the command uses each action that has stored records. |
 | `--source-guid TEXT` | Only the records of this source record, in each action that holds one |
 | `--file TEXT` | Only the records of this stored file (its `relative_path`). Without `-A`, the command uses each action that stores the file. With `--snapshots`, the command uses only the records that failed in the file. |
