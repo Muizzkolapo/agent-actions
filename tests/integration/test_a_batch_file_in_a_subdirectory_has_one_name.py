@@ -190,6 +190,42 @@ def test_a_run_that_sends_nothing_writes_the_file_holding_the_answers(tmp_path, 
     assert batch.backend.list_target_files(ACTION) == [batch_output_name(file)]
 
 
+def test_a_nested_file_first_seen_after_a_top_level_file_of_that_name_left_takes_its_path(
+    tmp_path,
+):
+    """The rows stored under the top-level name stay, and are not the nested file's."""
+    action = _Action(tmp_path)
+    action.run({"page.json": [rec("t1", keep=True)]})
+
+    action.reset()
+    action.run({"sub/page.json": [rec("s1", keep=True)]})
+
+    assert _registry(action) == ["sub/page.json"]
+    assert action.files() == {
+        "page.json": ["processed:t1@batch-1"],
+        "sub/page.json": ["processed:s1@batch-2"],
+    }
+
+
+def test_two_files_of_one_name_are_collected_apart_after_a_restart(tmp_path):
+    """The collect runs in a new process, with only what the store holds."""
+    action = _Action(tmp_path)
+    twins = {"sub1/page.json": [rec("a1", keep=True)], "sub2/page.json": [rec("b1", keep=True)]}
+    action.upstream_holds(twins)
+    for name, inputs in twins.items():
+        action.process(name, inputs)
+
+    action.backend = _reopened(action.backend)
+    action.collect()
+
+    assert _registry(action) == ["sub1/page.json", "sub2/page.json"]
+    assert action.files() == {
+        "sub1/page.json": ["processed:a1@batch-1"],
+        "sub2/page.json": ["processed:b1@batch-2"],
+    }
+    assert _each_record_held_once(action)
+
+
 # A store written by an older version, which keyed the file by its basename.
 
 
