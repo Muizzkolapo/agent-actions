@@ -140,6 +140,7 @@ def project_agent_config(project_config: dict[str, Any]) -> dict[str, Any]:
 
     defaults = project_config.get("default_agent_config", {})
     _refuse_or_raise(defaults, "default_agent_config", "merge_agent_configs")
+    _refuse_undeclared_or_raise(defaults, "merge_agent_configs")
     _refuse_project_split_field(defaults)
     return DefaultAgentConfig.model_validate(defaults).model_dump()
 

@@ -71,7 +71,7 @@ class TestAnUndeclaredKeyIsRefused:
         assert "did you mean 'model_name'?" in _message(caught)
 
     def test_the_agent_merge_refuses_it(self):
-        with pytest.raises(ValidationError, match="unknown default_agent_config key 'few_shot'"):
+        with pytest.raises(ConfigurationError, match="unknown default_agent_config key 'few_shot'"):
             project_agent_config({"default_agent_config": {**BASE, "few_shot": 3}})
 
     def test_the_workflow_defaults_merge_refuses_it(self):
