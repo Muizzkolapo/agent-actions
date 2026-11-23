@@ -75,7 +75,7 @@ class Cleaner:
                 backend.close()
         except StoreFormatError as e:
             # This version cannot read the store, so nothing can name its batches.
-            logger.warning("Removing a store of another storage format: %s", e)
+            logger.debug("Removing a store of another storage format: %s", e)
             click.echo(
                 click.style(
                     f"⚠️  The store for '{self.agent}' uses another storage format, so the "
