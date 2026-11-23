@@ -31,16 +31,17 @@ class SnowflakeSettings(BaseModel):
 class SnowflakeConnector(DbApiConnector):
     """Reads and writes Snowflake through its Python connector.
 
-    Names are written bare, so Snowflake folds them to upper case as it does
-    for a table made by hand, and a result column it folded is read back in
-    lower case. Rows are written in one transaction, but Snowflake commits a
-    CREATE TABLE at once: a first write that fails leaves the new table behind.
+    Names are quoted upper-cased, the name Snowflake gives an unquoted one, so
+    a table made by hand is found and a reserved word is still a name; a result
+    column in upper case is read back in lower case. Rows are written in one
+    transaction, but Snowflake commits a CREATE TABLE at once: a first write
+    that fails leaves the new table behind.
     """
 
     kind = "snowflake"
 
     dialect = Dialect(
-        quote="",
+        fold_upper=True,
         types={
             ColumnType.TEXT: "VARCHAR",
             ColumnType.INTEGER: "NUMBER(38, 0)",

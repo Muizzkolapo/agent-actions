@@ -21,6 +21,15 @@ from agent_actions.errors import ConfigurationError
 logger = logging.getLogger(__name__)
 
 _READ_BATCH = 1000
+
+# How each driver says a table does not exist, in lower case.
+_MISSING_TABLE = (
+    "no such table",  # sqlite
+    "does not exist",  # postgres, redshift, duckdb, snowflake
+    "doesn't exist",  # mysql
+    "not found: table",  # bigquery
+    "table_or_view_not_found",  # databricks
+)
 _WRITE_BATCH = 500
 
 _STANDARD_TYPES: Mapping[ColumnType, str] = {
@@ -37,12 +46,15 @@ class Dialect:
 
     param_style: Literal["qmark", "format", "named"] = "format"
     quote: str = '"'
+    # Quote each name upper-cased: the name a database that folds unquoted names
+    # stores, still quoted, so a reserved word is a name and not a keyword.
+    fold_upper: bool = False
     types: Mapping[ColumnType, str] = field(default_factory=lambda: _STANDARD_TYPES)
     # The type of a column given none; None declares the column with no type.
     untyped: str | None = "TEXT"
 
     def identifier(self, name: str) -> str:
-        return quoted_identifier(name, self.quote)
+        return quoted_identifier(name.upper() if self.fold_upper else name, self.quote)
 
     def markers(self, count: int) -> list[str]:
         """The *count* value markers of one statement, in order."""
@@ -130,14 +142,26 @@ class DbApiConnector(Connector):
 
     def read(self, query: str) -> Iterator[Row]:
         connection = self._open()
+        cursor = None
         try:
             cursor = self._read_cursor(connection)
             cursor.execute(query)
+            if cursor.description is None:
+                raise ConfigurationError(
+                    "The query returned no rows to read: end it in a SELECT",
+                    context={"query": query},
+                )
             names = [self._column_name(column[0]) for column in cursor.description]
+            repeated = sorted({name for name in names if names.count(name) > 1})
+            if repeated:
+                raise ConfigurationError(
+                    f"The query returns {', '.join(repeated)} more than once; give each "
+                    "column its own name with AS",
+                    context={"query": query, "repeated": repeated},
+                )
             while batch := cursor.fetchmany(_READ_BATCH):
                 for values in batch:
                     yield dict(zip(names, values, strict=True))
-            cursor.close()
         except ConfigurationError:
             raise
         except Exception as error:
@@ -145,6 +169,8 @@ class DbApiConnector(Connector):
                 f"The query failed: {error}", context={"query": query}, cause=error
             ) from error
         finally:
+            # Closed on every path: an unbuffered result left open blocks the next query.
+            _close_quietly(cursor)
             self._rollback(connection)
 
     def write(
@@ -179,7 +205,7 @@ class DbApiConnector(Connector):
                 declared = ", ".join(dialect.column(name, kinds.get(name)) for name in columns)
                 cursor.execute(f"CREATE TABLE IF NOT EXISTS {target} ({declared})")
             elif first is not None:
-                _refuse_missing_columns(table, columns, held, exact=bool(dialect.quote))
+                _refuse_missing_columns(table, columns, held, exact=not dialect.fold_upper)
             if mode is WriteMode.REPLACE:
                 cursor.execute(f"DELETE FROM {target} WHERE 1 = 1")  # nosec B608
             for batch in [] if first is None else chain([first], batches):
@@ -233,10 +259,19 @@ class DbApiConnector(Connector):
             cursor.close()
             return names
         except Exception as error:
+            if not self._is_missing_table(error):
+                raise ConfigurationError(
+                    f"Cannot read table {table}: {error}", context={"table": table}, cause=error
+                ) from error
             logger.debug("Taking %s as absent: %s", table, error)
             return None
         finally:
             self._rollback(connection)
+
+    def _is_missing_table(self, error: Exception) -> bool:
+        """Whether *error* says the table does not exist, and nothing worse."""
+        message = str(error).lower()
+        return any(words in message for words in _MISSING_TABLE)
 
     @staticmethod
     def _rollback(connection: Any) -> None:
@@ -249,6 +284,15 @@ class DbApiConnector(Connector):
         if self._connection is not None:
             self._connection.close()
             self._connection = None
+
+
+def _close_quietly(cursor: Any) -> None:
+    if cursor is None:
+        return
+    try:
+        cursor.close()
+    except Exception as error:
+        logger.debug("Could not close a cursor: %s", error)
 
 
 def _refuse_missing_columns(

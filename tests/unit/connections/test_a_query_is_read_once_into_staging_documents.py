@@ -134,3 +134,18 @@ def test_a_database_source_needs_a_connection_and_a_query(project, missing):
 
     with pytest.raises(ConfigurationError, match="requires a 'connection' and an 'sql' query"):
         resolve_start_node_data_source(project / "agent_io", source, "first")
+
+
+def test_a_connection_pointed_at_another_database_is_read_again(project):
+    first = _resolve(project)
+    with sqlite3.connect(project / "other.db") as raw:
+        raw.execute("CREATE TABLE topics (id INTEGER, topic TEXT)")
+        raw.execute("INSERT INTO topics VALUES (99, 'elsewhere')")
+    (project / "agent_actions.yml").write_text(
+        "connections:\n  warehouse:\n    type: sqlite\n    path: other.db\n", encoding="utf-8"
+    )
+
+    second = _resolve(project)
+
+    assert second != first
+    assert _staged(second) == [{"id": 99, "topic": "elsewhere"}]

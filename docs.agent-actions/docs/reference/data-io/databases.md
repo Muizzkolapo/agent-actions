@@ -66,9 +66,10 @@ A `path` or `keyfile` is relative to the project. `bigquery` without a
 | `mysql`, `snowflake` | Rows yes; a `CREATE TABLE` commits at once | A first write that fails leaves the new table behind, empty |
 | `bigquery`, `databricks` | No | Rows are added by a load job on `bigquery`. A write that stops partway is put right by writing again, except an `append` |
 
-`snowflake` names are written unquoted, so Snowflake folds them to upper case
-as it does for a table made by hand; a result column it folded is read back in
-lower case, so a prompt reads `{{ source.title }}`.
+`snowflake` names are quoted in upper case, the name Snowflake gives an
+unquoted one, so a table made by hand is found and a column named like a
+reserved word (`order`, `group`) still works. A result column in upper case is
+read back in lower case, so a prompt reads `{{ source.title }}`.
 
 :::note How each type is tested
 `sqlite`, `duckdb`, `postgres` and `mysql` are run against a real database by
@@ -101,13 +102,21 @@ Every column of a row is a field of `source`, so a prompt reads `{{ source.title
 
 The rows are written to `agent_io/_remote_cache/database/` the first time the
 workflow runs, and every later run reads that snapshot. A run that pauses for a
-batch and resumes a day later therefore sees the rows it started with.
+batch and resumes a day later therefore sees the rows it started with. A
+snapshot belongs to the query and to the connection's settings as written, so
+editing either one reads the query again.
 
 To read the query again:
 
 ```bash
 agac run -a my_workflow --refresh-input
 ```
+
+`--refresh-input` is refused while a batch is still open, since the batch
+answers the rows it was sent.
+
+The query must return rows (end it in a `SELECT`), and each column must have a
+name of its own: `SELECT t.id, u.id` is refused, so alias one with `AS`.
 
 A record's identity is its content, so after a refresh:
 
@@ -170,11 +179,13 @@ the old one, or use `replace` to mirror the store.
 
 ### When tables are written
 
-Tables are written when `agac run` finishes with every action complete. If the
-write fails, the results are still in the store. Write them again, without
-calling a model, with:
+Tables are written when `agac run` or `agac retry` finishes with every action
+complete. If the write fails, the results are still in the store. Write them
+again, without calling a model, with:
 
 ```bash
 agac export -w my_workflow
 agac export -w my_workflow -A classify_ticket    # one action's table
 ```
+
+`-A` must name an action that has an output.

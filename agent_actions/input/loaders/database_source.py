@@ -8,9 +8,10 @@ import logging
 import os
 import shutil
 import threading
+from collections.abc import Mapping
 from contextlib import ExitStack
 from pathlib import Path
-from typing import IO
+from typing import IO, Any
 
 from agent_actions.connections import Connector, Row, json_safe
 
@@ -23,9 +24,14 @@ REMOTE_CACHE_DIR = "_remote_cache"
 _SNAPSHOT_LOCK = threading.Lock()
 
 
-def snapshot_fingerprint(connection: str, query: str) -> str:
-    """What names a snapshot: the same connection and query read the same one."""
-    return hashlib.sha256(f"{connection}\n{query}".encode()).hexdigest()[:12]
+def snapshot_fingerprint(connection: str, query: str, settings: Mapping[str, Any]) -> str:
+    """What names a snapshot: the same query through the same connection settings.
+
+    *settings* are the connection's entry as the project file writes it, so a
+    credential is hashed as its ``${NAME}`` reference, never as its value.
+    """
+    written = json.dumps(dict(settings), sort_keys=True, default=str)
+    return hashlib.sha256(f"{connection}\n{query}\n{written}".encode()).hexdigest()[:12]
 
 
 def drop_database_snapshots(agent_folder: Path) -> None:

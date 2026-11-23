@@ -338,8 +338,8 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourceResolutionResult:
     """Resolve a database data source -- read the query once and keep its rows on disk.
 
-    A snapshot is kept per (connection, sql). ``agac run --refresh-input`` drops
-    it, so the query is read again.
+    A snapshot is kept per query and connection settings, so a changed setting
+    reads again. ``agac run --refresh-input`` drops it, so the query is read again.
     """
     if not config.connection or not config.sql or not config.sql.strip():
         raise ConfigurationError(
@@ -350,15 +350,16 @@ def _resolve_database(config: DataSourceConfig, agent_folder: Path) -> DataSourc
             },
         )
 
-    fingerprint = snapshot_fingerprint(config.connection, config.sql)
+    from agent_actions.connections import connection_settings, open_connection
+
+    project_root = find_project_root(str(agent_folder)) or agent_folder.resolve().parent
+    settings = connection_settings(config.connection, project_root)
+    fingerprint = snapshot_fingerprint(config.connection, config.sql, settings)
     snapshot_dir = agent_folder / _REMOTE_CACHE_DIR / "database" / fingerprint / "data"
     if snapshot_dir.exists():
         logger.info("Using the stored snapshot of '%s': %s", config.connection, snapshot_dir)
         return DataSourceResolutionResult(directories=[snapshot_dir])
 
-    from agent_actions.connections import open_connection
-
-    project_root = find_project_root(str(agent_folder)) or agent_folder.resolve().parent
     with open_connection(config.connection, project_root) as connector:
         snapshot_query(connector, config.sql, snapshot_dir, config.files)
     return DataSourceResolutionResult(directories=[snapshot_dir])

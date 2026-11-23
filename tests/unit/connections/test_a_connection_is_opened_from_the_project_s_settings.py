@@ -158,3 +158,13 @@ def test_every_credential_a_connection_type_takes_is_refused_as_a_literal(creden
     for model in takers:
         with pytest.raises(ConfigurationError, match=f"'{credential}' must name an environment"):
             read_settings("warehouse", {credential: "typed-in"}, model)
+
+
+def test_a_statement_that_returns_no_rows_is_refused_as_a_source(tmp_path: Path):
+    project = _project(tmp_path, "connections:\n  warehouse:\n    type: sqlite\n    path: w.db\n")
+
+    with open_connection("warehouse", project) as connector:
+        with pytest.raises(
+            ConfigurationError, match="returned no rows to read: end it in a SELECT"
+        ):
+            list(connector.read("CREATE TABLE made (x)"))

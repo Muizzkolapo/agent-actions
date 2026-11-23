@@ -153,6 +153,12 @@ def write_outputs(
             f"(it runs {', '.join(actions)})",
             context={"unknown": unknown},
         )
+    if only_action and only_action not in {output.action for output in outputs}:
+        raise ConfigurationError(
+            f"No output writes {only_action}; the actions with outputs are "
+            f"{', '.join(sorted({output.action for output in outputs}))}",
+            context={"action": only_action},
+        )
     written: dict[str, int] = {}
     for output in outputs:
         if only_action and output.action != only_action:

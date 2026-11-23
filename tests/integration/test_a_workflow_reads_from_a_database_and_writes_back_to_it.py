@@ -145,3 +145,33 @@ def test_a_write_that_fails_says_the_results_are_stored_and_how_to_write_them(pr
 
     _sql(project, "DROP TABLE published")
     assert "Wrote 2 rows to published" in _agac(project, "export")
+
+
+TOOLS = Path("tools") / WORKFLOW / "question_tools.py"
+READ_SPEC = 'def read_spec(data: Any, *args) -> dict:\n    source = data["source"]\n'
+
+
+def test_a_retry_that_repairs_a_record_writes_it_to_the_table(project):
+    tools = project / TOOLS
+    text = tools.read_text(encoding="utf-8")
+    assert READ_SPEC in text
+    tools.write_text(
+        "from pathlib import Path\n"
+        + text.replace(
+            READ_SPEC,
+            READ_SPEC
+            + '    if source["topic"] == "photosynthesis" and Path(__file__).with_name("fail").exists():\n'
+            + '        raise ValueError("refused on purpose")\n',
+        ),
+        encoding="utf-8",
+    )
+    (tools.parent / "fail").touch()
+    first = run_agac(project, "run", "-a", WORKFLOW)
+    assert first.returncode != 0, first.stdout + first.stderr
+    assert [row[0] for row in _published(project)] == [2]
+
+    (tools.parent / "fail").unlink()
+    output = _agac(project, "retry")
+
+    assert "Wrote 2 rows to published" in output, output
+    assert [row[0] for row in _published(project)] == [1, 2]

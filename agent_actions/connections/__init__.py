@@ -22,6 +22,7 @@ __all__ = [
     "Connector",
     "Row",
     "WriteMode",
+    "connection_settings",
     "json_safe",
     "open_connection",
     "quoted_identifier",
@@ -41,8 +42,8 @@ CONNECTORS: dict[str, str] = {
 }
 
 
-def open_connection(name: str, project_root: Path) -> Connector:
-    """Open the connection the project's ``connections:`` block calls *name*."""
+def connection_settings(name: str, project_root: Path) -> dict[str, Any]:
+    """The entry the project's ``connections:`` block calls *name*, as written."""
     from agent_actions.config.path_config import load_project_config
 
     declared = load_project_config(project_root).get("connections") or {}
@@ -53,6 +54,12 @@ def open_connection(name: str, project_root: Path) -> Connector:
             f"No connection named '{name}' in agent_actions.yml (declared: {known})",
             context={"connection": name},
         )
+    return settings
+
+
+def open_connection(name: str, project_root: Path) -> Connector:
+    """Open the connection the project's ``connections:`` block calls *name*."""
+    settings = connection_settings(name, project_root)
     return _connector_class(name, settings).from_settings(name, settings, project_root)
 
 

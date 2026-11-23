@@ -199,3 +199,10 @@ def test_a_carried_field_only_some_sources_hold_is_null_for_the_rest():
     ]
 
     assert output_table(records, "grade", ["ticket"])[1] == [("g1", 7, 4), ("g2", None, 2)]
+
+
+def test_writing_one_action_s_output_when_none_writes_it_is_refused(tmp_path):
+    declared = [{"action": "grade", "connection": "warehouse", "table": "grades"}]
+
+    with pytest.raises(ConfigurationError, match="No output writes grad; the actions with outputs"):
+        write_outputs(_Stored([]), declared, tmp_path, actions=["grade"], only_action="grad")

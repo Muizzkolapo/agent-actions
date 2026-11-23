@@ -42,6 +42,30 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def write_declared_outputs(workflow: AgentWorkflow, project_root: Path | None, agent: str) -> None:
+    """Write the workflow's declared outputs once every action has finished."""
+    declared = (workflow.config.manager.user_config or {}).get("outputs")
+    if not declared:
+        return
+    from agent_actions.connections.export import write_outputs
+    from agent_actions.utils.project_root import find_project_root
+
+    root = project_root or find_project_root(str(Path.cwd())) or Path.cwd()
+    try:
+        written = write_outputs(
+            workflow.storage_backend, declared, root, actions=list(workflow.execution_order)
+        )
+    except AgentActionsError:
+        click.echo(
+            "Every action finished, but writing the outputs failed. The results are "
+            f"stored: write them again with agac export -w {agent}",
+            err=True,
+        )
+        raise
+    for table, count in written.items():
+        click.echo(f"Wrote {count} rows to {table}")
+
+
 def start_tracked_run(
     workflow: AgentWorkflow, agent_name: str, project_root: Path | None
 ) -> tuple[RunTracker, str]:
@@ -121,12 +145,6 @@ class RunCommand:
         try:
             with hold_run_lock(paths.io_dir, self.agent_name):
                 started = time.monotonic()
-                if self.args.refresh_input:
-                    from agent_actions.input.loaders.database_source import (
-                        drop_database_snapshots,
-                    )
-
-                    drop_database_snapshots(paths.io_dir)
                 outcome = self._run_holding_the_lock(paths, project_root)
                 if self.args.wait:
                     outcome = self._wait_for_batches(outcome, paths, project_root, started)
@@ -199,6 +217,9 @@ class RunCommand:
             finally:
                 PromptValidator().validate(prompt_files)
 
+        if self.args.refresh_input and not resuming:
+            self._refresh_input(workflow, paths)
+
         tracker, run_id = start_tracked_run(workflow, self.agent_name, project_root)
 
         outcome = RunOutcome.FAILED
@@ -246,27 +267,24 @@ class RunCommand:
         return outcome
 
     def _write_outputs(self, workflow: AgentWorkflow, project_root: Path | None) -> None:
-        """Write the workflow's declared outputs once every action has finished."""
-        declared = (workflow.config.manager.user_config or {}).get("outputs")
-        if not declared:
-            return
-        from agent_actions.connections.export import write_outputs
-        from agent_actions.utils.project_root import find_project_root
+        write_declared_outputs(workflow, project_root, self.args.agent)
 
-        root = project_root or find_project_root(str(Path.cwd())) or Path.cwd()
-        try:
-            written = write_outputs(
-                workflow.storage_backend, declared, root, actions=list(workflow.execution_order)
+    def _refresh_input(self, workflow: AgentWorkflow, paths: ProjectPaths) -> None:
+        """Drop the database snapshots, so the query is read again; refused under an open batch.
+
+        A batch answers the rows it was sent. Reading the query again under one would
+        forget a record whose answer is still on its way.
+        """
+        state_mgr = workflow.services.core.state_manager
+        open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
+        if open_batches:
+            raise click.UsageError(
+                f"--refresh-input reads the query again, but a batch is still open for "
+                f"{', '.join(open_batches)}. Run without it until the batch is collected."
             )
-        except AgentActionsError:
-            click.echo(
-                "Every action finished, but writing the outputs failed. The results are "
-                f"stored: write them again with agac export -w {self.args.agent}",
-                err=True,
-            )
-            raise
-        for table, count in written.items():
-            click.echo(f"Wrote {count} rows to {table}")
+        from agent_actions.input.loaders.database_source import drop_database_snapshots
+
+        drop_database_snapshots(paths.io_dir)
 
     def _report(self, outcome: RunOutcome, workflow: AgentWorkflow) -> None:
         """Print the sentence for *outcome*; the exit code is read from the outcome alone."""

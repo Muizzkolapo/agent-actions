@@ -283,3 +283,8 @@ def test_a_workflow_runs_from_a_query_to_a_table_on_this_database(settings, tmp_
         (1, "published", "photosynthesis: passed in round 1"),
         (2, "published", "plate tectonics: passed in round 2"),
     ]
+
+
+def test_a_query_returning_a_column_name_twice_is_refused(connector):
+    with pytest.raises(ConfigurationError, match="returns id more than once; give each column"):
+        list(connector.read("SELECT 1 AS id, 2 AS id"))

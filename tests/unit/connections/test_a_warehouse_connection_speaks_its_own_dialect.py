@@ -24,10 +24,12 @@ class _Cursor:
         self.description = [("ID",), ("LABEL",)]
         self._rows: list[tuple] = []
 
+    probe_error = "no such table"
+
     def execute(self, statement, parameters=None):
         self._log.append((statement, parameters))
         if "WHERE 1 = 0" in statement:
-            raise LookupError("no such table")
+            raise LookupError(_Cursor.probe_error)
         if statement.startswith("SELECT"):
             self._rows = [(1, "a")]
 
@@ -180,9 +182,9 @@ def test_the_driver_is_handed_the_connection_s_settings(
         ),
         (
             "snowflake",
-            "CREATE TABLE IF NOT EXISTS out.labels (id NUMBER(38, 0), label VARCHAR)",
-            "DELETE FROM out.labels WHERE id = %s",
-            "INSERT INTO out.labels (id, label) VALUES (%s, %s)",
+            'CREATE TABLE IF NOT EXISTS "OUT"."LABELS" ("ID" NUMBER(38, 0), "LABEL" VARCHAR)',
+            'DELETE FROM "OUT"."LABELS" WHERE "ID" = %s',
+            'INSERT INTO "OUT"."LABELS" ("ID", "LABEL") VALUES (%s, %s)',
         ),
         (
             "databricks",
@@ -234,3 +236,24 @@ def test_a_driver_that_is_not_installed_says_which_extra_to_install(kind, tmp_pa
     with _open(kind, tmp_path, monkeypatch) as connector:
         with pytest.raises(ConfigurationError, match=rf"pip install 'agent-actions\[{kind}\]'"):
             connector.check()
+
+
+def test_a_snowflake_column_named_like_a_reserved_word_is_quoted(driver, tmp_path, monkeypatch):
+    with _open("snowflake", tmp_path, monkeypatch) as connector:
+        connector.write("labels", ["order", "group"], [(1, "a")], mode=WriteMode.APPEND)
+
+    assert driver.statements[1] == (
+        'CREATE TABLE IF NOT EXISTS "LABELS" ("ORDER" VARCHAR, "GROUP" VARCHAR)'
+    )
+
+
+def test_a_table_the_database_will_not_show_is_refused_not_taken_as_absent(
+    driver, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(_Cursor, "probe_error", "permission denied for table labels")
+
+    with _open("redshift", tmp_path, monkeypatch) as connector:
+        with pytest.raises(ConfigurationError, match="Cannot read table labels: permission denied"):
+            connector.write("labels", COLUMNS, [], mode=WriteMode.REPLACE)
+
+    assert not any(statement.startswith(("CREATE", "DELETE")) for statement in driver.statements)
