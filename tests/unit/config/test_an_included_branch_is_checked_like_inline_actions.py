@@ -605,6 +605,49 @@ class TestAnExpectTheExpanderDropsIsNoRead:
         )
 
 
+def _suite_judging(root: Path, ref: str) -> None:
+    (root / "schema").mkdir(parents=True, exist_ok=True)
+    (root / "schema" / "quality.yml").write_text(
+        yaml.safe_dump({"expectations": _schema_judging(ref)["expectations"]})
+    )
+
+
+class TestARuleInANamedSuiteCountsAsARead:
+    def test_a_branch_read_of_an_undeclared_host_action(self, tmp_path):
+        _suite_judging(tmp_path, "z.text")
+        reader = _with(B2, expect={"suite": "quality"})
+
+        message = _refusal(tmp_path, [A, Z, INCLUDE], {"pair": _pair([B1, reader])})
+
+        assert message == _branch_reads_z("b2")
+
+    def test_the_read_is_accepted_once_the_branch_declares_it(self, tmp_path):
+        _suite_judging(tmp_path, "z.text")
+        reader = _with(B2, expect={"suite": "quality"})
+
+        rendered = _render(tmp_path, [A, Z, WITH_Z], {"pair": _declaring_z([B1, reader])})
+
+        assert _names(rendered) == ["a", "z", "b1", "b2"]
+
+    def test_a_host_read_of_a_branch_internal(self, tmp_path):
+        _suite_judging(tmp_path, "b1.text")
+        reader = _with(C, expect={"suite": "quality"})
+
+        message = _refusal(tmp_path, [A, INCLUDE, reader])
+
+        assert message == (
+            f"Action 'c' in {WF} reads 'b1', which branch 'pair' (branches/pair.yml) does not "
+            "list under outputs. Outputs of 'pair': b2."
+        )
+
+    def test_a_suite_that_does_not_load_is_left_to_preflight(self, tmp_path):
+        reader = _with(B2, expect={"suite": "missing"})
+
+        rendered = _render(tmp_path, [A, Z, INCLUDE], {"pair": _pair([B1, reader])})
+
+        assert _names(rendered) == ["a", "z", "b1", "b2"]
+
+
 class TestABranchWithNoOutputsSaysNone:
     def test_a_host_read(self, tmp_path):
         reader = _with(C, dependencies=["b2"])

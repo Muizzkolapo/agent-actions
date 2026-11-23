@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  The `context:` references of an `llm_judge` rule in a named `suite:` are now added to the
+  `context_scope.observe` of the action at load time, as the references of an inline rule and of
+  a rule in the own schema of the action are. The source action is also inferred as a dependency.
+  Before, the run refused the action at preflight with "dependency declared but not referenced",
+  or the judge failed with "context reference ... is not present in llm_context", unless you
+  listed each reference of the suite in `observe:` yourself. The read check of an `include:`
+  now also reads the references of a suite. A suite that does not load adds no references;
+  preflight and the run report it as before.
+time: 2026-11-23T12:00:00.000000+00:00

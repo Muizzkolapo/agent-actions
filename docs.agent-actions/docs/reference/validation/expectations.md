@@ -247,7 +247,7 @@ On `model_vendor: agac-provider`, the judge receives a verdict object. Thus you 
 
 ### `context:` auto-injection
 
-At load time, Agent Actions automatically adds each reference in `context:` to the `context_scope.observe` of the action. You do not need to also list the reference there. If you do list it, Agent Actions removes the duplicate. This applies to the inline `expectations:` list of an action and to the rules of its own schema. A named `suite:` is the exception. The layer that adds the references cannot load a suite. Thus you must list the references of a suite in `observe:` yourself. For this reason, `retrieve_passage.passage_text` is available to the judge in the example above. This is true although `answer_is_grounded` is on a different action than `retrieve_passage`.
+At load time, Agent Actions automatically adds each reference in `context:` to the `context_scope.observe` of the action. You do not need to also list the reference there. If you do list it, Agent Actions removes the duplicate. This applies to the inline `expectations:` list of an action, to the rules of its own schema and to the rules of a named `suite:`. As a reference in `observe:` does, the reference makes the action run after the action that it names. A suite that does not load adds no references. Preflight and the run tell you why the suite does not load. For this reason, `retrieve_passage.passage_text` is available to the judge in the example above. This is true although `answer_is_grounded` is on a different action than `retrieve_passage`.
 
 ### Caching and budget
 
