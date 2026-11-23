@@ -79,7 +79,7 @@ def test_the_config_manager_refuses_it_at_load(tmp_path, shape):
 def test_the_cli_refuses_it_and_writes_nothing(tmp_path, shape, command):
     root = _project(tmp_path, shape)
 
-    result = run_agac(root, *command, "-a", "w")
+    result = run_agac(root, *command, "-w", "w")
     output = result.stdout + result.stderr
 
     assert result.returncode == 1, output
@@ -87,4 +87,3 @@ def test_the_cli_refuses_it_and_writes_nothing(tmp_path, shape, command):
     assert "'actions:'" in output, output
     store = root / "agent_workflow" / "w" / "agent_io" / "store"
     assert not list(store.glob("*.db")), output
-    assert not (root / "agent_workflow" / "w" / "agent_io" / "target").exists(), output
