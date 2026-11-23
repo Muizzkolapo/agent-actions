@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Reading a stored file now pauses the cyclic garbage collector. A read decodes and joins every upstream namespace of a file: many new objects, none in a cycle, so reference counting frees them all, while each collection the read set off walked the whole heap. The actions of a step read on their own threads, so the pause is counted and gives the collector back as it found it. On a synthetic run with 30 earlier actions, garbage collection took 7.1 s of a 38 s batch step, almost all of it inside reads, and 2.3 s after; a read of 925 records took 1.9 to 2.1 s instead of 2.4 to 2.7 s.'
+time: 2026-11-23T12:00:00Z

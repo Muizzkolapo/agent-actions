@@ -14,6 +14,7 @@ from agent_actions.config.defaults import StorageDefaults
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
 from agent_actions.record.reasons import PARSE_ERROR
+from agent_actions.utils.gc_pause import collector_paused
 from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
@@ -341,12 +342,14 @@ class StorageBackend(ABC):
     def _reconstructed_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Stored rows, reconstructed and lifecycle-validated. Cached pre-reset."""
         cache_key = (action_name, relative_path)
-        if cache_key not in self._reconstruction_cache:
-            result = self._read_target_raw(action_name, relative_path)
-            result = self._reconstruct_from_deltas(action_name, relative_path, result)
-            validate_lifecycle_batch(result, action_name=action_name)
-            self._reconstruction_cache[cache_key] = result
-        return plain_copy(self._reconstruction_cache[cache_key])
+        # Many new objects, none in a cycle: each collection they set off walks the heap.
+        with collector_paused():
+            if cache_key not in self._reconstruction_cache:
+                result = self._read_target_raw(action_name, relative_path)
+                result = self._reconstruct_from_deltas(action_name, relative_path, result)
+                validate_lifecycle_batch(result, action_name=action_name)
+                self._reconstruction_cache[cache_key] = result
+            return plain_copy(self._reconstruction_cache[cache_key])
 
     def forget_reconstructed(self, action_name: str, relative_path: str) -> None:
         """Drop one file's reconstructed rows from the cache; the next read rebuilds them."""
