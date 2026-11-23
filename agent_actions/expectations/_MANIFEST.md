@@ -75,7 +75,9 @@ through the project root stamped on the action config (`_project_root`); the bar
 reads the `expectations:` block of the action's resolved schema — the load pipeline inlines a
 named schema into the config and drops its name, so the inlined dict is the authority and the
 name route is only a fallback. A judged expectation's `context:` refs are auto-injected
-into the producing action's `context_scope.observe` for the inline form only, so a named suite's
-refs are inert. `_structural`
+into the producing action's `context_scope.observe` in every form: the expander adds the inline
+list's and the own schema's, and `ConfigManager.get_user_agents` adds a named suite's, because a
+suite loads from the project root and dependency inference runs before `_project_root` is
+stamped. `_structural`
 is reserved as an outcome id by convention; collision is prevented by control flow, since a
 structural failure returns its own result instead of running the suite.

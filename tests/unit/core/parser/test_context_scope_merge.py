@@ -15,7 +15,11 @@ Key scenarios tested:
 import pytest
 
 from agent_actions.output.response.expander import ActionExpander
-from agent_actions.output.response.expander_merge import deep_merge_context_scope
+from agent_actions.output.response.expander_merge import (
+    deep_merge_context_scope,
+    inherited_context_scope,
+    observe_judge_context_refs,
+)
 
 
 class TestContextScopeDeepMerge:
@@ -248,4 +252,45 @@ class TestASelectedSeedSurvivesTheMerge:
         assert result["seed"] == {
             "rules": "$file:rules.json",
             "syllabus": {"select_by": "source.track", "files": {"a": "$file:a.json"}},
+        }
+
+
+class TestAnInheritedScopeIsTheActionsOwn:
+    """An action gets its ``context_scope`` as its own copy, not the defaults' or its config's."""
+
+    @pytest.mark.parametrize(
+        "action",
+        [{}, {"context_scope": {"drop": ["source.url"]}}],
+        ids=["no-own-scope", "own-scope-without-observe"],
+    )
+    def test_the_inherited_scope_shares_no_dict_or_list_with_the_defaults(self, action):
+        defaults = {"context_scope": {"observe": ["source.page_content"]}}
+
+        scope = inherited_context_scope(action, defaults)
+
+        assert scope is not None
+        assert scope is not defaults["context_scope"]
+        assert scope["observe"] is not defaults["context_scope"]["observe"]
+
+    def test_the_inherited_scope_shares_nothing_with_the_action(self):
+        action = {"context_scope": {"observe": ["source.page_content"]}}
+
+        scope = inherited_context_scope(action, {})
+
+        assert scope is not None
+        assert scope is not action["context_scope"]
+        assert scope["observe"] is not action["context_scope"]["observe"]
+
+
+class TestAJudgedRefIsAddedToACopy:
+    def test_the_scope_the_agent_held_is_left_unchanged(self):
+        shared = {"observe": ["source.page_content"], "drop": ["source.url"]}
+        agent = {"context_scope": shared}
+
+        observe_judge_context_refs(agent, ["src.text"])
+
+        assert shared == {"observe": ["source.page_content"], "drop": ["source.url"]}
+        assert agent["context_scope"] == {
+            "observe": ["source.page_content", "src.text"],
+            "drop": ["source.url"],
         }
