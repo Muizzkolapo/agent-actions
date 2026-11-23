@@ -268,7 +268,7 @@ class VersionOutputCorrelator:
             }
             gone = [name for name in backend.list_target_files(agent_name) if name not in listed]
             if gone:
-                forget_files_of_inputs_gone(backend, agent_name, gone, listed)
+                forget_files_of_inputs_gone(backend, agent_name, gone)
         except Exception as e:
             logger.warning(
                 "Could not delete what '%s' stores for input that is gone: %s", agent_name, e

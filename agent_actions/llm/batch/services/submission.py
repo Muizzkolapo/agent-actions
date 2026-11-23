@@ -274,7 +274,7 @@ class BatchSubmissionService:
     ) -> SubmissionResult:
         """Submit a batch job, or return a passthrough when nothing is left to send.
 
-        *batch_name* is the input file's identity (``batch_file_identity``): every key
+        *batch_name* is the input file's path under the action's input root: every key
         the batch keeps, and the name its output is stored under, derive from it.
         *run_inputs* is this action's input above every narrowing, recorded for
         carry-forward, which cannot otherwise tell a record the run left out from one

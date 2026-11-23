@@ -43,7 +43,7 @@ Plain mixin classes, one per concern, that `SQLiteBackend` (in `../sqlite_backen
 
 | Package | Direction | Why |
 |---------|-----------|-----|
-| `storage.backend` | outbound | Disposition constants, `batch_file_names_key`, and `StorageBackend` for typing |
+| `storage.backend` | outbound | Disposition constants and `StorageBackend` for typing |
 | `utils` | outbound | `deep_json` encodes and decodes payload rows |
 | `errors` | outbound | `SerializationError`, `DataValidationError` |
 | `logging` | outbound | `DIAGNOSTIC` marks trace-truncation and missing-trace notices |
