@@ -117,3 +117,44 @@ def test_the_batch_actions_of_a_step_prepare_in_turn(project, monkeypatch):
             if other != name:
                 assert end <= other_start or other_end <= start, spans
     assert "beside" in result.output
+
+
+def test_a_batch_action_gives_its_turn_back_once_its_batch_is_sent(project, monkeypatch):
+    """The turn covers preparing and sending a batch, not waiting for its results.
+
+    The provider keeps every batch pending. The second batch action must still send its
+    batch in the first pass; `--wait` then waits outside the actions, between passes.
+    """
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+    from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
+    from agent_actions.storage import get_storage_backend
+
+    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "3600")
+    sent: list[str] = []
+    submit = AgacBatchClient._submit_to_provider_api
+
+    def noted_submit(self, input_file, batch_name):
+        sent.append(batch_name)
+        return submit(self, input_file, batch_name)
+
+    monkeypatch.setattr(AgacBatchClient, "_submit_to_provider_api", noted_submit)
+    outcome: list[object] = []
+    args = ["run", "-a", WORKFLOW, "--fresh", "--wait", "--poll", "1", "--wait-timeout", "2"]
+    run = threading.Thread(
+        target=lambda: outcome.append(CliRunner().invoke(cli, args)), daemon=True
+    )
+    run.start()
+    run.join(60)
+
+    assert not run.is_alive(), f"the run waited for a pending batch; sent so far: {sent}"
+    (result,) = outcome
+    assert result.exit_code == EXIT_PAUSED, result.output
+    assert sorted(sent) == ["one.json", "one.json", "two.json", "two.json"], sent
+    store_dir = project / "agent_workflow" / WORKFLOW
+    backend = get_storage_backend(workflow_path=str(store_dir), workflow_name=WORKFLOW)
+    backend.initialize()
+    try:
+        for action in ("first", "second"):
+            assert BatchRegistryManager(backend, action).has_uncollected_jobs(), action
+    finally:
+        backend.close()

@@ -127,6 +127,7 @@ batch_preparation_concurrency: 1   # one batch action of a step prepares at a ti
 
 - The value is a whole number from 1 to 50. The load refuses other values, for example `0` or `"1"`.
 - It limits only the batch actions that prepare and send their requests. An online, tool or hitl action of the step continues to run beside them. A batch action that collects its results is not limited.
+- A batch action gives its place back when it has sent its batch. It does not keep the place while the provider runs the batch: a later run, or `--wait`, collects the results.
 - `--concurrency-limit` continues to limit all of the actions of the run. A batch action that waits for its turn does not use one of those places.
 - `--concurrency-limit 1` and `--execution-mode sequential` also run one batch action at a time. But they also make an online action wait, or make the batch actions wait for the online action.
 - It does not change any answer.
