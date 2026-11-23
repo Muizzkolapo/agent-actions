@@ -13,9 +13,9 @@ from rich.table import Table
 from rich.text import Text
 
 from agent_actions.cli.cli_decorators import (
-    action_option,
     handles_user_errors,
     requires_project,
+    workflow_option,
 )
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.record.state import CASCADE_BLOCKING_STATES, RecordState
@@ -260,8 +260,10 @@ class PreviewCommand:
 
 
 @click.command()
-@click.option("-w", "--workflow", "--agent", "workflow", required=True, help="Workflow name")
-@action_option(help="Action name to preview (lists all if not specified)")
+@workflow_option("workflow", help="Workflow name")
+@click.option(
+    "-A", "--action", default=None, help="Action name to preview (lists all if not specified)"
+)
 @click.option(
     "-n",
     "--limit",

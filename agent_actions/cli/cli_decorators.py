@@ -54,55 +54,8 @@ def workflow_option(
     required: bool = True,
     help: str = "Workflow name: its configuration file name without path or extension",
 ) -> Callable:
-    """The workflow, as ``-w/--workflow`` or ``-a/--agent``, passed to the command as *name*."""
-    return click.option("-w", "--workflow", "-a", "--agent", name, required=required, help=help)
-
-
-_A_IS_DEPRECATED = (
-    "Warning: -a is deprecated in 'agac {command}', where it names the action, and will "
-    "name the workflow as it does in the other commands. Type -A or --action for the "
-    "action, and -w or --workflow for the workflow."
-)
-
-
-def _warn_a_is_deprecated(
-    ctx: click.Context, _param: click.Parameter, value: str | None
-) -> str | None:
-    if value is not None and not ctx.resilient_parsing:
-        click.echo(_A_IS_DEPRECATED.format(command=ctx.info_name), err=True)
-    return value
-
-
-def action_option(*, required: bool = False, help: str) -> Callable:
-    """The action, as ``-A/--action``, for a command that used to read it from ``-a``.
-
-    ``-a`` still names the action there, with a warning on stderr. The option is eager, so
-    the warning is printed before ``--help`` and before an error in any other option.
-    """
-
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args: Any, action: str | None, deprecated_action: str | None, **kwargs: Any):
-            if action is not None and deprecated_action is not None:
-                raise click.UsageError("-a and -A both name the action: give -A alone.")
-            if action is None:
-                action = deprecated_action
-            if required and action is None:
-                raise click.UsageError("Missing option '-A' / '--action'.")
-            return func(*args, action=action, **kwargs)
-
-        shown = f"{help}  [required]" if required else help
-        deprecated = click.option(
-            "-a",
-            "deprecated_action",
-            default=None,
-            hidden=True,
-            is_eager=True,
-            callback=_warn_a_is_deprecated,
-        )
-        return click.option("-A", "--action", default=None, help=shown)(deprecated(wrapper))
-
-    return decorator
+    """The workflow, as ``-w/--workflow`` or ``-a``, passed to the command as *name*."""
+    return click.option("-w", "--workflow", "-a", name, required=required, help=help)
 
 
 def requires_project(func):

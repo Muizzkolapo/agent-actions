@@ -380,7 +380,6 @@ class ValidateUDFsCommand:
     "-w",
     "--workflow",
     "-a",
-    "--agent",
     "agent",
     required=True,
     help="Workflow name: its configuration file name without path or extension",

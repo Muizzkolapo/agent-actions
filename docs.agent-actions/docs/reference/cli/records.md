@@ -18,14 +18,14 @@ The store keeps these payloads compressed. Thus `sqlite3` shows `target_data.dat
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `--agent` names the same option. |
-| `-A, --action TEXT` | Only the records of this action. If you omit it, the command uses each action that has stored records. `-a` also names the action in this command, and prints a warning on stderr. In the other commands, `-a` names the workflow. If you type `-a` and `-A` together, the command stops with exit code 2. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` names the same option. |
+| `-A, --action TEXT` | Only the records of this action. If you omit it, the command uses each action that has stored records. |
 | `--source-guid TEXT` | Only the records of this source record, in each action that holds one |
 | `--file TEXT` | Only the records of this stored file (its `relative_path`). Without `-A`, the command uses each action that stores the file. With `--snapshots`, the command uses only the records that failed in the file. |
 | `--field TEXT` | Print one value for each record, not the full record. The value is a dotted path into the record, for example `content.extract_facts.headline`. The keys of the stored `content` are the action names. If the record does not have the path, the command prints `null`. |
 | `--snapshots` | Print the input with which each failed or exhausted record was processed, not the stored records. `-A`, `--source-guid` and `--file` make the output smaller. |
 
-Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '--agent'.` The warning for `-a` comes before the error of an earlier option. It also comes before the help output if `-a` is in front of `--help`. See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
+Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '-a'.` See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
 
 The command prints each record as the store keeps it. It adds `_action` (the action that stored the record) and `_file` (the file that the record is stored under). `--field` can name each of these two fields.
 
