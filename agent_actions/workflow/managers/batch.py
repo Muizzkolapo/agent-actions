@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from rich.console import Console
 
+from agent_actions.config import sandbox
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ProcessingError
 from agent_actions.llm.batch.core.batch_constants import RecoveryType
@@ -368,7 +369,7 @@ class BatchLifecycleManager:
         if self.storage_backend.has_disposition(agent_name, DISPOSITION_PASSTHROUGH):
             return "passthrough"
 
-        node_output_dir = agent_io_path / "target" / agent_name
+        node_output_dir = sandbox.run_dir(agent_io_path) / "target" / agent_name
         if node_output_dir.exists():
             # Output dir exists but no batch registry or passthrough
             return "no_batches"

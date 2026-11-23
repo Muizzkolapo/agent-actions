@@ -8,6 +8,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.sandbox import AUTO_APPROVE_KEY
 from agent_actions.errors import AgentActionsError, ConfigurationError, mark_action_fatal
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.record_helpers import carry_framework_fields
@@ -85,17 +86,27 @@ class HITLStrategy:
                     len(filtered_records),
                 )
 
-            if os.environ.get("AGAC_HITL_AUTO_APPROVE") == "true":
-                logger.warning(
-                    "[%s] AGAC_HITL_AUTO_APPROVE=true — bypassing human review and "
-                    "auto-approving all %d records. No human approved this data. "
-                    "Unset the variable to restore the approval gate.",
-                    context.agent_name,
-                    len(filtered_records),
-                )
+            in_sandbox = bool(hitl_agent_config.get(AUTO_APPROVE_KEY))
+            if in_sandbox or os.environ.get("AGAC_HITL_AUTO_APPROVE") == "true":
+                if in_sandbox:
+                    logger.info(
+                        "[%s] Sandbox run: auto-approving all %d records.",
+                        context.agent_name,
+                        len(filtered_records),
+                    )
+                else:
+                    logger.warning(
+                        "[%s] AGAC_HITL_AUTO_APPROVE=true — bypassing human review and "
+                        "auto-approving all %d records. No human approved this data. "
+                        "Unset the variable to restore the approval gate.",
+                        context.agent_name,
+                        len(filtered_records),
+                    )
                 raw_response: Any = {
                     "hitl_status": "approved",
-                    "user_comment": "auto-approved (smoke test)",
+                    "user_comment": "auto-approved (sandbox)"
+                    if in_sandbox
+                    else "auto-approved (smoke test)",
                 }
                 executed = True
             else:

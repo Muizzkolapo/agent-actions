@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
+from agent_actions.config import sandbox
 from agent_actions.storage import get_storage_backend
 from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
@@ -57,7 +58,7 @@ def initialize_storage_backend(
             backend_type="sqlite",
         )
         backend.initialize()
-        db_path = workflow_dir / "agent_io" / "store" / f"{metadata.agent_name}.db"
+        db_path = sandbox.store_file(workflow_dir / "agent_io", metadata.agent_name)
         logger.debug("Storage backend: %s", db_path)
         return backend
     except (OSError, ValueError, sqlite3.Error) as e:
@@ -130,7 +131,7 @@ def initialize_services(
     agent_folder = Path(
         action_runner.get_action_folder(metadata.agent_name, project_root=config.project_root)
     )
-    status_file = agent_folder / ".agent_status.json"
+    status_file = sandbox.status_file(agent_folder)
 
     version_correlator = VersionOutputCorrelator(
         agent_folder,
@@ -169,7 +170,7 @@ def initialize_services(
         metadata.execution_order, metadata.action_configs
     )
 
-    manifest_manager = ManifestManager(agent_folder)
+    manifest_manager = ManifestManager(sandbox.run_dir(agent_folder))
 
     levels = action_level_orchestrator.compute_execution_levels()
     manifest_manager.initialize_manifest(
