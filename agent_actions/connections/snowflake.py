@@ -39,6 +39,7 @@ class SnowflakeConnector(DbApiConnector):
     """
 
     kind = "snowflake"
+    driver = "snowflake.connector"
 
     dialect = Dialect(
         fold_upper=True,

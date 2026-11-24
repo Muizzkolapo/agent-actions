@@ -17,6 +17,7 @@ from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import (
+    DataSourceResolutionResult,
     is_api_data_source,
     resolve_start_node_data_source,
 )
@@ -149,10 +150,27 @@ class ActionRunner:
 
     def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> list[Path]:
         """Resolve upstream directories for a start node (no dependencies)."""
-        result = resolve_start_node_data_source(
-            agent_folder, self.data_source_config, agent_name, self.project_root
+        return self._resolve_start_source(agent_folder, agent_name).directories
+
+    def _resolve_start_source(
+        self, agent_folder: Path, action_name: str
+    ) -> DataSourceResolutionResult:
+        return resolve_start_node_data_source(
+            agent_folder,
+            self.data_source_config,
+            action_name,
+            self.project_root,
+            has_open_batch=self._has_open_batch,
         )
-        return result.directories
+
+    def _has_open_batch(self, action_name: str) -> bool:
+        """Whether *action_name* has a batch submitted and not yet collected."""
+        if self.storage_backend is None:
+            return False
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        jobs = BatchRegistryManager(self.storage_backend, action_name).get_all_jobs().values()
+        return any(job.is_in_flight or job.awaits_collection for job in jobs)
 
     def _resolve_dependency_directories(
         self, agent_folder: Path, dependencies: list[str], agent_name: str
@@ -292,12 +310,7 @@ class ActionRunner:
         """
         if action_config.get("dependencies") or is_api_data_source(self.data_source_config):
             return None
-        result = resolve_start_node_data_source(
-            Path(self.get_action_folder(action_name)),
-            self.data_source_config,
-            action_name,
-            self.project_root,
-        )
+        result = self._resolve_start_source(Path(self.get_action_folder(action_name)), action_name)
         return staged_input_fingerprint(result.directories, result.file_type_filter)
 
     def setup_directories(
@@ -383,9 +396,7 @@ class ActionRunner:
         file_type_filter = None
         if not params.action_config.get("dependencies") and not params.previous_action_type:
             agent_folder_path = Path(agent_folder)
-            result = resolve_start_node_data_source(
-                agent_folder_path, self.data_source_config, params.action_name, self.project_root
-            )
+            result = self._resolve_start_source(agent_folder_path, params.action_name)
             file_type_filter = result.file_type_filter
 
         _process_files(

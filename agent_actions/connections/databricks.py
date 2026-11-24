@@ -31,6 +31,7 @@ class DatabricksConnector(DbApiConnector):
     """
 
     kind = "databricks"
+    driver = "databricks.sql"
 
     dialect = Dialect(
         param_style="named",

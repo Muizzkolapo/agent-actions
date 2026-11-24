@@ -22,6 +22,7 @@ class DuckdbConnector(DbApiConnector):
     """Reads and writes one DuckDB file. A write is one transaction, table creation included."""
 
     kind = "duckdb"
+    driver = "duckdb"
 
     dialect = Dialect(
         param_style="qmark",
