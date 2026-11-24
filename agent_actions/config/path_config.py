@@ -36,6 +36,14 @@ def _parse_project_yaml(name: str, text: str) -> Any:
     return yaml.safe_load(stream)
 
 
+def project_config_file(project_root: Path) -> Path | None:
+    """The project file `load_project_config` reads, or None when there is none."""
+    for config_file in (project_root / name for name in _PROJECT_CONFIG_NAMES):
+        if config_file.exists():
+            return config_file
+    return None
+
+
 def load_project_config(project_root: Path) -> dict[str, Any]:
     """
     Load project-specific configuration from YAML files.
@@ -55,31 +63,30 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
     Raises:
         ConfigValidationError: If YAML file exists but contains invalid syntax
     """
-    for config_file in (project_root / name for name in _PROJECT_CONFIG_NAMES):
-        if config_file.exists():
-            fire_event(ConfigLoadStartEvent(config_file=str(config_file)))
-            try:
-                with open(config_file, encoding="utf-8") as f:
-                    text = f.read()
-                config = copy.deepcopy(_parse_project_yaml(str(config_file), text)) or {}
-            except yaml.YAMLError as e:
-                raise ConfigValidationError(
-                    "path_config_yaml",
-                    f"Invalid YAML in config file {config_file}",
-                    context={"config_path": str(config_file), "operation": "load_config"},
-                    cause=e,
-                ) from e
-            if not isinstance(config, dict):
-                raise ConfigValidationError(
-                    "path_config_yaml",
-                    f"Config file {config_file} must be a mapping at the top level, "
-                    f"got {type(config).__name__}",
-                    context={"config_path": str(config_file), "operation": "load_config"},
-                )
-            fire_event(ConfigLoadEvent(config_file=str(config_file), config_type="project"))
-            return config
-
-    return {}
+    config_file = project_config_file(project_root)
+    if config_file is None:
+        return {}
+    fire_event(ConfigLoadStartEvent(config_file=str(config_file)))
+    try:
+        with open(config_file, encoding="utf-8") as f:
+            text = f.read()
+        config = copy.deepcopy(_parse_project_yaml(str(config_file), text)) or {}
+    except yaml.YAMLError as e:
+        raise ConfigValidationError(
+            "path_config_yaml",
+            f"Invalid YAML in config file {config_file}",
+            context={"config_path": str(config_file), "operation": "load_config"},
+            cause=e,
+        ) from e
+    if not isinstance(config, dict):
+        raise ConfigValidationError(
+            "path_config_yaml",
+            f"Config file {config_file} must be a mapping at the top level, "
+            f"got {type(config).__name__}",
+            context={"config_path": str(config_file), "operation": "load_config"},
+        )
+    fire_event(ConfigLoadEvent(config_file=str(config_file), config_type="project"))
+    return config
 
 
 _PROJECT_MARKERS = ("agent_actions.yml", "agent_actions.yaml", ".agent_actions.yml")

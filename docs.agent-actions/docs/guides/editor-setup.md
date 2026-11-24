@@ -53,6 +53,8 @@ The LSP reads agent-actions references and resolves each reference to a file loc
 | **Tool** | `impl: flatten_questions` | `tools/**/flatten_questions.py` → `@udf_tool def` |
 | **Schema** | `schema: question_schema` | `schema/question_schema.yml` (or `.yaml`/`.json`) |
 | **Action** | `dependencies: [extract_qa]` | Same file → `- name: extract_qa` |
+| **Output action** | `outputs:` → `action: extract_qa` | Same file → `- name: extract_qa` |
+| **Connection** | `connection: warehouse` (in `outputs:` or a `database` data source) | `agent_actions.yml` → `connections:` → `warehouse:` |
 | **Workflow** | `workflow: other_workflow` | `agent_workflow/other_workflow/agent_config/*.yml` |
 | **Seed File** | `$file:exam_syllabus.json` | The file that the run reads. The LSP looks in the `seed_data/` folder of the workflow, then in the `seed_data/` folder of the project, then in each folder of `seed_data_paths`. |
 

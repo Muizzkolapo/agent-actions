@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: 'The editor and the bundled skills know the database keys. In the editor, an `outputs:` entry''s `action:` goes to the action and a `connection:` goes to its entry in the `connections:` block of `agent_actions.yml`; a misspelt one is marked as unresolved before `agac run`. The `agac-agent-skills` skill has a `database-io` guide (connections, a `database` data source, `outputs:`), and `agac-operations` lists `--refresh-input` and `agac export`.'
+time: 2026-11-24T09:00:00.000000000+00:00

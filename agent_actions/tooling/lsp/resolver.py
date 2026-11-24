@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from .models import Location, ProjectIndex, Reference, ReferenceType
-from .utils import is_in_context_scope_list, is_in_dependencies_context
+from .utils import is_in_context_scope_list, is_in_dependencies_context, is_in_top_level_block
 
 
 def get_reference_at_position(content: str, line: int, character: int) -> Reference | None:
@@ -130,6 +130,25 @@ def get_reference_at_position(content: str, line: int, character: int) -> Refere
                 raw_text=context_match.group(1),
             )
 
+    # 9. An output's action and a connection: `action: name`, `connection: name`
+    database_match = re.search(r"^\s*(?:-\s+)?(action|connection):\s*['\"]?([\w.-]+)", current_line)
+    if database_match and (
+        database_match.group(1) == "connection" or is_in_top_level_block(lines, line, "outputs")
+    ):
+        start = database_match.start(2)
+        end = database_match.end(2)
+        if start <= character <= end:
+            return Reference(
+                type=(
+                    ReferenceType.CONNECTION
+                    if database_match.group(1) == "connection"
+                    else ReferenceType.ACTION
+                ),
+                value=database_match.group(2),
+                location=Location(file_path=Path(), line=line, column=start),
+                raw_text=database_match.group(2),
+            )
+
     return None
 
 
@@ -182,6 +201,9 @@ def resolve_reference(
         except (SeedFileError, ValueError, ConfigurationError):
             return None
         return Location(file_path=found.path, line=0, column=0)
+
+    elif reference.type == ReferenceType.CONNECTION:
+        return (index.connections or {}).get(reference.value)
 
     elif reference.type == ReferenceType.CONTEXT_FIELD:
         action_name = reference.value.split(".", 1)[0]

@@ -24,7 +24,7 @@ Use this skill when a workflow runs over many records (hundreds to many thousand
 
 1. **Check the output, not only the exit code.** A run can end with exit code 0 and keep a small part of its records. Every part of the run can do what its config allows: an `llm_judge` votes FAIL, the repair rounds are used up, `on_exhausted: return_last` keeps the last output, and the next guard filters the record. Run `scripts/run_health.py` after each pass (see [Health check](#health-check)).
 2. **Test the run mode that the full run uses.** Run a small sample in batch mode before a full batch run. Do not assume that an online test predicts a batch run.
-3. **Never edit the staging input of a workflow that can resume.** A changed or new staging file changes the plan. Use `--fresh` for new input, or add new input as a new file.
+3. **Never edit the staging input of a workflow that can resume.** A changed or new staging file changes the plan. Use `--fresh` for new input, or add new input as a new file. A `database` data source reads its query once into a snapshot; to pick up new rows, use `--refresh-input`, which answers only the rows that are new or changed.
 4. **Never change the agent-actions code that a live run imports.** A run started from an editable install reads the code at each import.
 5. **Keep paid output.** To change one action, use `agac run -w <workflow> --rerun <action>`. It runs that action and every action that reads it again on every record. The other actions keep their output. `--fresh` throws away all output.
 
@@ -38,6 +38,8 @@ agac run -w <workflow> -u tools --wait             # wait for open batches, then
 agac run -w <workflow> -u tools --rerun <action>   # run <action> and its readers again; keep the rest
 agac retry -w <workflow> --all                     # retry from the earliest failure until no pass helps
 agac retry -w <workflow> --filter <action>:<record_id> --reason "<why>"   # stop retrying one record
+agac run -w <workflow> -u tools --refresh-input    # read a database source's query again (refused while a batch is open)
+agac export -w <workflow>                          # write the workflow's `outputs:` tables again, no model calls
 agac dispositions -w <workflow> --json             # counts per action, for scripts
 agac status -w <workflow> --json                   # status of each action and of the run
 agac usage -w <workflow>                           # model calls and tokens per action
