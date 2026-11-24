@@ -522,7 +522,9 @@ def test_a_reader_stopped_by_an_error_after_its_source_was_rerun_keeps_nothing_m
         return answer(api_key, agent_config, *args)
 
     with pytest.MonkeyPatch.context() as patched:
-        patched.setattr(AgacClient, "call_json", staticmethod(refused_at_the_readers_second_record))
+        patched.setattr(
+            AgacClient, "call_json", staticmethod(refused_at_the_readers_second_record)
+        )
         _run("--rerun", ACTION)
     assert _status(online, PUBLISHER) == "failed"
     result = _run()
@@ -601,7 +603,9 @@ def _summaries_in(root, path):
 
 
 @pytest.mark.parametrize("edited", [False, True], ids=["first-run", "rerun-after-an-edit"])
-def test_a_file_reader_stopped_after_storing_one_file_asks_again_only_for_the_other(online, edited):
+def test_a_file_reader_stopped_after_storing_one_file_asks_again_only_for_the_other(
+    online, edited
+):
     """The file it stored before it stopped holds what its records were answered with, so
     the next run carries them and hands the tool only the file it did not store."""
     _with_a_file_reader(online)
@@ -667,7 +671,9 @@ def test_a_file_row_the_store_refuses_as_a_schema_echo_stays_failed(online):
     assert len(answered) == len(EVERY_PAGE) - len(PAGES)
 
 
-def test_an_answer_collection_fails_is_asked_again_though_its_file_was_not_stored(online, provider):
+def test_an_answer_collection_fails_is_asked_again_though_its_file_was_not_stored(
+    online, provider
+):
     """The checkpoint marks an answer that holds a parse error answered, and collection
     fails it. That failure is written as it is collected: left for the file, a run
     stopped before it carries the checkpoint row as an answer."""
@@ -692,7 +698,7 @@ def test_an_answer_collection_fails_is_asked_again_though_its_file_was_not_store
     assert "Page alpha." in provider.pages()
 
 
-def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its_file_was_collected(
+def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_once_its_file_is_collected(
     online, provider
 ):
     """The --rerun after the edit answers both pages of the first file, but the first page's
@@ -718,7 +724,7 @@ def test_an_answer_whose_checkpoint_row_was_not_stored_is_asked_again_though_its
     assert provider.pages() == ["Page alpha.", "Page delta.", "Page gamma."]
 
 
-def test_a_first_stage_file_stored_before_the_run_stopped_keeps_a_record_whose_checkpoint_row_failed(
+def test_a_first_stage_file_stored_before_the_stop_keeps_a_record_whose_checkpoint_row_failed(
     online, provider
 ):
     """The first file is stored and the run is stopped as it stores the second. Only the
@@ -774,7 +780,9 @@ def test_a_record_filtered_beside_a_file_of_failures_stays_out_of_a_fan_in(onlin
     guard filtered anywhere upstream by its disposition alone, which vouches for no stored
     row, so it is written though the file is not."""
     config = _config(online)
-    guard = "    guard: { condition: 'source.page_content != \"Page alpha.\"', on_false: filter }\n"
+    guard = (
+        "    guard: { condition: 'source.page_content != \"Page alpha.\"', on_false: filter }\n"
+    )
     text = config.read_text().replace(
         "    expect: { repair: none }\n", "    expect: { repair: none }\n" + guard, 1
     )
@@ -793,7 +801,9 @@ def test_a_record_filtered_beside_a_file_of_failures_stays_out_of_a_fan_in(onlin
         _run("--fresh")
 
     (alpha,) = [
-        row["source_guid"] for row in _stored_rows(online, SIDE) if "Page alpha." in json.dumps(row)
+        row["source_guid"]
+        for row in _stored_rows(online, SIDE)
+        if "Page alpha." in json.dumps(row)
     ]
     joined = {row["source_guid"] for row in _stored_rows(online, JOIN)}
     assert joined, "the fan-in ran"

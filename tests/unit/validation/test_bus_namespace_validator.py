@@ -21,7 +21,10 @@ def test_unknown_literal_is_flagged():
 
 
 def test_known_literals_not_flagged():
-    src = "def agg(data):\n    a = data.get('compile_verify_input')\n    b = data['author']\n    return {}\n"
+    src = (
+        "def agg(data):\n    a = data.get('compile_verify_input')\n    b = "
+        "data['author']\n    return {}\n"
+    )
     assert find_unknown_bus_namespaces({"agg": src}, _VALID) == []
 
 
@@ -36,7 +39,8 @@ def test_known_literals_not_flagged():
         ),
         # AST anchors on real reads; literals in comments/strings are invisible.
         pytest.param(
-            "def f(data):\n    # data.get('ghost')\n    s = \"data['phantom']\"\n    return data.get('author')\n",
+            "def f(data):\n    # data.get('ghost')\n    s = \"data['phantom']\"\n    "
+            "return data.get('author')\n",
             id="literal-in-comment-or-string",
         ),
         pytest.param("def f(data)\n    return data.get('bad')\n", id="syntax-error"),
@@ -51,7 +55,9 @@ def test_source_without_a_literal_unknown_read_is_not_flagged(src):
     [
         pytest.param("def f(data):\n    return data['nope']\n", "nope", id="subscript"),
         # data.get("X", default) keeps the optional read unbroken but still surfaces the typo.
-        pytest.param("def f(data):\n    return data.get('maybe', {})\n", "maybe", id="get-default"),
+        pytest.param(
+            "def f(data):\n    return data.get('maybe', {})\n", "maybe", id="get-default"
+        ),
     ],
 )
 def test_unknown_literal_read_is_flagged(src, key):
@@ -87,8 +93,14 @@ def test_identical_nested_helper_across_sources_not_deduped():
     # Two distinct UDFs each define a nested helper of the same name reading the same
     # unknown key. These are two independent bugs and must both be reported — dedup is
     # per-source, so the second must not be swallowed.
-    src_a = "def udf_a(data):\n    def _inner(data):\n        return data.get('bad')\n    return _inner(data)\n"
-    src_b = "def udf_b(data):\n    def _inner(data):\n        return data.get('bad')\n    return _inner(data)\n"
+    src_a = (
+        "def udf_a(data):\n    def _inner(data):\n        return data.get('bad')\n   "
+        " return _inner(data)\n"
+    )
+    src_b = (
+        "def udf_b(data):\n    def _inner(data):\n        return data.get('bad')\n   "
+        " return _inner(data)\n"
+    )
     findings = find_unknown_bus_namespaces({"a": src_a, "b": src_b}, {"author"})
     assert len(findings) == 2
 

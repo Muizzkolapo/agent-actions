@@ -107,7 +107,10 @@ def provider() -> Iterator[str]:
                 payload = {
                     "model": "some-model",
                     "created_at": "2026-01-01T00:00:00Z",
-                    "message": {"role": "assistant", "content": json.dumps({"summary": "A page."})},
+                    "message": {
+                        "role": "assistant",
+                        "content": json.dumps({"summary": "A page."}),
+                    },
                     "done": True,
                 }
             body = json.dumps(payload).encode()

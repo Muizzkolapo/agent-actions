@@ -4,7 +4,8 @@ record, in either run mode (1503).
 Jinja read `producer.items` on a record without `items` as the dict's `items` method, so
 the model was sent "<built-in method items of dict object ...>" and the record was stored
 as a success. A prompt calling a dict method, as the docs' `source.get('x', 'd')` and
-`ns.items()` do, still renders. What each record was sent is read back from the consumer's prompt traces.
+`ns.items()` do, still renders. What each record was sent is read back from the consumer's prompt
+traces.
 """
 
 from __future__ import annotations

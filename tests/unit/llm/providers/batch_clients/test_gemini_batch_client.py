@@ -46,7 +46,11 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         mock_file = Mock()
         mock_file.name = "files/test-file-123"
         mock_client.files.upload.return_value = mock_file
-        mock_client.files.download.return_value = b'{"key": "test-1", "response": {"candidates": [{"content": {"parts": [{"text": "test"}]}}]}}\n'
+        mock_client.files.download.return_value = (
+            b'{"key": "test-1", "response": '
+            b'{"candidates": [{"content": {"parts": '
+            b'[{"text": "test"}]}}]}}\n'
+        )
         with patch("agent_actions.llm.providers.gemini.batch_client.GEMINI_AVAILABLE", True):
             with patch(
                 "agent_actions.llm.providers.gemini.batch_client.genai",

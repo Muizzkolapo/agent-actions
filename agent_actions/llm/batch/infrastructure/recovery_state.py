@@ -200,7 +200,9 @@ def records_awaiting_recovery(
                 continue
             context_map = BatchContextManager.load_batch_context_map(backend, action_name, parent)
         except Exception:
-            logger.debug("Could not read the recovery of %s/%s", action_name, parent, exc_info=True)
+            logger.debug(
+                "Could not read the recovery of %s/%s", action_name, parent, exc_info=True
+            )
             continue
 
         failures: dict[str, str] = {}

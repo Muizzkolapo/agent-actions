@@ -57,7 +57,9 @@ class SourceDataSavedEvent(BaseEvent):
         self.level = EventLevel.DEBUG
         self.category = EventCategories.FILE_IO
         size_kb = self.bytes_written / 1024 if self.bytes_written > 0 else 0
-        self.message = f"Saved {self.item_count} items under {self.relative_path} ({size_kb:.1f}KB)"
+        self.message = (
+            f"Saved {self.item_count} items under {self.relative_path} ({size_kb:.1f}KB)"
+        )
         self.data = {
             "relative_path": self.relative_path,
             "item_count": self.item_count,

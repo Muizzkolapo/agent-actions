@@ -239,7 +239,9 @@ def test_batch_on_an_endpoint_action_is_refused_at_preflight(tmp_path, servers):
 
 
 def test_api_key_written_on_an_endpoint_action_is_refused(tmp_path, servers):
-    root = _project(tmp_path, _action("on_lab", "lab", "local-7b", "    api_key: OPENAI_API_KEY\n"))
+    root = _project(
+        tmp_path, _action("on_lab", "lab", "local-7b", "    api_key: OPENAI_API_KEY\n")
+    )
 
     output = _run(root, _env(servers), expect_exit=1)
 

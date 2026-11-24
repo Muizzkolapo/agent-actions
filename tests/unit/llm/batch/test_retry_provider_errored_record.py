@@ -382,7 +382,9 @@ def _no_content(custom_id: str) -> BatchResult:
 def test_find_missing_ids_counts_a_successful_result_with_no_content_as_missing():
     context_map = {OK_ID: {"user_content": "one"}, ERR_ID: {"user_content": "two"}}
 
-    missing = BatchResultReconciler.find_missing_ids(context_map, [_ok(OK_ID), _no_content(ERR_ID)])
+    missing = BatchResultReconciler.find_missing_ids(
+        context_map, [_ok(OK_ID), _no_content(ERR_ID)]
+    )
 
     assert missing == {ERR_ID}
 

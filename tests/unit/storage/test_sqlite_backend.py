@@ -481,7 +481,8 @@ class TestSaveCheckpointRecordsDropGuard:
             backend.save_checkpoint_records("action_a", "output.json", records)
 
     def test_mix_valid_and_invalid_records_raises(self, backend):
-        """A guid-less record in a mixed batch fails loud with no partial write of the valid rows."""
+        """A guid-less record in a mixed batch fails loud with no partial write of the valid
+        rows."""
         records = [
             {"source_guid": "g1", "content": "valid"},
             {"content": "no_guid"},
@@ -547,7 +548,10 @@ class TestCheckpointKeepsEveryRowOfARecord:
         backend.save_checkpoint_records(
             "action_a",
             "output.json",
-            [{"source_guid": "g1", "content": "first"}, {"source_guid": "g1", "content": "second"}],
+            [
+                {"source_guid": "g1", "content": "first"},
+                {"source_guid": "g1", "content": "second"},
+            ],
         )
         again = [{"source_guid": "g1", "content": "again"}]
 
@@ -577,7 +581,9 @@ class TestWritingAFileClearsItsCheckpointRows:
 
         assert backend.read_checkpoint_records("action_a", "output.json") == []
         assert backend.read_checkpoint_records("action_a", "other.json") == [{"source_guid": "g2"}]
-        assert backend.read_checkpoint_records("action_b", "output.json") == [{"source_guid": "g3"}]
+        assert backend.read_checkpoint_records("action_b", "output.json") == [
+            {"source_guid": "g3"}
+        ]
 
     def test_a_write_that_fails_keeps_the_rows(self, backend):
         """They hold the only copy of the answers the file was not written with."""
@@ -588,7 +594,9 @@ class TestWritingAFileClearsItsCheckpointRows:
         with pytest.raises(sqlite3.Error):
             backend.write_target("action_a", "output.json", [{"source_guid": "g1"}])
 
-        assert backend.read_checkpoint_records("action_a", "output.json") == [{"source_guid": "g1"}]
+        assert backend.read_checkpoint_records("action_a", "output.json") == [
+            {"source_guid": "g1"}
+        ]
 
 
 class TestSetDispositionRecordIdValidation:

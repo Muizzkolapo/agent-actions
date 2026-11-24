@@ -88,7 +88,7 @@ class TestActionExpanderHierarchy:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x)
         assert result["model_vendor"] == "openai"
         assert result["model_name"] == "gpt-4"
-        assert result.get("json_mode") == True
+        assert result.get("json_mode") is True
         assert result.get("granularity") == "Record"
 
 

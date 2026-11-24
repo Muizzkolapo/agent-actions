@@ -84,7 +84,8 @@ def run_agac(
 def run_in_warm_process(
     cwd: Path, *args: str, env: Mapping[str, str] | None = None, entry: str, timeout: float
 ) -> subprocess.CompletedProcess[str]:
-    """Run *entry* (`module:function`) in a warm child in place of the CLI, for the control tests."""
+    """Run *entry* (`module:function`) in a warm child in place of the CLI, for the control
+    tests."""
     return _WARM.call([str(AGAC), *args], cwd, _merged_env(os.environ, env), entry, timeout)
 
 

@@ -180,7 +180,9 @@ class TestPrefilterByGuard:
             "agent_actions.input.preprocessing.filtering.evaluator.get_guard_evaluator",
             return_value=evaluator,
         ):
-            passing, skipped, original_passing, filtered, _ = prefilter_by_guard([], config, "test")
+            passing, skipped, original_passing, filtered, _ = prefilter_by_guard(
+                [], config, "test"
+            )
 
         assert passing == []
         assert skipped == []
@@ -230,7 +232,8 @@ class TestPrefilterByGuard:
         assert call_kwargs["conditional_clause"] == "my_udf_check"
 
     def test_conditional_clause_only_rejects_to_skipped(self):
-        """conditional_clause without guard_config: rejected records go to skipped (SKIP behavior)."""
+        """conditional_clause without guard_config: rejected records go to skipped (SKIP
+        behavior)."""
         data = [
             {"content": {"val": "good"}},
             {"content": {"val": "bad"}},

@@ -111,7 +111,8 @@ class TestVendorParity:
         )
 
     def test_clear_cache_reinitialises_on_next_access(self):
-        """clear_cache() resets the cache so the next call to _get_vendor_capabilities re-builds it."""
+        """clear_cache() resets the cache so the next call to _get_vendor_capabilities re-builds
+        it."""
         caps_first = _get_vendor_capabilities()
         VendorCompatibilityValidator.clear_cache()
         caps_second = _get_vendor_capabilities()

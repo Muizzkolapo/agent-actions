@@ -262,7 +262,8 @@ class TestOllamaCloudClient:
 
         chat_kwargs = mock_client.chat.call_args.kwargs
         assert "format" not in chat_kwargs, (
-            "Cloud JSON call must NOT pass 'format' to chat() (structured output not supported yet)"
+            "Cloud JSON call must NOT pass 'format' to chat() (structured output not "
+            "supported yet)"
         )
 
     @patch("agent_actions.llm.providers.ollama.client.ResponseBuilder")

@@ -81,7 +81,8 @@ def _filter_and_store_fields(
         fail_on_missing: If True, raise ConfigurationError when declared fields are missing
         optional_fields: Declared fields that may be missing without failing
         metadata_collector: Optional dict to record stored vs loaded field metadata.
-            When provided, records {name: {stored_fields, loaded_fields, stored_count, loaded_count}}
+            When provided, records {name: {stored_fields, loaded_fields, stored_count,
+            loaded_count}}
             for downstream diagnostics (e.g. detecting fields produced by tools but not in schema).
     """
     stored_fields = set(data.keys())

@@ -277,7 +277,11 @@ def test_a_loose_setting_fills_a_name_the_block_leaves_out():
 
     seen = _tokenizer_call(agent, "batch")
 
-    assert (seen["chunk_size"], seen["chunk_overlap"], seen["split_method"]) == (4000, 250, "chars")
+    assert (seen["chunk_size"], seen["chunk_overlap"], seen["split_method"]) == (
+        4000,
+        250,
+        "chars",
+    )
 
 
 def test_an_action_setting_beats_the_workflow_one():

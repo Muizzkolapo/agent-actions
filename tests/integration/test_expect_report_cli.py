@@ -196,7 +196,9 @@ def test_an_unknown_action_is_refused_by_name(run):
     assert "not in workflow" in result.output
 
 
-def test_a_workflow_with_an_empty_store_says_so_rather_than_printing_nothing(tmp_path, monkeypatch):
+def test_a_workflow_with_an_empty_store_says_so_rather_than_printing_nothing(
+    tmp_path, monkeypatch
+):
     root = tmp_path / "empty"
     shutil.copytree(SOURCE, root, ignore=shutil.ignore_patterns("logs"))
     monkeypatch.chdir(root)
@@ -228,8 +230,14 @@ def test_a_verdict_is_read_from_its_own_action_namespace(tmp_path, monkeypatch):
         "_state": "processed",
         "source_guid": "guid",
         "content": {
-            "resummarize": {"summary": "up", "expect": _verdict(_outcome("upstream", passed=True))},
-            "summarize": {"summary": "own", "expect": _verdict(_outcome("own_rule", passed=False))},
+            "resummarize": {
+                "summary": "up",
+                "expect": _verdict(_outcome("upstream", passed=True)),
+            },
+            "summarize": {
+                "summary": "own",
+                "expect": _verdict(_outcome("own_rule", passed=False)),
+            },
         },
     }
     tally = tally_action("summarize", [shared])

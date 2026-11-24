@@ -124,7 +124,9 @@ def project(tmp_path, monkeypatch):
     (root / "tools" / WORKFLOW / "flatten.py").unlink()
     (root / "tools" / WORKFLOW / "retry_exit_probe.py").write_text(BREAKABLE_TOOL)
     config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
-    config.write_text(config.read_text().replace("impl: flatten_pages", "impl: retry_exit_flatten"))
+    config.write_text(
+        config.read_text().replace("impl: flatten_pages", "impl: retry_exit_flatten")
+    )
     marker = tmp_path / "BREAK"
     monkeypatch.setenv("RETRY_EXIT_BREAK", str(marker))
     monkeypatch.chdir(root)

@@ -177,7 +177,11 @@ class TestTheGuardCheckRefusesIt:
     @pytest.mark.parametrize(
         ("clause", "written", "suggested"),
         [
-            ("action.producer.severity == 'high'", "action.producer.severity", "producer.severity"),
+            (
+                "action.producer.severity == 'high'",
+                "action.producer.severity",
+                "producer.severity",
+            ),
             (
                 "producer.ok == true and LENGTH(action.producer.tags) > 0",
                 "action.producer.tags",

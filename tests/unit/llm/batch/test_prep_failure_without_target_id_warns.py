@@ -26,9 +26,9 @@ class TestPrepFailedLogging:
                 ValueError("test error"),
             )
 
-        assert any("target_id" in r.message and r.levelname == "WARNING" for r in caplog.records), (
-            "Missing WARNING about absent target_id on prep failure"
-        )
+        assert any(
+            "target_id" in r.message and r.levelname == "WARNING" for r in caplog.records
+        ), "Missing WARNING about absent target_id on prep failure"
 
     def test_prep_failed_with_target_id_no_extra_warning(self, caplog):
         """When prep fails and target_id exists, no warning about missing target_id."""

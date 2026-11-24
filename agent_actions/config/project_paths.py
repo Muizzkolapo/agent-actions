@@ -173,7 +173,9 @@ class ProjectPathsFactory:
         from agent_actions.validation.path_validator import PathValidator
 
         logger.debug("Creating project paths for agent: %s", agent_name)
-        factory = cls(path_manager=PathManager(project_root=project_root) if project_root else None)
+        factory = cls(
+            path_manager=PathManager(project_root=project_root) if project_root else None
+        )
         try:
             resolved_root = factory.path_manager.get_project_root()
             prompt_dir = factory.path_manager.get_standard_path(PathType.PROMPT_STORE)

@@ -169,7 +169,8 @@ def test_every_key_read_off_a_workflow_file_is_declared_on_the_model(reads):
 
 CAUGHT = {
     "direct": 'cfg = self.user_config\ncfg.get("stray")',
-    "attribute target": 'self._raw = getattr(m, "user_config", None) or {}\nself._raw.get("stray")',
+    "attribute target": 'self._raw = getattr(m, "user_config", None) or '
+    '{}\nself._raw.get("stray")',
     "inline or-default": '(getattr(m, "user_config", None) or {}).get("stray")',
     "plain attribute read": 'self.user_config.get("stray")',
     "subscript": 'self.user_config["stray"]',
@@ -180,7 +181,8 @@ CAUGHT = {
     "walrus": 'if (cfg := self.user_config):\n    cfg.get("stray")',
 }
 MISSED = {
-    "crosses a function boundary": 'def helper(cfg):\n    return cfg.get("stray")\nhelper(self.user_config)',
+    "crosses a function boundary": "def helper(cfg):\n    return "
+    'cfg.get("stray")\nhelper(self.user_config)',
     "held under some other name": 'self.raw = load()\nself.raw.get("stray")',
 }
 

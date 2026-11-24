@@ -119,7 +119,8 @@ class TestTombstoneShapeParity:
         assert skip["_tombstone"] is True
 
     def test_extra_metadata_does_not_clobber_regular_markers(self):
-        """extra_metadata kwarg must not overwrite _tombstone/_tombstone_reason on build_tombstone."""
+        """extra_metadata kwarg must not overwrite _tombstone/_tombstone_reason on
+        build_tombstone."""
         tombstone = build_tombstone(
             "action",
             _make_input_record(),
@@ -131,7 +132,8 @@ class TestTombstoneShapeParity:
         assert tombstone["_tombstone_reason"] == "guard_skip"
 
     def test_extra_metadata_does_not_clobber_exhausted_markers(self):
-        """extra_metadata kwarg must not overwrite _tombstone/_tombstone_reason on build_exhausted_tombstone."""
+        """extra_metadata kwarg must not overwrite _tombstone/_tombstone_reason on
+        build_exhausted_tombstone."""
         tombstone = build_exhausted_tombstone(
             "action",
             _make_input_record(),

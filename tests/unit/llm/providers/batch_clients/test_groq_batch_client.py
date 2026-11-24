@@ -147,7 +147,9 @@ class TestGroqBatchClient(BaseBatchClientTests):
         assert result["url"] == "/v1/chat/completions"
         assert "messages" in result["body"]
 
-    def test_metadata_includes_groq_specific_fields(self, provider, provider_success_response_json):
+    def test_metadata_includes_groq_specific_fields(
+        self, provider, provider_success_response_json
+    ):
         """Groq responses include created timestamp and system_fingerprint."""
         result = provider.parse_provider_response(provider_success_response_json)
         assert result.metadata["created"] == 1234567890

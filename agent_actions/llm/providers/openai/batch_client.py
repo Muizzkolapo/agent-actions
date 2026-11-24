@@ -98,7 +98,9 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             body["response_format"] = {"type": "json_object"}
         from agent_actions.llm.providers.openai.client import OpenAIClient
 
-        OpenAIClient.VENDOR_PARAMS.apply_to_body(body, batch_task.model_config.get("vendor_params"))
+        OpenAIClient.VENDOR_PARAMS.apply_to_body(
+            body, batch_task.model_config.get("vendor_params")
+        )
         return {
             "custom_id": batch_task.custom_id,
             "method": "POST",
@@ -171,7 +173,8 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 vendor="openai",
                 endpoint="batches.retrieve",
                 context={
-                    "message": "Batch completed but has no output file (all requests may have failed)",
+                    "message": "Batch completed but has no output file (all requests may "
+                    "have failed)",
                     "batch_id": batch_id,
                     "status": batch_job.status,
                     "error_file_id": error_file_id,

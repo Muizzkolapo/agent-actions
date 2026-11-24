@@ -39,7 +39,7 @@ class ErrorContextService:
             if hasattr(exception, "context") and isinstance(exception.context, dict):
                 merged_context.update(exception.context)
 
-        _ALLOWED_ATTRS = frozenset(
+        allowed_attrs = frozenset(
             {
                 "reason",
                 "status",
@@ -58,7 +58,7 @@ class ErrorContextService:
             if (
                 not attr_name.startswith("_")
                 and attr_name not in excluded_attrs
-                and attr_name in _ALLOWED_ATTRS
+                and attr_name in allowed_attrs
             ):
                 try:
                     attr_value = getattr(exc, attr_name)

@@ -365,7 +365,9 @@ class SQLiteMaintenanceMixin(SQLitePayloadCodecMixin):
                                 "compiled_prompt": self.decompress_trace_text(
                                     trace_row["compiled_prompt"]
                                 ),
-                                "llm_context": self.decompress_trace_text(trace_row["llm_context"]),
+                                "llm_context": self.decompress_trace_text(
+                                    trace_row["llm_context"]
+                                ),
                                 "response_text": self.decompress_trace_text(
                                     trace_row["response_text"]
                                 ),

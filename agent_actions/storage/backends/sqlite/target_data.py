@@ -120,7 +120,8 @@ class SQLiteTargetDataMixin(SQLitePayloadCodecMixin):
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "SELECT DISTINCT relative_path FROM target_data WHERE action_name = ? ORDER BY relative_path",
+                "SELECT DISTINCT relative_path FROM target_data WHERE action_name = ? "
+                "ORDER BY relative_path",
                 (action_name,),
             )
             return [row["relative_path"] for row in cursor.fetchall()]

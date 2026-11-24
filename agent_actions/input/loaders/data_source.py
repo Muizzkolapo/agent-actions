@@ -109,7 +109,8 @@ def _parse_data_source(raw: Any) -> DataSourceConfig:
         return DataSourceConfig(**raw)
 
     raise ConfigurationError(
-        f"Invalid data_source value: expected str, dict, or DataSourceConfig, got {type(raw).__name__}",
+        "Invalid data_source value: expected str, dict, or DataSourceConfig, got "
+        f"{type(raw).__name__}",
         context={"data_source": repr(raw)},
     )
 
@@ -248,7 +249,9 @@ def _holds_a_staging_document(cache_file: Path) -> bool:
     try:
         cached = deep_json.loads(cache_file.read_text(encoding="utf-8"))
     except (OSError, ValueError) as e:
-        logger.warning("Cached API data at %s cannot be read, fetching it again: %s", cache_file, e)
+        logger.warning(
+            "Cached API data at %s cannot be read, fetching it again: %s", cache_file, e
+        )
         return False
     if not isinstance(cached, list):
         logger.warning(

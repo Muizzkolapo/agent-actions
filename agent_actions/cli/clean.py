@@ -25,7 +25,8 @@ _NO_SCOPE = (
     help=(
         "Remove a workflow's working directories. --target removes the generated "
         "output under agent_io/target/; --all removes everything including staging, "
-        "the durable store and the sandbox output, and reclaims what a provider recorded locally about "
+        "the durable store and the sandbox output, and reclaims what a provider recorded "
+        "locally about "
         "this workflow's batches. With neither, nothing is removed."
     ),
 )

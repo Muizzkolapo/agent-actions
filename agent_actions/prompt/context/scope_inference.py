@@ -74,7 +74,8 @@ def infer_dependencies(
     Returns:
         Tuple of (input_sources, context_sources):
         - input_sources: List of actions that provide input files
-        - context_sources: List of actions that provide context only (loaded from record namespaces)
+        - context_sources: List of actions that provide context only (loaded from record
+          namespaces)
 
     Raises:
         ConfigurationError: If a referenced action doesn't exist in workflow
@@ -90,7 +91,8 @@ def infer_dependencies(
                 ]
             }
         }
-        workflow_actions = ["extract", "flatten", "add_answer_text", "suggest_distractor_counts", "write_scenario_question"]
+        workflow_actions = ["extract", "flatten", "add_answer_text", "suggest_distractor_counts",
+        "write_scenario_question"]
 
         Returns:
             (["add_answer_text"], ["suggest_distractor_counts", "write_scenario_question"])
@@ -166,7 +168,8 @@ def infer_dependencies(
     # hybrid. Nothing is lost either way: the order here was hash-random before.
     context_sources = sorted(referenced_actions - set(input_sources))
 
-    # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
+    # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1,
+    # extract_raw_qa_2, extract_raw_qa_3])
     # This handles version_consumption where context_scope references the base name
     # Expand both input_sources and context_sources
     input_sources_expanded = expand_version_base_names(input_sources, workflow_actions)
@@ -189,7 +192,8 @@ def infer_dependencies(
 
             if dep_action not in workflow_actions:
                 raise ConfigurationError(
-                    f"Action '{action_name}': References '{dep_action}' in dependencies/context_scope "
+                    f"Action '{action_name}': References '{dep_action}' in "
+                    "dependencies/context_scope "
                     f"but '{dep_action}' not found in workflow.\n\n"
                     f"Available actions: {workflow_actions}",
                     context={

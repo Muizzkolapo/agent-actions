@@ -1,10 +1,15 @@
-"""An error prints as the action only an action it names, and its context stays apart from its Problem."""
+"""An error prints as the action only an action it names, and its context stays apart from its
+Problem."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import ConfigurationError, ConfigValidationError, enrich_exception_context
+from agent_actions.errors import (
+    ConfigurationError,
+    ConfigValidationError,
+    enrich_exception_context,
+)
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.errors.translator import ErrorTranslator
@@ -116,7 +121,9 @@ class TestABlankActionPrintsNoActionLine:
         assert "action_name" not in ErrorTranslator().translate(error, CLI_CONTEXT).context
 
     def test_an_error_whose_formatter_passes_its_context_through(self):
-        error = ConfigurationError("Invalid thing", context={"action_name": " ", "agent": WORKFLOW})
+        error = ConfigurationError(
+            "Invalid thing", context={"action_name": " ", "agent": WORKFLOW}
+        )
         lines = _lines(error)
 
         assert f"  Agent: {WORKFLOW}" in lines

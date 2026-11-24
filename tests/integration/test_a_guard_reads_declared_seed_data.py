@@ -146,7 +146,9 @@ def _project(
     (workflow / "agent_io" / "staging").mkdir(parents=True)
     (workflow / "agent_io" / "staging" / "pages.json").write_text(json.dumps(PAGES))
     (root / "prompt_store").mkdir()
-    (root / "prompt_store" / f"{WORKFLOW}.md").write_text(_PROMPT.format(prompt_extra=prompt_extra))
+    (root / "prompt_store" / f"{WORKFLOW}.md").write_text(
+        _PROMPT.format(prompt_extra=prompt_extra)
+    )
     (root / "schema" / WORKFLOW).mkdir(parents=True)
     (root / "schema" / WORKFLOW / "fix1525_produce_out.yml").write_text(_PRODUCE_SCHEMA)
     (root / "schema" / WORKFLOW / "fix1525_consumer_out.yml").write_text(_CONSUMER_SCHEMA)
@@ -232,7 +234,9 @@ def test_the_prompt_still_reads_the_seed_beside_a_guard_reading_it(tmp_path):
     _run_to_the_end(project)
 
     prompts = [
-        p for (p,) in trace_rows(project, "select compiled_prompt from prompt_trace") if "Say " in p
+        p
+        for (p,) in trace_rows(project, "select compiled_prompt from prompt_trace")
+        if "Say " in p
     ]
     assert prompts == ["Say high in on", "Say high in on"], prompts
 
@@ -334,7 +338,9 @@ def test_the_prompt_and_the_guard_parse_a_seed_file_once_in_all(
 @pytest.mark.parametrize(
     ("condition", "parses"), [("source.page_content != ''", 0), ("seed.conf.mode == 'on'", 1)]
 )
-def test_a_file_tool_guard_parses_seed_once_at_most(tmp_path, monkeypatch, mode, condition, parses):
+def test_a_file_tool_guard_parses_seed_once_at_most(
+    tmp_path, monkeypatch, mode, condition, parses
+):
     project = _project(tmp_path, condition, mode, file_tool=True)
 
     assert _parses_in_process(project, monkeypatch) == parses

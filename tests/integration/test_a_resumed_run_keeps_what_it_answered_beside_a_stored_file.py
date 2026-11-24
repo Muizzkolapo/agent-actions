@@ -397,7 +397,8 @@ def test_an_action_switched_to_batch_beside_a_file_stored_before_its_edit_keeps_
     online,  # noqa: F811
     provider,  # noqa: F811
 ):
-    """Alpha is answered online by the --rerun after the edit and the run is stopped. Batch does not
+    """Alpha is answered online by the --rerun after the edit and the run is stopped. Batch does
+    not
     finish a checkpoint row, so it sends alpha again, rather than call it done and carry
     the row pages1.json held from before the edit."""
     provider.answers()

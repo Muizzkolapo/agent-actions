@@ -128,7 +128,9 @@ class TestToolPathAtTheWorkflowTopLevel:
         ],
         ids=["workflow wins", "default wins", "project config is the fallback"],
     )
-    def test_the_resolution_order_survives(self, tmp_path, workflow_value, default_value, expected):
+    def test_the_resolution_order_survives(
+        self, tmp_path, workflow_value, default_value, expected
+    ):
         """workflow > default > project config, through the real ConfigManager.
 
         This pins pre-existing manager behaviour rather than anything the schema

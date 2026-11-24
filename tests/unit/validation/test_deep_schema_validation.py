@@ -260,7 +260,8 @@ class TestFieldsFormatItemsSubSchema:
         report = validate_output_against_schema(output, self._schema(), "canonicalize_qa")
         assert not report.is_compliant
         assert any(
-            "'canonical_questions' element 1" in e and "'question_text' is a required property" in e
+            "'canonical_questions' element 1" in e
+            and "'question_text' is a required property" in e
             for e in report.validation_errors
         )
 

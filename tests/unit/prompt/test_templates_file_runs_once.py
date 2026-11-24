@@ -127,7 +127,9 @@ def test_the_file_named_by_the_error_is_the_one_that_reads_the_missing_name(
 
 
 @pytest.mark.parametrize("first, second", [("a.j2", "z.j2"), ("z.j2", "a.j2")])
-def test_two_files_reading_each_others_names_load_with_the_unset_one_empty(tmp_path, first, second):
+def test_two_files_reading_each_others_names_load_with_the_unset_one_empty(
+    tmp_path, first, second
+):
     templates = {
         first: "{% set x = 'x' ~ (y | default('')) %}\n",
         second: "{% set y = 'y' ~ (x | default('')) %}\n",

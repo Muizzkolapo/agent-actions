@@ -48,7 +48,9 @@ def test_get_tool_dirs_reads_tool_path(tmp_path: Path, config_text, expected):
     "error",
     [
         pytest.param(OSError("disk error"), id="os_error"),
-        pytest.param(ConfigValidationError("bad_config", "bad yaml"), id="config_validation_error"),
+        pytest.param(
+            ConfigValidationError("bad_config", "bad yaml"), id="config_validation_error"
+        ),
     ],
 )
 def test_get_tool_dirs_returns_default_when_config_load_fails(tmp_path: Path, error):

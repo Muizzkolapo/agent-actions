@@ -30,7 +30,8 @@ def _agents(actions: list[dict]) -> dict[str, dict]:
     expanded = {
         "name": "w",
         "actions": [
-            a.model_dump(mode="python", exclude_unset=True, by_alias=True) for a in workflow.actions
+            a.model_dump(mode="python", exclude_unset=True, by_alias=True)
+            for a in workflow.actions
         ],
         "defaults": workflow.defaults.model_dump(mode="python", exclude_unset=True, by_alias=True),
     }

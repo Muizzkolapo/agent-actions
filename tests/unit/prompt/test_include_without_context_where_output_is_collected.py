@@ -85,7 +85,8 @@ def test_in_a_macro_it_reads_another_files_variable_and_not_the_macros_argument(
 
 def test_a_missing_file_ignored_in_a_macro_yields_nothing_and_named_fails(tmp_path):
     templates = {
-        "a.j2": "{% macro soft() %}[{% include 'none.j2' ignore missing without context %}]{% endmacro %}"
+        "a.j2": "{% macro soft() %}[{% include 'none.j2' ignore missing without context "
+        "%}]{% endmacro %}"
         "{% macro hard() %}[{% include 'none.j2' without context %}]{% endmacro %}\n",
     }
 

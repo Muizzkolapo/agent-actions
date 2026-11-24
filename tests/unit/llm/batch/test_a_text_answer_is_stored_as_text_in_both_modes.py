@@ -59,7 +59,9 @@ def test_the_reply_is_stored_as_online_stores_it(vendor, text, tmp_path):
 def test_the_reply_is_one_record_holding_the_text(vendor, tmp_path):
     text = ANSWERS["prose-with-a-list"]
 
-    assert batch(vendor, text, action_config(json_mode=False), tmp_path) == [{"raw_response": text}]
+    assert batch(vendor, text, action_config(json_mode=False), tmp_path) == [
+        {"raw_response": text}
+    ]
 
 
 @pytest.mark.parametrize("vendor", VENDORS)
@@ -124,7 +126,9 @@ def test_a_repair_loop_judges_the_reply_as_online_judges_it(text, tmp_path):
             EXPECT, action_name=ACTION, agent_config=config
         )
 
-    in_online = service().execute(lambda prompt: (online_answer("openai", text, config), True), "p")
+    in_online = service().execute(
+        lambda prompt: (online_answer("openai", text, config), True), "p"
+    )
     in_batch = ExpectationStrategy(service()).evaluate(_retrieved(text, config, tmp_path))
 
     assert in_batch.passed == in_online.suite_result.overall_pass == (text == "tides")

@@ -13,6 +13,10 @@ from agent_actions.guards import (
 )
 
 
+def _unchanged(value):
+    return value
+
+
 class TestGuardConfig:
     """Test the new GuardConfig class for consolidated guard behavior."""
 
@@ -26,7 +30,9 @@ class TestGuardConfig:
 
     def test_guard_config_with_filter_behavior(self):
         """Test GuardConfig with filter behavior (remove records)."""
-        config = GuardConfig(condition='questionable != "Low Value"', on_false=GuardBehavior.FILTER)
+        config = GuardConfig(
+            condition='questionable != "Low Value"', on_false=GuardBehavior.FILTER
+        )
         assert config.condition == 'questionable != "Low Value"'
         assert config.on_false == GuardBehavior.FILTER
         assert config.is_udf_condition() is False
@@ -200,10 +206,7 @@ class TestFormatConverterIntegration:
         }
         defaults = {}
         agent = {"agent_type": "test_action"}
-        template_replacer = lambda x: x
-        result = ActionExpander._create_agent_from_action(
-            action, defaults, agent, template_replacer
-        )
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, _unchanged)
         assert result.get("conditional_clause") == "should_process"
         assert result.get("guard") is None
 
@@ -221,10 +224,7 @@ class TestFormatConverterIntegration:
         }
         defaults = {}
         agent = {"agent_type": "test_action"}
-        template_replacer = lambda x: x
-        result = ActionExpander._create_agent_from_action(
-            action, defaults, agent, template_replacer
-        )
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, _unchanged)
         assert result.get("guard") is not None
         assert result["guard"]["clause"] == 'questionable != "Low Value"'
         assert result["guard"]["behavior"] == "filter"
@@ -244,10 +244,7 @@ class TestFormatConverterIntegration:
         }
         defaults = {}
         agent = {"agent_type": "test_action"}
-        template_replacer = lambda x: x
-        result = ActionExpander._create_agent_from_action(
-            action, defaults, agent, template_replacer
-        )
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, _unchanged)
         assert result.get("guard") is not None
         assert result["guard"]["clause"] == 'questionable != "Low Value"'
         assert result["guard"]["behavior"] == "skip"

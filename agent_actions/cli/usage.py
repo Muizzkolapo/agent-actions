@@ -140,7 +140,9 @@ class UsageCommand:
         if report["priced"]:
             table.add_column("Est. cost", justify="right")
 
-        def add(labels: tuple[str, str, str, str], usage: Row, rows: list[Row], style: str) -> None:
+        def add(
+            labels: tuple[str, str, str, str], usage: Row, rows: list[Row], style: str
+        ) -> None:
             cells = [
                 f"{usage['calls']:,}",
                 f"{usage['input_tokens']:,}",

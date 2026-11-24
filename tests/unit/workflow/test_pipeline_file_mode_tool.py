@@ -1781,7 +1781,8 @@ def test_file_tool_tracked_item_extends_lineage():
         == "new value from original"
     )
     assert (
-        enriched_results.data[1]["content"]["my_file_tool"]["transformed"] == "new value from other"
+        enriched_results.data[1]["content"]["my_file_tool"]["transformed"]
+        == "new value from other"
     )
 
     assert enriched_results.data[0]["source_guid"] == "sg-1"
@@ -1972,7 +1973,9 @@ def test_file_tool_cascade_blocked_source_index_alignment():
     ):
         processor = UnifiedProcessor()
         strategy = FileToolStrategy()
-        output, stats = processor.process([r1, r2, r3], context, strategy, raw_records=[r1, r2, r3])
+        output, stats = processor.process(
+            [r1, r2, r3], context, strategy, raw_records=[r1, r2, r3]
+        )
 
     # R2 should be quarantined (unprocessed), R1 and R3 processed
     assert stats.unprocessed == 1

@@ -157,7 +157,9 @@ class TestOwnershipEndsWhenTheResultsAreInHand:
                 context,
                 MagicMock(file_name="f.json"),
                 state,
-                recovery_results=[BatchResult(custom_id="r1", content=dict(FAILING), success=True)],
+                recovery_results=[
+                    BatchResult(custom_id="r1", content=dict(FAILING), success=True)
+                ],
                 accumulated=[],
                 context_map=_context_map("r1"),
             )

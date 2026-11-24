@@ -308,7 +308,8 @@ class TestHandleDependencySkip:
 
     @patch("agent_actions.workflow.executor.fire_event")
     def test_returns_skipped_result_with_success_true(self, mock_fire, executor, mock_deps):
-        """Returns ActionExecutionResult(success=True, status='skipped') — skipped state, but independent branches continue."""
+        """Returns ActionExecutionResult(success=True, status='skipped') — skipped state, but
+        independent branches continue."""
         mock_deps.action_runner.storage_backend = None
         start_time = datetime.now()
 
@@ -551,7 +552,8 @@ class TestTotalFailureEscalation:
     def test_total_failure_handle_run_success_returns_failure_result(
         self, mock_fire, executor, mock_deps
     ):
-        """_handle_run_success must return success=False when _resolve_completion_status returns FAILED."""
+        """_handle_run_success must return success=False when _resolve_completion_status returns
+        FAILED."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = False
         mock_deps.action_runner.storage_backend.get_failed_items.return_value = [
             {"record_id": "guid-1", "disposition": "failed", "reason": "503"},
@@ -602,7 +604,9 @@ class TestTotalFailureEscalation:
         )
 
     @patch("agent_actions.workflow.executor.fire_event")
-    def test_total_failure_tracker_records_failed_not_partial(self, mock_fire, executor, mock_deps):
+    def test_total_failure_tracker_records_failed_not_partial(
+        self, mock_fire, executor, mock_deps
+    ):
         """Run tracker must record 'failed', not 'partial', for total failure."""
         run_tracker = MagicMock()
         executor.run_tracker = run_tracker
@@ -757,7 +761,8 @@ class TestStaleDispositionFullChain:
         # Upstream "write_scenario_question" has stale SKIPPED disposition from prior run
         # but also has output from the current run.
         storage.has_disposition.side_effect = (
-            lambda dep, disp, **kw: dep == "write_scenario_question" and disp == DISPOSITION_SKIPPED
+            lambda dep, disp, **kw: dep == "write_scenario_question"
+            and disp == DISPOSITION_SKIPPED
         )
         storage.list_target_files.return_value = ["combined_scraped.json"]
         mock_deps.action_runner.storage_backend = storage
@@ -778,7 +783,8 @@ class TestStaleDispositionFullChain:
     def test_limit_change_clears_dispositions_then_action_resolves_completed(
         self, mock_fire, executor, mock_deps
     ):
-        """Full chain: limit changes → status reset + dispositions cleared → action re-runs → COMPLETED."""
+        """Full chain: limit changes → status reset + dispositions cleared → action re-runs →
+        COMPLETED."""
         storage = MagicMock()
         # Stale SKIPPED disposition from prior run
         storage.has_disposition.return_value = False  # cleared by invalidation
@@ -829,7 +835,9 @@ class TestFailureDetailLogging:
 
     @patch("agent_actions.workflow.executor.fire_event")
     @patch("agent_actions.workflow.executor.logger")
-    def test_partial_failure_logs_record_details(self, mock_logger, mock_fire, executor, mock_deps):
+    def test_partial_failure_logs_record_details(
+        self, mock_logger, mock_fire, executor, mock_deps
+    ):
         """Partial failure should log record IDs and reasons."""
         msgs = self._run_with_failures(
             executor,
@@ -899,7 +907,9 @@ class TestFailureDetailLogging:
     @patch("agent_actions.workflow.executor.logger")
     def test_missing_record_id_logs_unknown(self, mock_logger, mock_fire, executor, mock_deps):
         """Missing record_id key should log 'unknown', not crash."""
-        msgs = self._run_with_failures(executor, mock_deps, mock_logger, [{"reason": "some error"}])
+        msgs = self._run_with_failures(
+            executor, mock_deps, mock_logger, [{"reason": "some error"}]
+        )
         assert any("record_id: unknown" in m for m in msgs)
 
     @patch("agent_actions.workflow.executor.fire_event")

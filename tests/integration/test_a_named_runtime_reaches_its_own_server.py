@@ -1,4 +1,5 @@
-"""`model_vendor: llamafile` alone reaches a local llamafile; an `openai` action beside it does not.
+"""`model_vendor: llamafile` alone reaches a local llamafile; an `openai` action beside it does
+not.
 
 Every run is an `agac run` through the CLI. Each stub server speaks the OpenAI chat API
 and records the requests it was sent, so an assertion on a server's log is an assertion
@@ -141,7 +142,9 @@ def _action(name: str, vendor: str, model: str, extra: str = "") -> str:
 
 
 def test_the_llamafile_row_is_the_port_this_test_serves():
-    assert RUNTIME_PROFILES["llamafile"].default_base_url == f"http://localhost:{LLAMAFILE_PORT}/v1"
+    assert (
+        RUNTIME_PROFILES["llamafile"].default_base_url == f"http://localhost:{LLAMAFILE_PORT}/v1"
+    )
 
 
 def test_a_llamafile_action_and_an_openai_action_reach_their_own_servers(tmp_path, servers):
@@ -162,7 +165,9 @@ def test_a_llamafile_action_and_an_openai_action_reach_their_own_servers(tmp_pat
     actions = _action("classify_local", "llamafile", "local") + _action(
         "summarize_cloud", "openai", "gpt-4o-mini", "    api_key: OPENAI_API_KEY\n"
     )
-    _run(tmp_path / "mixed", actions, {"OPENAI_API_KEY": "sk-test", "OPENAI_BASE_URL": _url(other)})
+    _run(
+        tmp_path / "mixed", actions, {"OPENAI_API_KEY": "sk-test", "OPENAI_BASE_URL": _url(other)}
+    )
 
     assert [r["model"] for r in local.requests] == ["local"]
     assert [r["model"] for r in other.requests] == ["gpt-4o-mini"]

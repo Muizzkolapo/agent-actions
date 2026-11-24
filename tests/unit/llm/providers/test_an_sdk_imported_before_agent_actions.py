@@ -46,7 +46,8 @@ if sdk == "anthropic":
     from anthropic.types import Message, RawMessageStreamEvent
 
     models.construct_type(type_=Message, value=payload)
-    bufs = {"json_bufs": {}} if "json_bufs" in inspect.signature(accumulate_event).parameters else {}
+    takes_bufs = "json_bufs" in inspect.signature(accumulate_event).parameters
+    bufs = {"json_bufs": {}} if takes_bufs else {}
     snapshot = None
     for raw in events:
         event = models.construct_type(type_=RawMessageStreamEvent, value=raw)

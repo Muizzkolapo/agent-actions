@@ -75,7 +75,9 @@ def test_rules_of_a_named_suite_are_read(tmp_path):
         {
             "name": "a",
             "expect": {
-                "expectations": [{"type": "llm_judge", "field": "summary", "params": {"rule": "x"}}]
+                "expectations": [
+                    {"type": "llm_judge", "field": "summary", "params": {"rule": "x"}}
+                ]
             },
         },
     ],

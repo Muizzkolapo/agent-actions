@@ -8,14 +8,14 @@ from typing import Any
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
-logger = logging.getLogger(__name__)
-
 from agent_actions.prompt.aliases import header_names, prompt_aliases
 from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.constants import RESERVED_NAMES_NO_RECORD_HAS, SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
 from .data_flow_graph import InputRequirement
+
+logger = logging.getLogger(__name__)
 
 # A call such as `ns.items()` or `ns.get('x', 'd')` reaches the method of the mapping
 # behind `ns`, not a field of that name (see `prompt/jinja_env.py`).
@@ -95,7 +95,9 @@ class ReferenceExtractor:
         for directive, refs in context_scope.items():
             if isinstance(refs, list):
                 requirements.extend(
-                    self._extract_from_context_scope(refs, agent_name, f"context_scope.{directive}")
+                    self._extract_from_context_scope(
+                        refs, agent_name, f"context_scope.{directive}"
+                    )
                 )
 
         conditional = agent_config.get("conditional_clause", "")

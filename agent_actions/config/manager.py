@@ -187,7 +187,8 @@ class ConfigManager:
         project_root: Path | None = None,
         rendered_workflow: str | None = None,
     ):
-        """``rendered_workflow`` is the workflow file already rendered; given it, no render runs."""
+        """``rendered_workflow`` is the workflow file already rendered; given it, no render
+        runs."""
         self.constructor_path = constructor_path
         self.default_path = default_path
         self.project_root = project_root

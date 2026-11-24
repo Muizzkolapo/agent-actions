@@ -161,7 +161,9 @@ class StaticDataLoader:
                     cause=e,
                 ) from e
 
-        logger.debug("Loaded %s static data fields: %s", len(loaded_data), list(loaded_data.keys()))
+        logger.debug(
+            "Loaded %s static data fields: %s", len(loaded_data), list(loaded_data.keys())
+        )
         return loaded_data
 
     def _parse_file_path(self, file_spec: str, field_name: str) -> str:
@@ -250,7 +252,8 @@ class StaticDataLoader:
         if file_size > cls.MAX_FILE_SIZE_BYTES:
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': File too large "
-                f"({file_size / 1024 / 1024:.2f}MB, max {cls.MAX_FILE_SIZE_BYTES / 1024 / 1024}MB)",
+                f"({file_size / 1024 / 1024:.2f}MB, max "
+                f"{cls.MAX_FILE_SIZE_BYTES / 1024 / 1024}MB)",
                 context={
                     "field_name": field_name,
                     "file_path": str(file_path),

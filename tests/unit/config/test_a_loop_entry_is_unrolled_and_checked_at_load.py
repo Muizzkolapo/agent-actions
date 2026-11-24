@@ -364,5 +364,7 @@ def test_a_branch_action_at_file_granularity_is_refused(tmp_path):
     branch = _branch(check={"granularity": "File"})
     data = _compiled(_expanded(branch=branch))
 
-    with pytest.raises(ConfigurationError, match="'check' of branch 'question_round' runs at File"):
+    with pytest.raises(
+        ConfigurationError, match="'check' of branch 'question_round' runs at File"
+    ):
         finish_loops(data, WF, tmp_path)

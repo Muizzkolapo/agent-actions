@@ -218,7 +218,9 @@ def test_a_carried_record_with_a_failing_verdict_is_not_counted_again(backend, c
     carried = carry(_row("old", _verdict(False)))
     new = ProcessingResult.success(data=[_row("new", _verdict(False))], source_guid="new")
 
-    _, stats = collect_results_from_processing_results([carried, new], "a", storage_backend=backend)
+    _, stats = collect_results_from_processing_results(
+        [carried, new], "a", storage_backend=backend
+    )
 
     assert stats.checks_failed == 1
     assert "old" not in _reasons(backend)

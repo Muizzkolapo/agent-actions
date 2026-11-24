@@ -1,7 +1,8 @@
 """A stub OpenAI-compatible chat server that records what it was handed.
 
 `honour` replies match the schema the request carried, `ignore` replies match none,
-`prose` is not JSON, `empty` holds no content; a status queue answers first. As a program (`--honour PORT
+`prose` is not JSON, `empty` holds no content; a status queue answers first. As a program
+(`--honour PORT
 --ignore PORT`) it serves the sample project's probe and prints each request's headers.
 """
 

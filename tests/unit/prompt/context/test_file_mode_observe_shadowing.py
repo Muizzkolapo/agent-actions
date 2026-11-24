@@ -319,7 +319,9 @@ class TestFrameworkNamespaceShadowing:
     def test_bus_namespace_name_qualified_even_when_absent(self):
         """``version`` is injected downstream for guards and templates; a bare
         flat key of that name would shadow it there."""
-        content = _enrich({"extract": {"version": 3, "title": "T"}}, ["extract.version"])["content"]
+        content = _enrich({"extract": {"version": 3, "title": "T"}}, ["extract.version"])[
+            "content"
+        ]
 
         assert content["extract.version"] == 3
         assert "version" not in content

@@ -139,7 +139,9 @@ def _batch(tmp_path: Path, prompt: str, caching: bool) -> dict[str, Any]:
     sent: list[dict[str, Any]] = []
     client = AnthropicBatchClient(api_key="sk-ant-test", enable_prompt_caching=caching)
     client.client = _sdk_client(sent)
-    data = [{"target_id": "alpha", "source_guid": "sg-alpha", "content": {"page_content": "alpha"}}]
+    data = [
+        {"target_id": "alpha", "source_guid": "sg-alpha", "content": {"page_content": "alpha"}}
+    ]
     prepared = BatchTaskPreparator(
         action_indices={}, dependency_configs={}, storage_backend=MagicMock()
     ).prepare_tasks(

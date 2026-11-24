@@ -96,7 +96,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             if "properties" not in schema:
                 if schema.get("type") == "object":
                     raise ConfigurationError(
-                        f"Schema is a JSON Schema object but missing 'properties' key (got: {list(schema.keys())})"
+                        "Schema is a JSON Schema object but missing 'properties' key "
+                        f"(got: {list(schema.keys())})"
                     )
                 if not all(isinstance(v, dict) for v in schema.values()):
                     raise ConfigurationError(

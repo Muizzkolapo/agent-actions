@@ -117,7 +117,9 @@ def test_the_records_it_had_answered_are_still_done_for_the_next_run(tmp_path, b
     assert manager.get_status(ACTION) == ActionStatus.PENDING
 
 
-def test_an_edit_since_the_refusal_keeps_what_it_had_answered_and_names_the_edit(tmp_path, backend):
+def test_an_edit_since_the_refusal_keeps_what_it_had_answered_and_names_the_edit(
+    tmp_path, backend
+):
     """What came before the refusal was answered under the old prompt and stands; the
     records still to answer are answered under the edit."""
     _failed(tmp_path, backend, _refused())
@@ -128,7 +130,8 @@ def test_an_edit_since_the_refusal_keeps_what_it_had_answered_and_names_the_edit
     assert _dispositions(backend) == {"answered": DISPOSITION_SUCCESS}
     assert manager.get_status(ACTION) == ActionStatus.PENDING
     assert [r.getMessage() for r in records if "was edited since" in r.getMessage()] == [
-        f"{ACTION} was edited since its last run started (action config (prompt/schema/guard/routing)): "
+        f"{ACTION} was edited since its last run started (action config "
+        "(prompt/schema/guard/routing)): "
         "the records it finished stand, a batch already sent is collected as it was sent, and "
         f"the rest are answered under the edit. Run again with --rerun {ACTION} to answer "
         "every record under the edit"

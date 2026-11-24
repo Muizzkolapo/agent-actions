@@ -83,7 +83,8 @@ class TestReservedNamespaceCollision:
 
 
 class TestPartialFileRejection:
-    """One staging file is rejected, so the whole first stage is: nothing of the clean file runs."""
+    """One staging file is rejected, so the whole first stage is: nothing of the clean file
+    runs."""
 
     def test_the_rejection_is_reported(self, run):
         r = run("partial_file_rejection")
@@ -183,7 +184,9 @@ class TestHonestyProbe:
         r = run("honesty_probe")
         assert r.returncode == 0, r.output
 
-        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob("*.db")
+        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob(
+            "*.db"
+        )
         rows = stored_rows(
             db,
             "select record_id, attempt, compiled_prompt, response_text from prompt_trace "
@@ -204,7 +207,9 @@ class TestHonestyProbe:
         project = tmp_path / "honesty_probe"
         shutil.copytree(FIXTURE, project)
         (project / ".env").write_text("OPENAI_API_KEY=sk-not-used\nOLLAMA_API_KEY=not-used\n")
-        config = project / "agent_workflow" / "honesty_probe" / "agent_config" / "honesty_probe.yml"
+        config = (
+            project / "agent_workflow" / "honesty_probe" / "agent_config" / "honesty_probe.yml"
+        )
         config.write_text(config.read_text().replace("run_mode: online", f"run_mode: {run_mode}"))
         return project
 
@@ -242,7 +247,9 @@ class TestHonestyProbe:
 
         assert result.returncode == 0, outputs[-1]
         completing = next(
-            out for out in outputs if re.search(r"[✓⚠] repaired \d+ records", " ".join(out.split()))
+            out
+            for out in outputs
+            if re.search(r"[✓⚠] repaired \d+ records", " ".join(out.split()))
         )
         line = self._repaired_line(completing)
         assert "repaired 4 records in" in line
@@ -273,7 +280,9 @@ class TestHonestyProbe:
         assert "⚠ repaired 4 records in" in flat
         assert "— 1 skipped by guard, 3 failed their checks" in flat
         # Its own line: under parallel execution a log line can follow it in the output.
-        (warned,) = [row.strip() for row in r.output.splitlines() if " warned  4 records in" in row]
+        (warned,) = [
+            row.strip() for row in r.output.splitlines() if " warned  4 records in" in row
+        ]
         assert warned.startswith("✓ warned  4 records in")
         assert "failed their checks" not in warned
         assert re.search(r"⚠ [0-9.]+s — 3 completed, 7 records failed their checks", flat)
@@ -282,7 +291,9 @@ class TestHonestyProbe:
         r = run("honesty_probe")
         assert r.returncode == 0, r.output
 
-        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob("*.db")
+        (db,) = (r.project / "agent_workflow" / "honesty_probe" / "agent_io" / "store").glob(
+            "*.db"
+        )
         held = sorted(
             stored_rows(
                 db,

@@ -37,7 +37,9 @@ class TestFileModeRefusesBeforeTheGuardAndFailsTheRecord:
 
         assert prepared == []
         assert [s["reason"] for s in skipped] == [OBSERVE_FIELD_MISSING]
-        assert skipped[0]["detail"] == "context_scope.observe field 'a1.n' not found in this record"
+        assert (
+            skipped[0]["detail"] == "context_scope.observe field 'a1.n' not found in this record"
+        )
 
     def test_the_refusal_names_the_position_so_the_pre_scope_list_stays_aligned(self):
         """`pipeline.py` removes these positions from the list the guard is paired to."""

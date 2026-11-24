@@ -15,8 +15,9 @@ _sentinel = object()
 if sys.modules.get("agent_actions.workflow.pipeline_file_mode", _sentinel) is _sentinel:
     sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
 
-from agent_actions.llm.batch.services.submission import BatchSubmissionService
-from agent_actions.processing.disposition_gate import DispositionGate
+# Imported only once the module stub above is in place.
+from agent_actions.llm.batch.services.submission import BatchSubmissionService  # noqa: E402
+from agent_actions.processing.disposition_gate import DispositionGate  # noqa: E402
 
 
 def _make_service(

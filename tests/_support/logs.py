@@ -24,7 +24,9 @@ class _Collect(logging.Handler):
 
 
 @contextmanager
-def framework_records(name: str, level: int = logging.WARNING) -> Iterator[list[logging.LogRecord]]:
+def framework_records(
+    name: str, level: int = logging.WARNING
+) -> Iterator[list[logging.LogRecord]]:
     """The records the logger *name* emits at *level* or above inside the block."""
     logger = logging.getLogger(name)
     handler = _Collect()

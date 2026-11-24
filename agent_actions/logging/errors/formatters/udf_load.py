@@ -50,7 +50,9 @@ class UDFLoadErrorFormatter(ErrorFormatter):
 
         subject = self._workflow_and_action(context)
         if module == UDFLoadError.DISCOVERY_SENTINEL:
-            return self._format_discovery_failure(file, error, search_path, requested_path, subject)
+            return self._format_discovery_failure(
+                file, error, search_path, requested_path, subject
+            )
 
         return self._format_import_failure(
             module, file, error, exc, search_path, requested_path, subject

@@ -151,7 +151,10 @@ class BatchPassthroughEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.BATCH
-        self.message = f"All items filtered by conditional clause - passthrough data processed for {self.action_name}"
+        self.message = (
+            "All items filtered by conditional clause - passthrough data "
+            f"processed for {self.action_name}"
+        )
         self.data = {
             "action_name": self.action_name,
         }

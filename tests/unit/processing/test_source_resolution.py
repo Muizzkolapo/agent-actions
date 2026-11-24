@@ -115,7 +115,9 @@ class TestResolveFirstStageSource:
         framework name — the envelope is what makes that safe."""
         row = {"content": {"source": {"lineage": "user value"}}, "source_guid": "G"}
 
-        assert resolve_first_stage_source(row) == {"content": {"source": {"lineage": "user value"}}}
+        assert resolve_first_stage_source(row) == {
+            "content": {"source": {"lineage": "user value"}}
+        }
 
     @pytest.mark.parametrize("item", ["just some text", [{"title": "T"}], 7, 0.5, True])
     def test_a_non_record_item_is_returned_unchanged(self, item):

@@ -66,7 +66,9 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
         from agent_actions.storage import get_storage_backend
 
-        backend = get_storage_backend(workflow_path=str(io_dir.parent), workflow_name=workflow_name)
+        backend = get_storage_backend(
+            workflow_path=str(io_dir.parent), workflow_name=workflow_name
+        )
         backend.initialize()
         try:
             for action in statuses:
@@ -476,7 +478,8 @@ class RunCommand:
     "--verify-keys",
     is_flag=True,
     default=False,
-    help="Verify API keys by probing vendor endpoints, and declared endpoints with one structured-output request, before execution",
+    help="Verify API keys by probing vendor endpoints, and declared endpoints with one "
+    "structured-output request, before execution",
 )
 @click.option(
     "--wait",

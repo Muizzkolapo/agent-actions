@@ -29,7 +29,9 @@ def _prompt(tmp_path: Path, prompt: str, templates: dict[str, str], head: str = 
 
 @BEFORE_AND_AFTER
 @pytest.mark.parametrize("unrelated", [0, 2])
-def test_an_item_appended_to_another_files_list_is_in_it_once(tmp_path, setter, changer, unrelated):
+def test_an_item_appended_to_another_files_list_is_in_it_once(
+    tmp_path, setter, changer, unrelated
+):
     templates = {setter: "{% set reg = [] %}\n", changer: "{% set _ = reg.append('b') %}\n"}
     for n in range(unrelated):
         templates[f"other_{n}.j2"] = f"{{% set other_{n} = {n} %}}\n"

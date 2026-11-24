@@ -62,7 +62,9 @@ class SQLiteSourceDataMixin(SQLitePayloadCodecMixin):
                     relative_path,
                     source_guid,
                     deep_json.dumps(item, ensure_ascii=False),
-                    self._repeat_of_column(item.get("repeat_of_source_guid"), relative_path, index),
+                    self._repeat_of_column(
+                        item.get("repeat_of_source_guid"), relative_path, index
+                    ),
                 )
             )
 

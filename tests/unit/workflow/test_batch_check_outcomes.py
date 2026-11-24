@@ -56,7 +56,10 @@ class TestBatchCheckCompleteEvent:
     def test_completed_event_has_correct_fields(self, executor, mock_deps):
         """Successful batch fires BatchCompleteEvent with action_name and elapsed_time."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
-        mock_deps.batch_manager.handle_batch_agent.return_value = ("/output/file.json", "completed")
+        mock_deps.batch_manager.handle_batch_agent.return_value = (
+            "/output/file.json",
+            "completed",
+        )
         mock_deps.state_manager.get_status_details.return_value = {
             "status": ActionStatus.BATCH_SUBMITTED,
             "batch_submitted_at": "2026-05-01T10:00:00",
@@ -116,7 +119,10 @@ class TestBatchTotalFailure:
     def test_batch_total_failure_returns_failed(self, executor, mock_deps):
         """Batch-completed action with all records failed returns success=False."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.BATCH_SUBMITTED
-        mock_deps.batch_manager.handle_batch_agent.return_value = ("/output/file.json", "completed")
+        mock_deps.batch_manager.handle_batch_agent.return_value = (
+            "/output/file.json",
+            "completed",
+        )
         mock_deps.state_manager.get_status_details.return_value = {
             "status": ActionStatus.BATCH_SUBMITTED,
             "batch_submitted_at": "2026-05-01T10:00:00",

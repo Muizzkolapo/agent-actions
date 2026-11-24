@@ -68,8 +68,10 @@ class TestProcessorUtilsThreadSafety:
 
         def worker():
             """Worker function that generates position-based correlation IDs."""
-            correlation_id = VersionIdGenerator.get_or_create_position_based_version_correlation_id(
-                record_index, version_base_name, self.get_test_session_id(), file_context
+            correlation_id = (
+                VersionIdGenerator.get_or_create_position_based_version_correlation_id(
+                    record_index, version_base_name, self.get_test_session_id(), file_context
+                )
             )
             with correlation_ids_lock:
                 correlation_ids.append(correlation_id)
@@ -161,7 +163,8 @@ class TestProcessorUtilsThreadSafety:
             source_guid, version_base_name, self.get_test_session_id()
         )
         assert new_id == original_id, (
-            f"Deterministic generation should produce same ID after clearing: {original_id} vs {new_id}"
+            "Deterministic generation should produce same ID after clearing: "
+            f"{original_id} vs {new_id}"
         )
 
     def test_stress_test_many_concurrent_operations(self):
@@ -174,7 +177,9 @@ class TestProcessorUtilsThreadSafety:
             for i in range(operations_per_worker):
                 if i % 3 == 0:
                     VersionIdGenerator.get_or_create_version_correlation_id(
-                        f"guid-{worker_id}-{i}", f"loop-{worker_id % 5}", self.get_test_session_id()
+                        f"guid-{worker_id}-{i}",
+                        f"loop-{worker_id % 5}",
+                        self.get_test_session_id(),
                     )
                 elif i % 3 == 1:
                     VersionIdGenerator.get_or_create_position_based_version_correlation_id(

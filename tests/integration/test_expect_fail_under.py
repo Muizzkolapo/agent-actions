@@ -164,7 +164,9 @@ def test_the_json_report_is_still_emitted_when_the_gate_fails(gate):
 def test_one_failing_action_fails_the_gate_even_when_another_is_perfect(multi_gate):
     """Per action, not pooled: pooling lets a healthy action carry a broken one."""
     result = multi_gate(
-        {"summarize": [True, True, True, True], "resummarize": [False, False]}, "--fail-under", "60"
+        {"summarize": [True, True, True, True], "resummarize": [False, False]},
+        "--fail-under",
+        "60",
     )
     assert result.exit_code != 0, result.output
     assert "resummarize" in result.stderr, result.stderr

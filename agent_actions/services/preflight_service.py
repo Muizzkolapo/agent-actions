@@ -98,7 +98,8 @@ def _dispatch_lookup_problem(call: str, tools_path: str | None) -> str | None:
 def static_warning_lines(warnings: list[StaticTypeWarning]) -> list[str]:
     """One line per distinct finding: a prompt and an observe entry often report the same one."""
     lines = (
-        f"{w.location.agent_name}: {w.message}" + (f" {w.hint}" if w.hint else "") for w in warnings
+        f"{w.location.agent_name}: {w.message}" + (f" {w.hint}" if w.hint else "")
+        for w in warnings
     )
     return list(dict.fromkeys(lines))
 
@@ -197,7 +198,9 @@ class PreflightService:
         if origin:
             enrich_exception_context(error, origin=origin)
 
-    def _refusal(self, message: str, hint: str, actions: Iterable[Any]) -> PreFlightValidationError:
+    def _refusal(
+        self, message: str, hint: str, actions: Iterable[Any]
+    ) -> PreFlightValidationError:
         error = PreFlightValidationError(message, hint=hint)
         self._attach_origin(error, actions)
         return error
@@ -285,7 +288,9 @@ class PreflightService:
         self._warn_findings(
             "resolution",
             [
-                f"{warning.message}\n     Hint: {warning.hint}" if warning.hint else warning.message
+                f"{warning.message}\n     Hint: {warning.hint}"
+                if warning.hint
+                else warning.message
                 for warning in resolution_result.warnings
             ],
             actions=_issue_actions(resolution_result.warnings),
@@ -329,10 +334,14 @@ class PreflightService:
             allowed = (action_names - set(names.values())) | set(names)
             tool_namespaces[impl] = tool_namespaces.get(impl, allowed) & allowed
         impl_refs = {
-            c["model_name"] for c in configs if runs_udf(c) and isinstance(c.get("model_name"), str)
+            c["model_name"]
+            for c in configs
+            if runs_udf(c) and isinstance(c.get("model_name"), str)
         }
         guard_refs = {
-            c["conditional_clause"] for c in configs if isinstance(c.get("conditional_clause"), str)
+            c["conditional_clause"]
+            for c in configs
+            if isinstance(c.get("conditional_clause"), str)
         }
         self._warn_findings(
             "bus namespaces",
@@ -377,7 +386,9 @@ class PreflightService:
             for ref in (scope.get("optional") or {}) if isinstance(scope, dict) else {}:
                 namespace, _, field = ref.partition(".")
                 base = self.action_configs.get(namespace, {}).get("version_base_name")
-                optional.setdefault(name, set()).update({ref, f"{base}.{field}"} if base else {ref})
+                optional.setdefault(name, set()).update(
+                    {ref, f"{base}.{field}"} if base else {ref}
+                )
         return optional
 
     def _collect_producing_schemas(self) -> dict[str, dict[str, Any]]:
@@ -576,7 +587,8 @@ class PreflightService:
             return {}
 
     def _check_tool_conditional_required_field_risks(self) -> None:
-        """Refuse preflight when a kind:tool UDF only conditionally emits a required schema field."""
+        """Refuse preflight when a kind:tool UDF only conditionally emits a required schema
+        field."""
         findings, actions = _per_action(
             find_conditional_required_field_risks, self._collect_tool_required_field_inputs()
         )
@@ -588,7 +600,8 @@ class PreflightService:
             )
 
     def _warn_dag_schema_compatibility_gaps(self) -> None:
-        """Warn when a tool's required output field is one its UDF does not return and `defaults:` does not declare."""
+        """Warn when a tool's required output field is one its UDF does not return and `defaults:`
+        does not declare."""
         gaps = find_dag_schema_compatibility_gaps(
             self.action_configs, synthesized=self._collect_synthesized_output_fields()
         )

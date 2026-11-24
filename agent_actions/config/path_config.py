@@ -526,7 +526,8 @@ def _is_racy(signature: tuple[Any, ...]) -> bool:
 
 
 def record_seed_search_folders(workflow_config_path: str | None) -> list[SeedFolder]:
-    """:func:`seed_search_folders` for a run's records, re-reading the project file only when it changes.
+    """:func:`seed_search_folders` for a run's records, re-reading the project file only when it
+    changes.
 
     The project root and the folders the project file names are kept per workflow
     file until a stat of the project file differs or a listed folder no longer

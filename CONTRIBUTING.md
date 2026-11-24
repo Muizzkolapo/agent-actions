@@ -285,7 +285,10 @@ task test:fast
 
 - Python 3.11+
 - 4-space indentation
-- 100 character line length
+- PEP 8, checked by ruff: pycodestyle (`E`, `W`), naming (`N`) and import order (`I`)
+- 99 character lines, PEP 8's limit for a team that agrees on longer lines; `ruff format`
+  wraps code, and a long string, comment or docstring is wrapped by hand
+- Exception names may keep a suffix other than `Error` (`N818` is off): they are public API
 - Type hints encouraged
 - Run `task check` before committing
 

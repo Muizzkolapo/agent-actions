@@ -273,7 +273,8 @@ class TestNonDeterministicConvergence:
 
         for i in range(1, len(failure_counts)):
             assert failure_counts[i] <= failure_counts[i - 1], (
-                f"Failure set grew from {failure_counts[i - 1]} to {failure_counts[i]} at cycle {i}"
+                f"Failure set grew from {failure_counts[i - 1]} to {failure_counts[i]} at "
+                f"cycle {i}"
             )
 
 

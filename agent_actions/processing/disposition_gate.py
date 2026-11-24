@@ -740,7 +740,8 @@ def build_carry_forward(
         prior_output = storage_backend.read_checkpoint_records(action_name, relative_path)
         if not prior_output:
             logger.warning(
-                "Prior output missing for %s/%s — all %d carry-forward records will be reprocessed",
+                "Prior output missing for %s/%s — all %d carry-forward records will be "
+                "reprocessed",
                 action_name,
                 relative_path,
                 len(carry_ids),
@@ -748,7 +749,9 @@ def build_carry_forward(
             return [], carry_ids
         rows_per_record = Counter(row.get("source_guid") for row in prior_output)
         answered_again = {guid for guid, count in rows_per_record.items() if guid and count > 1}
-        prior_output = [row for row in prior_output if row.get("source_guid") not in answered_again]
+        prior_output = [
+            row for row in prior_output if row.get("source_guid") not in answered_again
+        ]
         logger.info(
             "Action '%s': using %d checkpointed records for carry-forward",
             action_name,

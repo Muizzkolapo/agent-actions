@@ -135,7 +135,9 @@ def test_a_warn_guard_that_runs_out_of_time_still_runs_its_record():
 
 def test_a_record_whose_guard_runs_out_of_time_is_not_prepared():
     context = PreparationContext(
-        agent_config=_config(_guard(timeout=0.2)), agent_name="a2", agent_indices={"a1": 0, "a2": 1}
+        agent_config=_config(_guard(timeout=0.2)),
+        agent_name="a2",
+        agent_indices={"a1": 0, "a2": 1},
     )
 
     with _guards_that_take(1.0), pytest.raises(GuardNotEvaluatedError, match="G0"):

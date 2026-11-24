@@ -324,7 +324,9 @@ def _serialize_snapshot(source: dict[str, Any] | None) -> str | None:
     try:
         return deep_json.dumps(source, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
-        logger.debug("Could not serialize input snapshot: %s", type(source).__name__, exc_info=True)
+        logger.debug(
+            "Could not serialize input snapshot: %s", type(source).__name__, exc_info=True
+        )
         return None
 
 
@@ -572,7 +574,9 @@ def _fail_parse_errors(
     return data
 
 
-def _record_success(acc: _Collection, result: ProcessingResult, data: list[dict[str, Any]]) -> None:
+def _record_success(
+    acc: _Collection, result: ProcessingResult, data: list[dict[str, Any]]
+) -> None:
     """Note failing verdicts and queue the SUCCESS dispositions of *result*'s rows."""
     action_name = acc.action_name
     if result.source_guid:
@@ -595,7 +599,9 @@ def _record_success(acc: _Collection, result: ProcessingResult, data: list[dict[
             acc.record(guid, DISPOSITION_SUCCESS, CONSUMED_INTO_OUTPUT)
 
 
-def _collect_success(acc: _Collection, idx: int, result: ProcessingResult, status_key: str) -> None:
+def _collect_success(
+    acc: _Collection, idx: int, result: ProcessingResult, status_key: str
+) -> None:
     data = result.data or []
     if result.skip_reason == CARRY_FORWARD_REASON:
         _collect_carried(acc, data, status_key)
@@ -719,7 +725,9 @@ def _collect_failed(acc: _Collection, idx: int, result: ProcessingResult) -> Non
     acc.collected(idx, "failed")
     if acc.storage_backend and result.source_guid:
         input_snapshot_str = _serialize_snapshot(result.source_snapshot or result.input_record)
-        acc.record(result.source_guid, DISPOSITION_FAILED, reason, input_snapshot_str, result.error)
+        acc.record(
+            result.source_guid, DISPOSITION_FAILED, reason, input_snapshot_str, result.error
+        )
     elif acc.storage_backend and result.source_guid is None:
         failed_items = result.data or []
         if failed_items:

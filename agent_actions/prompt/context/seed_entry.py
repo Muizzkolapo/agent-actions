@@ -105,7 +105,9 @@ def parse_seed_entry(key: str, raw: Any, action_name: str) -> SeedEntry:
     by_value: dict[str, str] = {}
     for value, file_spec in files.items():
         if isinstance(value, bool) or not isinstance(value, str | int):
-            raise ConfigurationError(f"{head}'files' key {value!r} must be a string or an integer.")
+            raise ConfigurationError(
+                f"{head}'files' key {value!r} must be a string or an integer."
+            )
         if not isinstance(file_spec, str):
             raise ConfigurationError(
                 f"{head}file for value '{value}' must be a file path, "
@@ -118,7 +120,8 @@ def parse_seed_entry(key: str, raw: Any, action_name: str) -> SeedEntry:
 def selected_seed_entries(
     action_configs: Mapping[str, Mapping[str, Any]],
 ) -> list[tuple[str, SeedEntry]]:
-    """Every selected seed entry in the workflow, once per distinct map, with the first action that declares it."""
+    """Every selected seed entry in the workflow, once per distinct map, with the first action that
+    declares it."""
     seen: set[tuple[Any, ...]] = set()
     entries: list[tuple[str, SeedEntry]] = []
     for action_name, config in action_configs.items():

@@ -106,7 +106,9 @@ def _preflight(entry):
 
 
 def test_preflight_accepts_the_rule_with_no_field_and_an_exclude_list():
-    assert _preflight({"id": "r", "type": "no_null_fields", "params": {"exclude": ["notes"]}}) == []
+    assert (
+        _preflight({"id": "r", "type": "no_null_fields", "params": {"exclude": ["notes"]}}) == []
+    )
 
 
 def test_preflight_refuses_an_unknown_argument():

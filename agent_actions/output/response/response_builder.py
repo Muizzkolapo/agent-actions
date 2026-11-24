@@ -279,7 +279,8 @@ class ResponseBuilder:
 
     @staticmethod
     def _extract_anthropic(response: Any) -> UsageResult:
-        """Anthropic: ``response.usage.input_tokens`` / ``.output_tokens`` and the cached tokens."""
+        """Anthropic: ``response.usage.input_tokens`` / ``.output_tokens`` and the cached
+        tokens."""
         if response is None or not response.usage:
             return UsageResult()
         return ResponseBuilder._anthropic_usage(response.usage)

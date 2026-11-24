@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 
 
 class _FolderNames(dict[str, Any]):
-    """The globals while templates/ loads: looking up a name runs the files yet to run that set it."""
+    """The globals while templates/ loads: looking up a name runs the files yet to run that set
+    it."""
 
     demand: Callable[[str], None] | None = None
 
@@ -322,7 +323,9 @@ def _compile_action_schemas(
         try:
             loaded_schema = SchemaLoader.load_schema(schema_value, project_root=project_root)
             action["schema"] = loaded_schema
-            logger.debug("Inlined schema reference '%s' for action '%s'", schema_value, action_name)
+            logger.debug(
+                "Inlined schema reference '%s' for action '%s'", schema_value, action_name
+            )
         except FileNotFoundError as e:
             error_msg = f"Action '{action_name}': Could not load schema '{schema_value}' - {e}"
             if strict and errors is not None:

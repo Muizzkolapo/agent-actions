@@ -89,7 +89,9 @@ def _judge_error(name: str, exc: Exception) -> EndpointProbeResult:
                 name, "not_honoured", f"endpoint '{name}' {NOT_HONOURED} (HTTP {status}: {exc})"
             )
         return EndpointProbeResult(
-            name, "rejected", f"endpoint '{name}' rejected the probe request (HTTP {status}: {exc})"
+            name,
+            "rejected",
+            f"endpoint '{name}' rejected the probe request (HTTP {status}: {exc})",
         )
     if status is not None:
         return EndpointProbeResult(

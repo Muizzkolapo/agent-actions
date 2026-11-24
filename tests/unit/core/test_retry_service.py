@@ -254,7 +254,8 @@ class TestRetryExhaustedException:
     """Tests for RetryExhaustedException — carries retry_result for callers to inspect."""
 
     def test_carries_retry_result(self):
-        """Exception exposes the RetryResult so callers can distinguish exhaustion from guard-skip."""
+        """Exception exposes the RetryResult so callers can distinguish exhaustion from
+        guard-skip."""
         retry_result = RetryResult(
             response=None,
             attempts=3,

@@ -1,7 +1,8 @@
 """Tests for F4: batch exception writes FAILED dispositions for abandoned records.
 
 When _process_single_batch_file raises an exception that is neither a halt nor
-declared fatal to the action, process_all_batch_results must write DISPOSITION_FAILED for every INCLUDED
+declared fatal to the action, process_all_batch_results must write DISPOSITION_FAILED for every
+INCLUDED
 record in the failed batch file's context_map, clearing any stale DEFERRED
 dispositions. Records in other files must be unaffected.
 """

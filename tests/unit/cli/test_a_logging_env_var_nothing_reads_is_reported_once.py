@@ -41,7 +41,9 @@ def project(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("name", UNREAD)
-def test_an_unread_logging_env_var_is_reported_once_per_command(project, monkeypatch, capsys, name):
+def test_an_unread_logging_env_var_is_reported_once_per_command(
+    project, monkeypatch, capsys, name
+):
     monkeypatch.setenv(name, "1")
 
     assert CLI().execute(["inspect", "-a", WORKFLOW]) == 0

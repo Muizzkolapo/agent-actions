@@ -44,7 +44,9 @@ def project(tmp_path: Path) -> Path:
 def test_a_run_writes_one_routing_row_a_ticket_and_one_digest_row(project):
     _agac(project, "run")
 
-    assert [row[0] for row in _sql(project, "SELECT ticket_id FROM ticket_routing ORDER BY 1")] == [
+    assert [
+        row[0] for row in _sql(project, "SELECT ticket_id FROM ticket_routing ORDER BY 1")
+    ] == [
         1,
         2,
         3,

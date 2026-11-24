@@ -125,7 +125,9 @@ def _endpoint_environment_errors(
     for header, value in endpoint.headers.items():
         for variable in _HEADER_ENV_VAR.findall(value):
             if not os.environ.get(variable):
-                unset(f"{subject} reads {variable} for header {header}, which is not set", variable)
+                unset(
+                    f"{subject} reads {variable} for header {header}, which is not set", variable
+                )
 
     return absent, invalid
 
@@ -296,7 +298,8 @@ class WorkflowResolutionService:
                         ),
                         referenced_agent="(workflow)",
                         referenced_field="api_key",
-                        hint=f"{server} rejected the key. Check that it is not expired or revoked.",
+                        hint=f"{server} rejected the key. Check that it is not expired or "
+                        "revoked.",
                     )
                 )
 
@@ -692,7 +695,8 @@ class WorkflowResolutionService:
             except TemplateSyntaxError as exc:
                 errors.append(
                     StaticTypeError(
-                        message=f"Template syntax error in '{action_name}': {exc.message} (line {exc.lineno})",
+                        message=f"Template syntax error in '{action_name}': {exc.message} "
+                        f"(line {exc.lineno})",
                         location=FieldLocation(
                             agent_name=action_name,
                             config_field="prompt",
@@ -898,7 +902,8 @@ class WorkflowResolutionService:
             for problem, hint in problems:
                 errors.append(
                     StaticTypeError(
-                        message=f"Action '{action_name}': vendor_params for '{vendor}': {problem}.",
+                        message=f"Action '{action_name}': vendor_params for '{vendor}': "
+                        f"{problem}.",
                         location=FieldLocation(
                             agent_name=action_name,
                             config_field=VENDOR_PARAMS_KEY,

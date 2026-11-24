@@ -429,7 +429,12 @@ class TestConcurrencyAndResilience:
                         "node1",
                         f"batch_{i:03d}.json",
                         [
-                            {"_state": "processed", "_state_schema_version": 1, "batch": i, "id": j}
+                            {
+                                "_state": "processed",
+                                "_state_schema_version": 1,
+                                "batch": i,
+                                "id": j,
+                            }
                             for j in range(5)
                         ],
                     )

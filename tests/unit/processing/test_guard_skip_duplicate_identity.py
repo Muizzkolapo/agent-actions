@@ -61,7 +61,9 @@ def _fold(given: list[str]) -> list[dict[str, Any]]:
             }
         )
     outputs.extend(
-        {"source_index": i, "data": {"out": "r0-0"}} for i, guid in enumerate(given) if guid == "r0"
+        {"source_index": i, "data": {"out": "r0-0"}}
+        for i, guid in enumerate(given)
+        if guid == "r0"
     )
     return outputs
 

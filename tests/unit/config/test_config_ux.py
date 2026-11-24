@@ -189,7 +189,8 @@ class TestValidationErrorSurfacing:
         cm = _make_manager(
             tmp_path,
             _WORKFLOW_HEADER
-            + "actions:\n  - name: extract\n    intent: extract data\n    kind: llm\n    dependencies: not_a_list\n",
+            + "actions:\n  - name: extract\n    intent: extract data\n    kind: llm\n    "
+            "dependencies: not_a_list\n",
         )
 
         with (
@@ -208,7 +209,8 @@ class TestValidationErrorSurfacing:
         """config_path and workflow_name are still in context alongside validation_errors."""
         cm = _make_manager(
             tmp_path,
-            "name: my_workflow\ndescription: test\nversion: '1.0'\nactions:\n  - invalid_entry: true\n",
+            "name: my_workflow\ndescription: test\nversion: '1.0'\nactions:\n  - "
+            "invalid_entry: true\n",
         )
 
         with (

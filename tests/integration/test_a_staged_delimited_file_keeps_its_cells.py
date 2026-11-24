@@ -43,7 +43,9 @@ MULTILINE = (("a1", '"line one\nline two"'), ("a2", '"crlf one\r\ncrlf two"'))
 @pytest.mark.parametrize("run_mode", ["online", "batch"])
 @pytest.mark.parametrize("file_type", ["csv", "tsv"])
 def test_a_quoted_cell_keeps_its_line_breaks(tmp_path, file_type, run_mode):
-    root = _project(tmp_path, file_type, TOOL_FIRST.replace("source.item_id", "source.*"), run_mode)
+    root = _project(
+        tmp_path, file_type, TOOL_FIRST.replace("source.item_id", "source.*"), run_mode
+    )
     _restage(root, file_type, _delimited(file_type, *MULTILINE))
 
     result = _run(root, run_mode)

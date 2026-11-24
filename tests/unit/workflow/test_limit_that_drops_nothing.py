@@ -100,7 +100,9 @@ class TestTheStampCarriesTheOutcome:
         every later limit at or above the short count would vouch for it."""
         backend = _Backend()
         executor.deps.action_runner.storage_backend = backend
-        record_indices_to_process(_records(10), {"record_limit": 5}, "act", storage_backend=backend)
+        record_indices_to_process(
+            _records(10), {"record_limit": 5}, "act", storage_backend=backend
+        )
         record_indices_to_process(_records(3), {"record_limit": 5}, "act", storage_backend=backend)
 
         stamp = executor._completion_metadata("act", {"record_limit": 5})

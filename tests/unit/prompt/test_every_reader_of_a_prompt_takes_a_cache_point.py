@@ -1,4 +1,5 @@
-"""Whatever reads a prompt template reads one with a `{% cache_point %}` as it reads the same template without it."""
+"""Whatever reads a prompt template reads one with a `{% cache_point %}` as it reads the same
+template without it."""
 
 from __future__ import annotations
 

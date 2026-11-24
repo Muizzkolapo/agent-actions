@@ -131,7 +131,9 @@ def get_reference_at_position(content: str, line: int, character: int) -> Refere
             )
 
     # 9. An output's action and a connection: `action: name`, `connection: name`
-    database_match = re.search(r"^\s*(?:-\s+)?(action|connection):\s*['\"]?([\w.-]+)", current_line)
+    database_match = re.search(
+        r"^\s*(?:-\s+)?(action|connection):\s*['\"]?([\w.-]+)", current_line
+    )
     if database_match and (
         database_match.group(1) == "connection" or is_in_top_level_block(lines, line, "outputs")
     ):

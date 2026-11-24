@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'Lint and format to PEP 8: lines are at most 99 characters, and ruff now checks pycodestyle errors (`E`) and naming (`N`) as well as warnings and import order. Long strings, comments and docstrings were wrapped without changing any value; imports that sat below other statements were moved to the top, and the few names that broke PEP 8 conventions were renamed.'
+time: 2026-11-23T11:00:00.000000000+00:00

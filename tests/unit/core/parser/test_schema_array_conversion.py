@@ -279,7 +279,7 @@ class TestEdgeCases:
             "Should not wrap in schema name"
         )
 
-    def test_array_schema_with_minItems_maxItems(self):
+    def test_array_schema_with_min_items_and_max_items(self):
         """Array schema with minItems/maxItems should preserve them if supported."""
         schema = {
             "name": "bounded_array",

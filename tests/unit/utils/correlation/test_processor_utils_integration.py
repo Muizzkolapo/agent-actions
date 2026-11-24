@@ -30,8 +30,14 @@ class TestProcessorUtilsIntegration:
 
     def test_parallel_loop_agents_simulation(self):
         """Simulate parallel loop agents processing the same data."""
-        source_records = [{"source_guid": f"record-{i}", "content": f"data-{i}"} for i in range(10)]
-        loop_agents = ["generate_distractors_1", "generate_distractors_2", "generate_distractors_3"]
+        source_records = [
+            {"source_guid": f"record-{i}", "content": f"data-{i}"} for i in range(10)
+        ]
+        loop_agents = [
+            "generate_distractors_1",
+            "generate_distractors_2",
+            "generate_distractors_3",
+        ]
         version_base_name = "generate_distractors"
         results: dict[str, list[str]] = {}
         results_lock = threading.Lock()
@@ -50,7 +56,9 @@ class TestProcessorUtilsIntegration:
 
         threads = []
         for agent_name in loop_agents:
-            thread = threading.Thread(target=simulate_loop_agent, args=(agent_name, source_records))
+            thread = threading.Thread(
+                target=simulate_loop_agent, args=(agent_name, source_records)
+            )
             threads.append(thread)
             thread.start()
         for thread in threads:
@@ -212,9 +220,13 @@ class TestProcessorUtilsIntegration:
                 outputs_by_guid[source_guid] = []
             outputs_by_guid[source_guid].append(output)
         for source_guid, outputs in outputs_by_guid.items():
-            assert len(outputs) == 1, f"Source {source_guid} has {len(outputs)} outputs, expected 1"
+            assert len(outputs) == 1, (
+                f"Source {source_guid} has {len(outputs)} outputs, expected 1"
+            )
             output = outputs[0]
-            assert "version_correlation_id" in output, f"Missing version_correlation_id in {output}"
+            assert "version_correlation_id" in output, (
+                f"Missing version_correlation_id in {output}"
+            )
             assert output["version_correlation_id"] is not None
         correlation_ids = {
             outputs[0]["version_correlation_id"] for outputs in outputs_by_guid.values()

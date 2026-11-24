@@ -670,7 +670,12 @@ class TestCalculateWorkflowMetrics:
                     "duration_seconds": 10,
                     "total_tokens": 0,
                 },
-                {"workflow_id": "b", "status": "failed", "duration_seconds": 20, "total_tokens": 0},
+                {
+                    "workflow_id": "b",
+                    "status": "failed",
+                    "duration_seconds": 20,
+                    "total_tokens": 0,
+                },
             ],
         }
         metrics = tracker._calculate_workflow_metrics(runs_data)

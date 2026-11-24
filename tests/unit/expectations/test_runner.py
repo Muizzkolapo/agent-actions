@@ -69,7 +69,12 @@ def test_a_failing_warn_severity_rule_is_recorded_but_does_not_block():
 def test_wildcard_selector_fails_when_any_element_fails_and_reports_each():
     result = run_suite(
         suite_of(
-            {"id": "len", "type": "word_count_between", "field": "options[*]", "params": {"max": 1}}
+            {
+                "id": "len",
+                "type": "word_count_between",
+                "field": "options[*]",
+                "params": {"max": 1},
+            }
         ),
         RECORD,
     )
@@ -80,7 +85,12 @@ def test_wildcard_selector_fails_when_any_element_fails_and_reports_each():
 def test_wildcard_selector_passes_when_every_element_passes():
     result = run_suite(
         suite_of(
-            {"id": "len", "type": "word_count_between", "field": "options[*]", "params": {"max": 5}}
+            {
+                "id": "len",
+                "type": "word_count_between",
+                "field": "options[*]",
+                "params": {"max": 5},
+            }
         ),
         RECORD,
     )

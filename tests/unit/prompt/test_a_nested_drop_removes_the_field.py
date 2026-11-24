@@ -48,7 +48,9 @@ class TestANestedDropRemovesTheField:
 
     def test_a_nested_drop_removes_it_from_a_wildcard_passthrough(self):
         """A wildcard copies the nested dict instead, so this shape needs the traversal."""
-        _, _, passthrough = _scoped({"passthrough": ["upstream.*"], "drop": ["upstream.body.text"]})
+        _, _, passthrough = _scoped(
+            {"passthrough": ["upstream.*"], "drop": ["upstream.body.text"]}
+        )
 
         assert "SECRET" not in str(passthrough), passthrough
         assert passthrough["upstream"]["body"] == {"ok": "1"}

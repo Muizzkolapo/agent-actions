@@ -51,7 +51,8 @@ class GuardCheck(Check):
         with sqlite3.connect(str(db_path)) as conn:
             if self.behavior == "filter":
                 count = conn.execute(
-                    "SELECT COUNT(*) FROM record_disposition WHERE action_name = ? AND disposition = ?",
+                    "SELECT COUNT(*) FROM record_disposition WHERE action_name = ? AND "
+                    "disposition = ?",
                     (self.action, DISPOSITION_FILTERED),
                 ).fetchone()[0]
 
@@ -61,13 +62,15 @@ class GuardCheck(Check):
                         name=f"guard({self.action}): filtered records found",
                         message=f"{count} records with disposition '{DISPOSITION_FILTERED}'"
                         if count > 0
-                        else f"no records with disposition '{DISPOSITION_FILTERED}' in record_disposition",
+                        else f"no records with disposition '{DISPOSITION_FILTERED}' in "
+                        "record_disposition",
                     )
                 )
 
             elif self.behavior == "skip":
                 passthrough_count = conn.execute(
-                    "SELECT COUNT(*) FROM record_disposition WHERE action_name = ? AND disposition = ?",
+                    "SELECT COUNT(*) FROM record_disposition WHERE action_name = ? AND "
+                    "disposition = ?",
                     (self.action, DISPOSITION_PASSTHROUGH),
                 ).fetchone()[0]
 
@@ -80,7 +83,8 @@ class GuardCheck(Check):
                     CheckResult(
                         passed=passthrough_count > 0 or target_count == 0,
                         name=f"guard({self.action}): skip guard evaluated",
-                        message=f"{passthrough_count} passthrough dispositions, {target_count} output rows",
+                        message=f"{passthrough_count} passthrough dispositions, "
+                        f"{target_count} output rows",
                     )
                 )
 

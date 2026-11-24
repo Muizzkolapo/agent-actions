@@ -26,7 +26,9 @@ def test_a_workflow_file_is_checked(tmp_path):
     (tmp_path / "templates").mkdir()
 
     with pytest.raises(ConfigurationError, match="'agents:' format"):
-        render_pipeline_with_templates(workflow_file, tmp_path / "templates", project_root=tmp_path)
+        render_pipeline_with_templates(
+            workflow_file, tmp_path / "templates", project_root=tmp_path
+        )
 
 
 @pytest.mark.parametrize("value", [1, "x", {"k": "v"}, None])

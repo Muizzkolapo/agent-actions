@@ -208,7 +208,9 @@ def _suggest_dotted(variable: str, upstreams: list[str], action_name: str) -> st
         return f" Did you mean one of {options}?"
     if variable == action_name:
         return ""
-    return f" A first action reads its staged row under 'source'. Did you mean 'source.{variable}'?"
+    return (
+        f" A first action reads its staged row under 'source'. Did you mean 'source.{variable}'?"
+    )
 
 
 def _check_bare_field_references(

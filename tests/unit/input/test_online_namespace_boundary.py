@@ -74,4 +74,6 @@ def test_online_text_source_wrapped_no_leak():
 def test_online_source_guid_unchanged():
     # No persisted guid moves — still hashed over the raw item.
     _dc, st = _online_json([{"id": "r1", "page_content": "x"}])
-    assert st[0]["source_guid"] == IDGenerator.derive_source_guid({"id": "r1", "page_content": "x"})
+    assert st[0]["source_guid"] == IDGenerator.derive_source_guid(
+        {"id": "r1", "page_content": "x"}
+    )

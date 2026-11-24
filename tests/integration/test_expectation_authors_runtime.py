@@ -105,7 +105,9 @@ def run(tmp_path_factory):
         batch author needs: submitting pauses and the collect is a second run."""
         if workflow in done and not again:
             return done[workflow]
-        project = done[workflow].project if again else tmp_path_factory.mktemp("authors") / workflow
+        project = (
+            done[workflow].project if again else tmp_path_factory.mktemp("authors") / workflow
+        )
         if not again:
             shutil.copytree(FIXTURE, project)
             # Only the vendor moves. The model name is carried through to the fake
@@ -207,7 +209,9 @@ def test_a_guard_on_the_verdict_drops_the_record_that_failed(run):
     published = [
         record
         for db in r._dbs()
-        for (blob,) in stored_rows(db, "select data from target_data where action_name = 'publish'")
+        for (blob,) in stored_rows(
+            db, "select data from target_data where action_name = 'publish'"
+        )
         for record in json.loads(blob)
     ]
     assert ("publish", "filtered", "guard_filter") in dispositions, r.output
@@ -316,7 +320,9 @@ def test_the_batch_judge_is_sent_the_field_its_rule_references(run):
     bodies = {
         record["content"]["extract"]["body"]
         for db in result._dbs()
-        for (blob,) in stored_rows(db, "select data from target_data where action_name = 'extract'")
+        for (blob,) in stored_rows(
+            db, "select data from target_data where action_name = 'extract'"
+        )
         for record in json.loads(blob)
     }
 

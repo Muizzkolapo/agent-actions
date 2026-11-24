@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import typing
-from types import SimpleNamespace as NS
+from types import SimpleNamespace
 
 import pytest
 from anthropic.types.messages import MessageBatch
@@ -40,11 +40,11 @@ GEMINI = [state.name for state in JobState]
 
 def _openai_compatible(client_type, status: str):
     client = client_type(api_key="test")
-    client.client = NS(
-        files=NS(create=lambda file, purpose: NS(id="file-1")),
-        batches=NS(
-            create=lambda **kwargs: NS(id="batch_1", status=status),
-            retrieve=lambda batch_id: NS(id=batch_id, status=status),
+    client.client = SimpleNamespace(
+        files=SimpleNamespace(create=lambda file, purpose: SimpleNamespace(id="file-1")),
+        batches=SimpleNamespace(
+            create=lambda **kwargs: SimpleNamespace(id="batch_1", status=status),
+            retrieve=lambda batch_id: SimpleNamespace(id=batch_id, status=status),
         ),
     )
     return client
@@ -60,13 +60,13 @@ def _groq(status: str) -> GroqBatchClient:
 
 def _anthropic(status: str) -> AnthropicBatchClient:
     client = AnthropicBatchClient(api_key="test")
-    client.client = NS(
-        messages=NS(
-            batches=NS(
-                create=lambda requests, extra_headers=None: NS(
+    client.client = SimpleNamespace(
+        messages=SimpleNamespace(
+            batches=SimpleNamespace(
+                create=lambda requests, extra_headers=None: SimpleNamespace(
                     id="msgbatch_1", processing_status=status
                 ),
-                retrieve=lambda batch_id: NS(id=batch_id, processing_status=status),
+                retrieve=lambda batch_id: SimpleNamespace(id=batch_id, processing_status=status),
             )
         )
     )
@@ -74,13 +74,13 @@ def _anthropic(status: str) -> AnthropicBatchClient:
 
 
 def _gemini(status: str) -> GeminiBatchClient:
-    state = JobState[status] if status in JobState.__members__ else NS(name=status)
+    state = JobState[status] if status in JobState.__members__ else SimpleNamespace(name=status)
     client = GeminiBatchClient(api_key="test")
-    client.client = NS(
-        files=NS(upload=lambda file, config: NS(name="files/in-1")),
-        batches=NS(
-            create=lambda model, src, config: NS(name="batches/1", state=state),
-            get=lambda name: NS(name=name, state=state),
+    client.client = SimpleNamespace(
+        files=SimpleNamespace(upload=lambda file, config: SimpleNamespace(name="files/in-1")),
+        batches=SimpleNamespace(
+            create=lambda model, src, config: SimpleNamespace(name="batches/1", state=state),
+            get=lambda name: SimpleNamespace(name=name, state=state),
         ),
     )
     return client
@@ -156,13 +156,14 @@ def test_a_gemini_batch_that_partly_succeeded_is_read(tmp_path):
     """Its results are written for the requests that succeeded; failed outright, the
     requests the provider answered would be paid for again."""
     client = _gemini("JOB_STATE_PARTIALLY_SUCCEEDED")
-    client.client.batches.get = lambda name: NS(
+    client.client.batches.get = lambda name: SimpleNamespace(
         name=name,
         state=JobState.JOB_STATE_PARTIALLY_SUCCEEDED,
-        dest=NS(file_name="files/out-1"),
+        dest=SimpleNamespace(file_name="files/out-1"),
     )
     client.client.files.download = lambda file: (
-        b'{"key": "r1", "response": {"candidates": [{"content": {"parts": [{"text": "\\"hi\\""}]}}]}}\n'
+        b'{"key": "r1", "response": {"candidates": [{"content": {"parts": [{"text": '
+        b'"\\"hi\\""}]}}]}}\n'
     )
 
     assert client.check_status("batches/1") == BatchStatus.COMPLETED

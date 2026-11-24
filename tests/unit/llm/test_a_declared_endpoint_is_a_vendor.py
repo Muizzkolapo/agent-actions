@@ -109,7 +109,8 @@ class TestPreflightWiring:
         result = WorkflowResolutionService(action_configs={"classify": config}).resolve_all()
 
         assert [f"{e.message} {e.hint}" for e in result.errors] == [
-            "Action 'classify': vendor 'lab' does not support run_mode: batch. Set run_mode: online."
+            "Action 'classify': vendor 'lab' does not support run_mode: batch. Set "
+            "run_mode: online."
         ]
 
 
@@ -364,10 +365,14 @@ class TestReplyShapes:
 
             (record,) = compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
 
-        assert record["_parse_error"].startswith("endpoint 'lab' returned JSON that does not match")
+        assert record["_parse_error"].startswith(
+            "endpoint 'lab' returned JSON that does not match"
+        )
         assert fragment in record["_parse_error"]
 
-    def test_an_extra_field_is_refused_by_a_closed_schema_and_kept_by_an_open_one(self, compatible):
+    def test_an_extra_field_is_refused_by_a_closed_schema_and_kept_by_an_open_one(
+        self, compatible
+    ):
         closed = SCHEMA
         open_schema = {
             "name": "classify",
@@ -447,7 +452,9 @@ class TestCommandAuth:
         with pytest.raises(ConfigValidationError) as info:
             compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
 
-        assert info.value.context["reason"] == "endpoint 'lab' auth command 'python3' exited with 3"
+        assert (
+            info.value.context["reason"] == "endpoint 'lab' auth command 'python3' exited with 3"
+        )
         assert "leaked" not in str(info.value)
 
     def test_a_command_that_cannot_run_is_refused(self, compatible, tmp_path):
@@ -741,7 +748,11 @@ class TestCommandAuthRuntime:
         (tmp_path / "sub" / "deep").mkdir(parents=True)
         monkeypatch.chdir(tmp_path / "sub" / "deep")
         where = tmp_path / "where"
-        script = f"import os, pathlib; pathlib.Path({str(where)!r}).write_text(os.getcwd()); print('cwd-token-abcdef')"
+        script = (
+            "import os, pathlib; "
+            f"pathlib.Path({str(where)!r}).write_text(os.getcwd()); "
+            "print('cwd-token-abcdef')"
+        )
         with FakeEndpoint() as server:
             _declare_full(server.base_url, auth={"command": ["python3", "-c", script]})
             compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)
@@ -790,7 +801,11 @@ class TestCommandAuthRuntime:
         (inner / "agent_actions.yml").write_text("schema_path: schema\n")
         monkeypatch.chdir(inner / "agent_workflow" / "wf")
         where = tmp_path / "where"
-        script = f"import os, pathlib; pathlib.Path({str(where)!r}).write_text(os.getcwd()); print('cwd-token-abcdef')"
+        script = (
+            "import os, pathlib; "
+            f"pathlib.Path({str(where)!r}).write_text(os.getcwd()); "
+            "print('cwd-token-abcdef')"
+        )
         with FakeEndpoint() as server:
             _declare_full(server.base_url, auth={"command": ["python3", "-c", script]})
             compatible.endpoint_client("lab").invoke(_agent_config(), "C", {}, SCHEMA)

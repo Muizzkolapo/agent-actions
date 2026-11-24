@@ -129,7 +129,9 @@ class LineageCheck(Check):
                             row["data"], table="target_data", where=action_name
                         )
                     except SerializationError as e:
-                        results.append(CheckResult(False, f"lineage({action_name}): parse", str(e)))
+                        results.append(
+                            CheckResult(False, f"lineage({action_name}): parse", str(e))
+                        )
                         continue
 
                     records = data if isinstance(data, list) else [data]
@@ -206,7 +208,9 @@ class LineageCheck(Check):
 
                         # Check 5: node_id prefix matches action name
                         if isinstance(nid, str) and not nid.startswith(f"{action_name}_"):
-                            bad_prefix.append(f"{label}: {nid!r} doesn't start with {action_name}_")
+                            bad_prefix.append(
+                                f"{label}: {nid!r} doesn't start with {action_name}_"
+                            )
 
                         # Check 6: last lineage entry == own node_id
                         if isinstance(lineage, list) and lineage and isinstance(nid, str):
@@ -246,7 +250,9 @@ class LineageCheck(Check):
                 def _report(name, issues, ok_msg):
                     if issues:
                         sample = ", ".join(issues[:3])
-                        results.append(CheckResult(False, name, f"{len(issues)} issues — {sample}"))
+                        results.append(
+                            CheckResult(False, name, f"{len(issues)} issues — {sample}")
+                        )
                     else:
                         results.append(CheckResult(True, name, ok_msg))
 

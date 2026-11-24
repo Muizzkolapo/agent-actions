@@ -259,7 +259,9 @@ class WorkflowParser:
                 inherited_scope = inherited_context_scope(action_data, inherited) or {}
             except ConfigurationError as e:
                 # An entry the loader refuses on a run; the catalog shows the action's own.
-                logger.debug("Context scope of %s not merged with its defaults: %s", action_name, e)
+                logger.debug(
+                    "Context scope of %s not merged with its defaults: %s", action_name, e
+                )
                 inherited_scope = action_data.get("context_scope") or {}
             merged_scope = _normalise_known_directives(inherited_scope, version_base_map)
             inference_input = (

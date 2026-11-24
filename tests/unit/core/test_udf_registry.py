@@ -43,7 +43,7 @@ class TestUDFRegistration:
         """Test that case-insensitive duplicates in same file return existing function."""
 
         @udf_tool()
-        def My_Function():
+        def My_Function():  # noqa: N802 - the case is the point of the test
             return "original"
 
         # Same file, different case - returns existing function

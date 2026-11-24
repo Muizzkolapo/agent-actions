@@ -62,7 +62,8 @@ def route_case(spec: Mapping[str, Any], data: Mapping[str, Any]) -> str:
     if spec.get("default"):
         return DEFAULT_CASE
     raise ValueError(
-        f"{spec['field']} is {value!r}, which is no case of the router ({', '.join(spec['cases'])}) "
+        f"{spec['field']} is {value!r}, which is no case of the router "
+        f"({', '.join(spec['cases'])}) "
         "and the router has no default branch"
     )
 
@@ -78,7 +79,8 @@ def picked(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any]:
     # every iteration it ran: the last one is its result.
     if len(held) > 1 and spec.get("loop") is None:
         raise ValueError(
-            f"the record holds an output of {', '.join(held)}; pick takes the output of one of them"
+            f"the record holds an output of {', '.join(held)}; pick takes the output of "
+            "one of them"
         )
     return dict(data[held[0]]) if held else {}
 

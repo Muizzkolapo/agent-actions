@@ -35,7 +35,9 @@ def _escape_markup(text: str) -> str:
 
 def _describe_branch(branch: dict[str, Any]) -> str:
     named = f" as {_escape_markup(branch['instance'])}" if "instance" in branch else ""
-    return f"{_escape_markup(branch['name'])}{named}  [dim]({_escape_markup(branch['file'])})[/dim]"
+    return (
+        f"{_escape_markup(branch['name'])}{named}  [dim]({_escape_markup(branch['file'])})[/dim]"
+    )
 
 
 def _describe_names(branch: dict[str, Any]) -> str:
@@ -630,7 +632,9 @@ class ContextCommand(BaseInspectCommand):
 
         # Group by namespace so a long observe list reads as `foo: a, b, c, …`
         # rather than many single-field lines.
-        scope_kinds = [(kind, scope.get(kind) or []) for kind in ("observe", "passthrough", "drop")]
+        scope_kinds = [
+            (kind, scope.get(kind) or []) for kind in ("observe", "passthrough", "drop")
+        ]
         scope_kinds = [(k, refs) for k, refs in scope_kinds if refs]
 
         if scope_kinds:
@@ -704,7 +708,10 @@ class ContextCommand(BaseInspectCommand):
                     if row.get("file"):
                         where = _escape_markup(row["file"])
                         if row.get("overrides"):
-                            where += f"  [dim](overrides {_escape_markup(', '.join(row['overrides']))})[/dim]"
+                            where += (
+                                "  [dim](overrides "
+                                f"{_escape_markup(', '.join(row['overrides']))})[/dim]"
+                            )
                     else:
                         where = f"[red]{_escape_markup(row.get('error', 'not found'))}[/red]"
                     self.console.print(

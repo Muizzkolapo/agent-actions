@@ -113,7 +113,9 @@ def validate_staged_source_reads(
     for action_name in [first_action, *_actions_below(first_action, action_configs)]:
         reads = _source_reads(action_configs.get(action_name) or {})
         if action_name == first_action:
-            reads = [(location, field) for location, field in reads if location.startswith("guard")]
+            reads = [
+                (location, field) for location, field in reads if location.startswith("guard")
+            ]
         # The guard runs first and decides what a record without the field does.
         guarded = {field for location, field in reads if location.startswith("guard")}
         for location, field in reads:
@@ -141,7 +143,9 @@ def validate_staged_source_reads(
         )
 
 
-def _actions_below(first_action: str, action_configs: Mapping[str, Mapping[str, Any]]) -> list[str]:
+def _actions_below(
+    first_action: str, action_configs: Mapping[str, Mapping[str, Any]]
+) -> list[str]:
     """The actions that depend on *first_action*, directly or through others.
 
     A version merge names the versions it merges by their base name.
@@ -220,7 +224,9 @@ def _source_fields_every_render_reads(template: str) -> set[str]:
     from agent_actions.validation.prompt_required_field_validator import _chain_root_and_field
 
     try:
-        ast = Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))  # nosec B701  # prompt text, not HTML
+        # Prompt text, not HTML, so nothing to escape.
+        environment = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701
+        ast = environment.parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError:
         return set()
 

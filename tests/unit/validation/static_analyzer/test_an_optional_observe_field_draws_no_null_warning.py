@@ -102,7 +102,9 @@ class TestAFieldOfAFilterGuardedUpstreamAtAFanIn:
                 _action(
                     "score", fields=["points"], dependencies=["spec"], observe=["spec.spec_text"]
                 ),
-                _action("retry", dependencies=["review", "score"], observe=[entry, "score.points"]),
+                _action(
+                    "retry", dependencies=["review", "score"], observe=[entry, "score.points"]
+                ),
             ]
         }
 

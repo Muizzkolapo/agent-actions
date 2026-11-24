@@ -50,7 +50,8 @@ class GuardParser:
                     "guard_type": str(type(guard)),
                     "operation": "parse_guard",
                     "failed_field": "guard",
-                    "expected": 'Non-empty string (e.g., "udf:check_eligibility" or SQL expression)',
+                    "expected": 'Non-empty string (e.g., "udf:check_eligibility" or SQL '
+                    "expression)",
                     "actual_value": guard,
                     "suggestion": (
                         "Provide a valid guard expression as a non-empty string. "

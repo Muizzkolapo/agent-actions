@@ -104,7 +104,9 @@ class TestNoSurfaceAnswersTheSameClauseDifferently:
         [
             pytest.param(lambda r, c: record_mode(r, c), id="record"),
             pytest.param(lambda r, c: file_mode(r, c), id="file-with-context-scope"),
-            pytest.param(lambda r, c: file_mode(r, c, scope=None), id="file-without-context-scope"),
+            pytest.param(
+                lambda r, c: file_mode(r, c, scope=None), id="file-without-context-scope"
+            ),
         ],
     )
     def test_every_surface_reads_the_resolved_value(self, surface):
@@ -160,7 +162,10 @@ class TestTheSiblingFrameworkNamespaces:
         )
 
     def test_a_carried_workflow_does_not_shadow_the_run_metadata(self):
-        record = {"source_guid": "G0", "content": {"workflow": {"name": "CARRIED"}, "a1": {"n": 1}}}
+        record = {
+            "source_guid": "G0",
+            "content": {"workflow": {"name": "CARRIED"}, "a1": {"n": 1}},
+        }
 
         assert (
             record_mode(
@@ -417,7 +422,8 @@ class TestOnlyANamespaceIsDisplacedByANamespace:
         """The same spread can name an output field ``source``, and the pool *does* resolve
         a ``source`` namespace for this record — so presence on both sides is not enough."""
         assert (
-            self._kept(self._merged_content(), "source == 'tool-said-this'", scope=self.GEN) is True
+            self._kept(self._merged_content(), "source == 'tool-said-this'", scope=self.GEN)
+            is True
         )
 
     def test_a_first_stage_staging_field_named_source_is_readable(self):

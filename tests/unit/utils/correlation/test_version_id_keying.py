@@ -37,7 +37,8 @@ def test_expansion_items_keep_unique_ids():
 
 
 def test_versioned_expansion_items_keep_unique_ids():
-    """A versioned agent that ALSO expands keeps unique per-item ids (kills the drop-`not force` cheat)."""
+    """A versioned agent that ALSO expands keeps unique per-item ids (kills the drop-`not force`
+    cheat)."""
     VersionIdGenerator.clear()
     cfg = {"is_versioned_agent": True, "version_base_name": "extract", "workflow_session_id": "s1"}
     a = VersionIdGenerator.add_version_correlation_id(
@@ -50,7 +51,8 @@ def test_versioned_expansion_items_keep_unique_ids():
 
 
 def test_versioned_no_source_guid_falls_back_to_position():
-    """Versioned records lacking source_guid keep per-position ids (kills the fallback-collapse cheat)."""
+    """Versioned records lacking source_guid keep per-position ids (kills the fallback-collapse
+    cheat)."""
     VersionIdGenerator.clear()
     a = VersionIdGenerator.add_version_correlation_id({}, _CFG, record_index=0)
     b = VersionIdGenerator.add_version_correlation_id({}, _CFG, record_index=1)
@@ -58,7 +60,8 @@ def test_versioned_no_source_guid_falls_back_to_position():
 
 
 def test_versioned_shared_id_uses_guid_helper():
-    """The shared id is exactly the GUID helper's output (kills inline-hash and clamp-to-0 cheats)."""
+    """The shared id is exactly the GUID helper's output (kills inline-hash and clamp-to-0
+    cheats)."""
     VersionIdGenerator.clear()
     v = VersionIdGenerator.add_version_correlation_id({"source_guid": "g1"}, _CFG, record_index=3)
     assert v["version_correlation_id"] == VersionIdGenerator.get_or_create_version_correlation_id(

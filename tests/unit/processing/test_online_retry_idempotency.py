@@ -16,15 +16,16 @@ _pipeline_file_mode = sys.modules.get("agent_actions.workflow.pipeline_file_mode
 if _pipeline_file_mode is _sentinel:
     sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
 
-import pytest
+# Imported only once the module stub above is in place.
+import pytest  # noqa: E402
 
-from agent_actions.errors.processing import ProcessingError
-from agent_actions.processing.disposition_gate import DispositionGate
-from agent_actions.processing.types import (
+from agent_actions.errors.processing import ProcessingError  # noqa: E402
+from agent_actions.processing.disposition_gate import DispositionGate  # noqa: E402
+from agent_actions.processing.types import (  # noqa: E402
     ProcessingContext,
     ProcessingResult,
 )
-from agent_actions.processing.unified import UnifiedProcessor
+from agent_actions.processing.unified import UnifiedProcessor  # noqa: E402
 
 
 def _make_context(
@@ -89,7 +90,9 @@ class TestOnlineRecordRetry:
 
     def test_terminal_records_skipped_strategy_sees_only_cleared(self):
         terminal = {f"r{i}" for i in range(9)}
-        prior_output = [{"source_guid": f"r{i}", "score_quality": {"score": 0.9}} for i in range(9)]
+        prior_output = [
+            {"source_guid": f"r{i}", "score_quality": {"score": 0.9}} for i in range(9)
+        ]
         backend = _mock_backend(terminal_ids=terminal, prior_output=prior_output)
         gate = DispositionGate(storage_backend=backend)
 

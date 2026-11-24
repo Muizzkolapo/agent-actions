@@ -296,7 +296,9 @@ def test_file_mode_hitl_sets_identity_source_mapping():
 )
 def test_file_mode_hitl_non_decision_fails_the_action(n_records, payload, match):
     """Only approved/rejected are decisions; anything else must raise, never be applied."""
-    input_data = [{"source_guid": f"sg-{i}", "content": {"id": i}} for i in range(1, n_records + 1)]
+    input_data = [
+        {"source_guid": f"sg-{i}", "content": {"id": i}} for i in range(1, n_records + 1)
+    ]
     context = ProcessingContext(
         agent_config={"kind": "hitl", "granularity": "file"},
         agent_name="review_data",

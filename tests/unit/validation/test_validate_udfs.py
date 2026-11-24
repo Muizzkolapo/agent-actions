@@ -328,7 +328,9 @@ class TestExecute:
         assert "File: bad.py" in joined
 
     @patch("agent_actions.validation.validate_udfs.fire_event")
-    def test_discovery_sentinel_renders_directory_error_not_module_error(self, mock_fire, tmp_path):
+    def test_discovery_sentinel_renders_directory_error_not_module_error(
+        self, mock_fire, tmp_path
+    ):
         """When discover_udfs signals the user-code dir is missing/invalid via
         UDFLoadError.DISCOVERY_SENTINEL, the handler must render a directory-
         appropriate message and never leak the sentinel string to the user."""
@@ -619,7 +621,8 @@ class TestBusNamespaceWarnings:
         registry = self._discover(
             tmp_path / "tools",
             "tool_framework",
-            "    return (data.get('source'), data['version'], data.get('workflow'), data['seed'])\n",
+            "    return (data.get('source'), data['version'], data.get('workflow'), "
+            "data['seed'])\n",
         )
 
         cmd = ValidateUDFsCommand("agent.yml", str(tmp_path))

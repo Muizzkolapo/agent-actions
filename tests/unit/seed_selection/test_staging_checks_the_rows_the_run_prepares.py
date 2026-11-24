@@ -1,4 +1,5 @@
-"""The staging check reads a row as the prompt will, and the record pipeline selects in every mode."""
+"""The staging check reads a row as the prompt will, and the record pipeline selects in every
+mode."""
 
 import json
 import math
@@ -133,7 +134,9 @@ class TestASpreadsheetCellIsReadAsItsValue:
             self._load(tmp_path, math.nan)
 
     def test_a_fraction_is_still_the_wrong_type(self, tmp_path):
-        with pytest.raises(StaticDataLoadError, match=r"must be a string or an integer, got float"):
+        with pytest.raises(
+            StaticDataLoadError, match=r"must be a string or an integer, got float"
+        ):
             self._load(tmp_path, 1.5)
 
 

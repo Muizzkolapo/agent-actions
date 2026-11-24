@@ -27,7 +27,8 @@ class InvocationStrategyFactory:
         if mode == RunMode.BATCH:
             if provider is None:
                 raise ValueError(
-                    f"BatchProvider required for BATCH mode (action: '{agent_config.get('agent_type', 'unknown')}')"
+                    "BatchProvider required for BATCH mode (action: "
+                    f"'{agent_config.get('agent_type', 'unknown')}')"
                 )
             return BatchStrategy(provider)
 
@@ -49,7 +50,8 @@ class InvocationStrategyFactory:
         expect_config = agent_config.get("expect")
         action_name = agent_config.get("name", "unknown")
 
-        # Repair is meaningless for deterministic tools — re-running the same UDF yields the same output.
+        # Repair is meaningless for deterministic tools — re-running the same UDF yields the same
+        # output.
         if _is_tool_action(agent_config):
             if expect_config is not None and expect_config.get("repair", "auto") != "none":
                 from agent_actions.errors import ConfigurationError

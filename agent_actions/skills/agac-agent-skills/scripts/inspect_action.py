@@ -54,7 +54,8 @@ def main() -> None:
 
     print("\n=== Context (template variables) ===")
     rc2 = run(
-        base + ["inspect", "context", "-a", args.workflow, "-u", args.tools, args.action_name], root
+        base + ["inspect", "context", "-a", args.workflow, "-u", args.tools, args.action_name],
+        root,
     )
 
     sys.exit(rc1 or rc2)

@@ -111,7 +111,8 @@ def _unrolled(
     if not isinstance(branch_name, str) or branch_name not in branches:
         found = ", ".join(available) if available else "none"
         raise ConfigurationError(
-            f"{where}: 'include: {branch_name}' names no branch file. Branch files found: {found}.",
+            f"{where}: 'include: {branch_name}' names no branch file. Branch files found: "
+            f"{found}.",
             context={"loop": name, "branch": repr(branch_name)},
         )
     branch = parse_branch(branch_name, branches[branch_name], workflow_file)
@@ -217,7 +218,9 @@ def _string_map(value: Any, key: str, what: str, where: str) -> dict[str, str]:
     return dict(value)
 
 
-def _branch_action(value: Any, key: str, actions: Mapping[str, Any], label: str, where: str) -> str:
+def _branch_action(
+    value: Any, key: str, actions: Mapping[str, Any], label: str, where: str
+) -> str:
     if not isinstance(value, str) or value not in actions:
         raise ConfigurationError(
             f"{where}: '{key}: {value}' names no action of {label}. Branch actions: "
@@ -412,7 +415,9 @@ def finish_loops(data: Any, workflow_file: str, project_root: Path | None = None
     picks = [a for a in by_name.values() if is_loop_pick(a)]
     if not picks:
         return
-    members = {name for name, action in by_name.items() if loop_of(action) and "_include" in action}
+    members = {
+        name for name, action in by_name.items() if loop_of(action) and "_include" in action
+    }
     for pick in picks:
         settings = loop_of(pick)
         assert settings is not None
@@ -489,7 +494,9 @@ def _refuse_outside_reads(
                 if DIRECTIVE_REGISTRY.get(directive, {}).get("type") == "list" and isinstance(
                     refs, list
                 ):
-                    reads.update(r.split(".", 1)[0].rstrip("?") for r in refs if isinstance(r, str))
+                    reads.update(
+                        r.split(".", 1)[0].rstrip("?") for r in refs if isinstance(r, str)
+                    )
         guard = action.get("guard")
         clause = guard.get("condition") if isinstance(guard, dict) else guard
         if isinstance(clause, str) and not clause.strip().lower().startswith("udf:"):

@@ -115,7 +115,8 @@ class TestAResumedRunWhoseOnlyRecordLeftToSendIsSkipped:
         config.write_text(
             config.read_text().replace(
                 "    expect: { repair: none }\n",
-                "    guard: { condition: 'source.page_content != \"Page a1.\"', on_false: skip }\n",
+                "    guard: { condition: 'source.page_content != \"Page a1.\"', "
+                "on_false: skip }\n",
             )
         )
         submitted = _agac(project, "--fresh")

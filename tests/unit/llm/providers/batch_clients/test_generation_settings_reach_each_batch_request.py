@@ -1,4 +1,5 @@
-"""An action's top_p, stop and penalties reach each batch request line, as they reach an online one.
+"""An action's top_p, stop and penalties reach each batch request line, as they reach an online
+one.
 
 Batch built each task from model_name, temperature, max_tokens and vendor_params alone, so a
 batch action ran with the vendor's defaults for the rest. Each line names a setting as the

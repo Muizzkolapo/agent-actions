@@ -241,7 +241,8 @@ def _resolve_input_record(input_idx: int, original_data: list[dict]) -> dict[str
         return None
     if not is_input_position(input_idx, len(original_data)):
         raise IndexError(
-            f"source_index {input_idx!r} does not name one of the {len(original_data)} input records"
+            f"source_index {input_idx!r} does not name one of the {len(original_data)} "
+            "input records"
         )
     return original_data[input_idx]
 
@@ -536,7 +537,8 @@ def prefilter_by_guard(
     workflow_metadata: dict[str, Any] | None = None,
     dependency_configs: dict[str, Any] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict], list[dict], list[tuple[dict, Exception]]]:
-    """Evaluate the guard per record, as ``(passing, skipped, original_passing, filtered, failed)``.
+    """Evaluate the guard per record, as ``(passing, skipped, original_passing, filtered,
+    failed)``.
 
     A ``filter`` record appears in none of the first three; ``skipped`` keeps its
     original content for the caller to merge back. An action above that failed or

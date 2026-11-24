@@ -304,7 +304,8 @@ class _World:
         self.recovery: list[BatchResult] = []
 
     def collect(self, metadata: dict[str, Any] | None) -> None:
-        """One collect pass: the original batch answers `original`, any round answers `recovery`."""
+        """One collect pass: the original batch answers `original`, any round answers
+        `recovery`."""
 
         def answers(provider, batch_id, *args, **kwargs):
             return self.original if batch_id == "b1" else self.recovery

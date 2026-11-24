@@ -27,7 +27,8 @@ def _first_param(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
 
 
 def _is_sequence_index(sl: ast.AST) -> bool:
-    """True for a slice or a (possibly negative) integer index — sequence access, not a mapping key."""
+    """True for a slice or a (possibly negative) integer index — sequence access, not a mapping
+    key."""
     if isinstance(sl, ast.Slice):
         return True
     if isinstance(sl, ast.Constant) and isinstance(sl.value, int):
@@ -181,7 +182,8 @@ def find_passthrough_schema_risks(actions: dict[str, dict]) -> list[str]:
         if _source_is_passthrough(info.get("source", "")):
             findings.append(
                 f"{name}: UDF passes upstream dicts through unchanged, but its schema is strict "
-                f"(additionalProperties not true). Extra upstream keys will be rejected at runtime "
+                "(additionalProperties not true). Extra upstream keys will be rejected "
+                "at runtime "
                 f"— add them to the schema fields or set additionalProperties: true."
             )
     return findings

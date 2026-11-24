@@ -108,7 +108,9 @@ class SchemaChecksMixin:
                 continue
 
             has_schema = bool(
-                action.get(SCHEMA_KEY) or action.get("output_schema") or action.get(SCHEMA_NAME_KEY)
+                action.get(SCHEMA_KEY)
+                or action.get("output_schema")
+                or action.get(SCHEMA_NAME_KEY)
             )
             if not has_schema:
                 continue

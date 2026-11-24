@@ -96,7 +96,9 @@ def postgres_server() -> Iterator[dict[str, Any] | None]:
         }
     finally:
         subprocess.run(
-            _as("postgres", [str(binaries / "pg_ctl"), "-D", str(data), "-m", "immediate", "stop"]),
+            _as(
+                "postgres", [str(binaries / "pg_ctl"), "-D", str(data), "-m", "immediate", "stop"]
+            ),
             check=False,
             capture_output=True,
         )

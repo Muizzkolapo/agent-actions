@@ -53,7 +53,9 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
             "message": (
                 f"Title OK ({title_len}/{title_max} chars)"
                 if title_passed
-                else f"Title {'empty' if title_len == 0 else f'exceeds limit ({title_len}/{title_max} chars)'}"
+                else "Title empty"
+                if title_len == 0
+                else f"Title exceeds limit ({title_len}/{title_max} chars)"
             ),
         }
     )
@@ -61,7 +63,9 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     if not title_passed:
         all_passed = False
         violations.append(
-            f"Title {'is empty' if title_len == 0 else f'exceeds {title_max} char limit ({title_len} chars)'}"
+            "Title is empty"
+            if title_len == 0
+            else f"Title exceeds {title_max} char limit ({title_len} chars)"
         )
 
     # --- Description validation ---
@@ -78,7 +82,9 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
             "message": (
                 f"Description OK ({desc_len}/{desc_max} chars)"
                 if desc_passed
-                else f"Description {'empty' if desc_len == 0 else f'exceeds limit ({desc_len}/{desc_max} chars)'}"
+                else "Description empty"
+                if desc_len == 0
+                else f"Description exceeds limit ({desc_len}/{desc_max} chars)"
             ),
         }
     )
@@ -86,7 +92,9 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     if not desc_passed:
         all_passed = False
         violations.append(
-            f"Description {'is empty' if desc_len == 0 else f'exceeds {desc_max} char limit ({desc_len} chars)'}"
+            "Description is empty"
+            if desc_len == 0
+            else f"Description exceeds {desc_max} char limit ({desc_len} chars)"
         )
 
     # --- Bullet points validation ---
@@ -104,7 +112,9 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
             "message": (
                 f"Bullet count OK ({bullet_count}/{max_bullets})"
                 if bullet_count_passed
-                else f"Bullet count {'is 0' if bullet_count == 0 else f'exceeds max ({bullet_count}/{max_bullets})'}"
+                else "Bullet count is 0"
+                if bullet_count == 0
+                else f"Bullet count exceeds max ({bullet_count}/{max_bullets})"
             ),
         }
     )
@@ -112,7 +122,9 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     if not bullet_count_passed:
         all_passed = False
         violations.append(
-            f"{'No bullet points provided' if bullet_count == 0 else f'Too many bullets ({bullet_count}/{max_bullets})'}"
+            "No bullet points provided"
+            if bullet_count == 0
+            else f"Too many bullets ({bullet_count}/{max_bullets})"
         )
 
     for idx, bullet in enumerate(bullet_points):
@@ -162,7 +174,9 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     if not kw_count_passed:
         all_passed = False
         violations.append(
-            f"{'No search keywords provided' if kw_count == 0 else f'Too many keywords ({kw_count}/{max_keywords})'}"
+            "No search keywords provided"
+            if kw_count == 0
+            else f"Too many keywords ({kw_count}/{max_keywords})"
         )
 
     for idx, kw in enumerate(search_keywords):
@@ -177,7 +191,10 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
                     "passed": False,
                     "actual_length": kw_len,
                     "max_allowed": max_kw_chars,
-                    "message": f"Keyword '{kw[:30]}...' exceeds {max_kw_chars} char limit ({kw_len} chars)",
+                    "message": (
+                        f"Keyword '{kw[:30]}...' exceeds {max_kw_chars} char limit "
+                        f"({kw_len} chars)"
+                    ),
                 }
             )
             violations.append(f"Search keyword {idx + 1} exceeds {max_kw_chars} char limit")
@@ -275,7 +292,10 @@ def validate_marketplace_compliance(data: dict[str, Any]) -> dict[str, Any]:
     total_count = len(field_results)
 
     if all_passed:
-        summary = f"All checks passed ({passed_count}/{total_count} fields compliant). Listing is marketplace-ready."
+        summary = (
+            f"All checks passed ({passed_count}/{total_count} fields compliant). "
+            "Listing is marketplace-ready."
+        )
     else:
         summary = (
             f"{passed_count}/{total_count} fields passed. "

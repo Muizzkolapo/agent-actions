@@ -30,7 +30,10 @@ from agent_actions.llm.providers.ollama.batch_client import OllamaBatchClient
 from agent_actions.llm.providers.ollama.client import OllamaLocalClient
 from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
 from agent_actions.llm.providers.openai.client import OpenAIClient
-from agent_actions.processing.helpers import _validate_llm_output_schema, transform_with_passthrough
+from agent_actions.processing.helpers import (
+    _validate_llm_output_schema,
+    transform_with_passthrough,
+)
 from agent_actions.processing.types import ProcessingResult
 
 ACTION = "tag_page"
@@ -228,7 +231,9 @@ def batch_result(
     results = retrieve_and_reconcile(
         provider, BATCH_ID, str(output_directory), context_map=context_map, agent_config=config
     )
-    (result,) = BatchResultStrategy().process(results, context_map=context_map, agent_config=config)
+    (result,) = BatchResultStrategy().process(
+        results, context_map=context_map, agent_config=config
+    )
     return result
 
 

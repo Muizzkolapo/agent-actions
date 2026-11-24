@@ -257,11 +257,13 @@ class TestPerformMaintenance:
         # Insert dispositions directly to simulate accumulated records
         with backend._lock:
             backend.connection.execute(
-                "INSERT INTO record_disposition (action_name, record_id, disposition, reason, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+                "INSERT INTO record_disposition (action_name, record_id, disposition, "
+                "reason, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
                 ("act", "r1", "failed", "error"),
             )
             backend.connection.execute(
-                "INSERT INTO record_disposition (action_name, record_id, disposition, reason, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
+                "INSERT INTO record_disposition (action_name, record_id, disposition, "
+                "reason, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
                 ("act", "r1", "success", None),
             )
             backend.connection.commit()

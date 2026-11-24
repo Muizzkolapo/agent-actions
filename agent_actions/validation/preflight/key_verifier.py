@@ -127,7 +127,10 @@ def _probe_groq(target: ProbeTarget) -> ProbeResult:
         from groq import APIConnectionError, APITimeoutError, AuthenticationError, RateLimitError
 
         return _classify_sdk_exception(
-            "groq", e, (AuthenticationError,), (APIConnectionError, APITimeoutError, RateLimitError)
+            "groq",
+            e,
+            (AuthenticationError,),
+            (APIConnectionError, APITimeoutError, RateLimitError),
         )
 
 

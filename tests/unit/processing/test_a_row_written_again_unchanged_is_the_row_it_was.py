@@ -176,7 +176,10 @@ class TestARowMintedAnIdentityIsMatchedByWhatItHolds:
 
         assert unchanged == {"s1", "s2"}
         assert [row["source_guid"] for row in out] == ["s1", "s2"]
-        assert [row["target_id"] for row in out] == ["target-beta part 1-1", "target-beta part 2-1"]
+        assert [row["target_id"] for row in out] == [
+            "target-beta part 1-1",
+            "target-beta part 2-1",
+        ]
         assert [row["version_correlation_id"] for row in out] == ["corr-s1", "corr-s2"]
 
     def test_a_child_written_differently_is_the_new_row(self):

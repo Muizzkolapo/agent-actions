@@ -113,7 +113,8 @@ def test_the_action_config_alone_gives_the_output_check_nothing_to_read(tmp_path
 
 
 def test_a_record_run_sends_and_checks_the_schema_it_was_given(tmp_path, caplog):
-    """Through run_dynamic_agent: the model call gets the record's schema, and so does the check."""
+    """Through run_dynamic_agent: the model call gets the record's schema, and so does the
+    check."""
     tools = _project(tmp_path, "return 'topic_answer'")
     sent: list[dict] = []
 

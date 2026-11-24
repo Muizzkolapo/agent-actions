@@ -1,4 +1,5 @@
-"""A guard's time limit is set in the workflow: `guard: {timeout:}` or `defaults: guard_timeout`."""
+"""A guard's time limit is set in the workflow: `guard: {timeout:}` or `defaults:
+guard_timeout`."""
 
 from unittest.mock import patch
 

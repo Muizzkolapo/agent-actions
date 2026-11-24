@@ -24,7 +24,9 @@ _FIELD_SCOPED = {
             "id": "options",
             "type": "array",
             "items": {"type": "string"},
-            "expectations": [{"id": "option_count", "type": "item_count", "params": {"equals": 4}}],
+            "expectations": [
+                {"id": "option_count", "type": "item_count", "params": {"equals": 4}}
+            ],
         }
     ],
 }
@@ -52,7 +54,9 @@ _NESTED = {
         {
             "id": "options",
             "type": "array",
-            "expectations": [{"id": "option_count", "type": "item_count", "params": {"equals": 4}}],
+            "expectations": [
+                {"id": "option_count", "type": "item_count", "params": {"equals": 4}}
+            ],
             "items": {
                 "type": "object",
                 "properties": {

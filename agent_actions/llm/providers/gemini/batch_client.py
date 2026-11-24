@@ -8,8 +8,6 @@ import math
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 try:
     import httpx
     from google import genai
@@ -29,6 +27,8 @@ from agent_actions.llm.providers.error_wrapper import (
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import UNIDENTIFIED_RECORD, BaseBatchClient, BatchTask
+
+logger = logging.getLogger(__name__)
 
 # Every state of the SDK's JobState. Paused, updating or being cancelled, a job has
 # not ended, and only a later poll can say how it does.
@@ -176,7 +176,8 @@ class GeminiBatchClient(BaseBatchClient):
         return candidates[0] or {}
 
     def _answer_text_of(self, raw_response: dict[str, Any]) -> str:
-        """The answer as the SDK's ``response.text`` reads it: its text parts joined, thoughts left out."""
+        """The answer as the SDK's ``response.text`` reads it: its text parts joined, thoughts left
+        out."""
         parts = (self._first_candidate(raw_response).get("content") or {}).get("parts") or []
         return "".join(
             part["text"]
@@ -221,7 +222,9 @@ class GeminiBatchClient(BaseBatchClient):
         thoughts = usage_metadata.get("thoughtsTokenCount")
         # Thinking tokens are output: the total counts them, the candidates count does not.
         completion = (
-            None if candidates is None and thoughts is None else (candidates or 0) + (thoughts or 0)
+            None
+            if candidates is None and thoughts is None
+            else (candidates or 0) + (thoughts or 0)
         )
         usage = {
             "total_tokens": usage_metadata.get("totalTokenCount"),

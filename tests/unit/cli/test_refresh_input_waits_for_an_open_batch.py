@@ -28,7 +28,9 @@ def _io(tmp_path: Path, statuses: dict[str, str]) -> Path:
 
 def _command(fresh: bool = False) -> RunCommand:
     return RunCommand(
-        RunCommandArgs(agent="wf", user_code=None, use_tools=False, refresh_input=True, fresh=fresh)
+        RunCommandArgs(
+            agent="wf", user_code=None, use_tools=False, refresh_input=True, fresh=fresh
+        )
     )
 
 

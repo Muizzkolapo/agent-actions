@@ -31,7 +31,8 @@ class LineageBuilder:
 
     @staticmethod
     def _propagate_ancestry_chain(obj: dict, parent_item: dict) -> None:
-        """Propagate parent_target_id, root_target_id, and source_guid from parent to *obj* in place."""
+        """Propagate parent_target_id, root_target_id, and source_guid from parent to *obj* in
+        place."""
         if "target_id" in parent_item:
             obj["parent_target_id"] = parent_item["target_id"]
         if "root_target_id" in parent_item:
@@ -62,7 +63,8 @@ class LineageBuilder:
 
     @staticmethod
     def set_parent_tracking(obj: dict, parent_item: dict) -> None:
-        """Propagate parent_target_id, root_target_id, source_guid, and lineage_sources from *parent_item* to *obj*."""
+        """Propagate parent_target_id, root_target_id, source_guid, and lineage_sources from
+        *parent_item* to *obj*."""
         LineageBuilder._propagate_ancestry_chain(obj, parent_item)
 
     @staticmethod

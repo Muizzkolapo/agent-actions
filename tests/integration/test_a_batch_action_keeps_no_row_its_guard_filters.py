@@ -2,7 +2,8 @@
 
 `summarize` and `publish` both run under `run_mode: batch` against the provider mock,
 each to completion, before `summarize` is given a guard. A run with ``--rerun summarize``
-resets both, so every record reaches the guard again. Where the guard filters every record the action
+resets both, so every record reaches the guard again. Where the guard filters every record the
+action
 holds nothing and is skipped, and its reader is skipped and emptied, as online
 (test_skipped_reader_drops_stale_rows). Where it filters one, that record's row goes.
 """

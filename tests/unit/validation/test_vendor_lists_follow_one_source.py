@@ -1,4 +1,5 @@
-"""Every vendor list and batch rule reads one source, so a runtime profile vendor appears in each."""
+"""Every vendor list and batch rule reads one source, so a runtime profile vendor appears in
+each."""
 
 from __future__ import annotations
 

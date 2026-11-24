@@ -100,7 +100,9 @@ def test_a_template_is_rendered_around_the_prompt():
 
 def test_a_template_that_starts_with_the_prompt_keeps_its_cache_prefix():
     service = ExpectationService(
-        suite=SUITE, max_iterations=2, repair={"prompt": "{original_prompt}\n\nFix: {failed_lines}"}
+        suite=SUITE,
+        max_iterations=2,
+        repair={"prompt": "{original_prompt}\n\nFix: {failed_lines}"},
     )
     strategy = ExpectationStrategy(service)
     result = BatchResult(custom_id="r1", content=RULE_FAILURE, success=True)

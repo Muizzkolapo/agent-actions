@@ -122,7 +122,8 @@ class TestJudgeBudgetIsSharedAcrossTheBatch:
         """The budget is per action per run, so the batch must not rebuild it per record."""
         custom_ids = ["t-001", "t-002"]
         context_map = {
-            cid: {"target_id": cid, "source_guid": f"sg-{cid}", "content": {}} for cid in custom_ids
+            cid: {"target_id": cid, "source_guid": f"sg-{cid}", "content": {}}
+            for cid in custom_ids
         }
         batch_results = [
             BatchResult(custom_id=cid, content=PASSING, success=True) for cid in custom_ids

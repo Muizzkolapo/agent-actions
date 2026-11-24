@@ -1,4 +1,5 @@
-"""A store error before an action's work begins ends a parallel run, as it ends a sequential one (1508).
+"""A store error before an action's work begins ends a parallel run, as it ends a sequential one
+(1508).
 
 Setting an action running, and counting the rows it holds before it runs, sit outside
 the handler that fails an action: the store is not answering, and a run that went on

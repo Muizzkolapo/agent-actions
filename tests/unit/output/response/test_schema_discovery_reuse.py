@@ -14,7 +14,9 @@ def _make_schemas(tmp_path: Path, count: int) -> list[str]:
     names = []
     for i in range(count):
         name = f"schema_{i}"
-        (schema_dir / f"{name}.yml").write_text(f"fields:\n  - name: field_{i}\n    type: string\n")
+        (schema_dir / f"{name}.yml").write_text(
+            f"fields:\n  - name: field_{i}\n    type: string\n"
+        )
         names.append(name)
     return names
 

@@ -8,7 +8,8 @@ from agent_actions.utils.readonly import ReadOnlyDict
 
 
 class Bus(dict[str, Any]):
-    """Strict-accessor dict for UDF input. `get`/`[]` stay tolerant; `require` raises on unknown."""
+    """Strict-accessor dict for UDF input. `get`/`[]` stay tolerant; `require` raises on
+    unknown."""
 
     def require(self, namespace: str) -> Any:
         # Message stays generic: the same accessor wraps the action-keyed tool

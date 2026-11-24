@@ -171,7 +171,9 @@ def test_abandoning_gets_past_an_action_left_collecting_or_failed(finished_not_c
     _set_disposition(project, named, "failed")
     _set_action_status(project, left_as)
 
-    code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+    code, output = _agac(
+        project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight"
+    )
 
     assert code == EXIT_PAUSED, output
     assert "Abandoning" in _unwrapped(output), output
@@ -211,7 +213,9 @@ def test_a_reader_behind_an_uncollected_batch_is_left_to_the_batch(
     assert code != 0, output
     assert "finished, not collected" in _unwrapped(output), output
 
-    code, output = _agac(project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight")
+    code, output = _agac(
+        project, "retry", "-a", WORKFLOW, "--record", named, "--abandon-in-flight"
+    )
     assert code == EXIT_PAUSED, output
 
     # The retry stops at its own submission, and the run that collects it runs the

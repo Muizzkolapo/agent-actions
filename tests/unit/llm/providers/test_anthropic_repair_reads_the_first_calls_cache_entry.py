@@ -1,4 +1,5 @@
-"""A repair call sends its feedback after the marked prompt, so it reads the cache entry the first call wrote."""
+"""A repair call sends its feedback after the marked prompt, so it reads the cache entry the first
+call wrote."""
 
 from __future__ import annotations
 
@@ -105,7 +106,9 @@ def _sdk_client(vendor: str, sent: list[dict[str, Any]]) -> Any:
         sent.append(json.loads(request.content))
         if request.url.path.endswith("/batches"):
             return http.Response(200, json=_BATCH_CREATED)
-        return http.Response(200, json=_ANTHROPIC_REPLY if vendor == "anthropic" else _OPENAI_REPLY)
+        return http.Response(
+            200, json=_ANTHROPIC_REPLY if vendor == "anthropic" else _OPENAI_REPLY
+        )
 
     http_client = http.Client(transport=http.MockTransport(handler))
     if vendor == "anthropic":
@@ -212,7 +215,10 @@ class TestOnlineRepair:
         ]
 
     def test_caching_off_marks_neither_call(self):
-        assert [_marked_texts(body) for body in _online(_config(STATIC, caching=False))] == [[], []]
+        assert [_marked_texts(body) for body in _online(_config(STATIC, caching=False))] == [
+            [],
+            [],
+        ]
 
     def test_a_repair_of_a_prompt_that_reads_the_record_carries_no_mark(self):
         first, repair = _online(_config(TEMPLATED))
@@ -269,7 +275,8 @@ class TestBatchRepair:
         off = _anthropic_batch(tmp_path, _config(STATIC, caching=False), feedback=feedback)
 
         assert [
-            p["messages"][0]["content"].startswith(f"{SHARED}\n\n{FEEDBACK} :<|end_of") for p in off
+            p["messages"][0]["content"].startswith(f"{SHARED}\n\n{FEEDBACK} :<|end_of")
+            for p in off
         ] == [True, True]
         assert [_joined(p["messages"][0]["content"]) for p in on] == [
             p["messages"][0]["content"] for p in off

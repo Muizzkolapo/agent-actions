@@ -102,7 +102,9 @@ class TestTheVersionsSummaryTheIndexerBuilds:
         return meta.versions_summary
 
     def test_it_describes_the_param_and_range(self):
-        assert self._summary({"param": "round", "range": [1, 3]}) == "param `round`, range `[1, 3]`"
+        assert (
+            self._summary({"param": "round", "range": [1, 3]}) == "param `round`, range `[1, 3]`"
+        )
 
     def test_it_does_not_describe_a_retired_key(self):
         summary = self._summary({"param": "round", "range": [1, 3], "mode": "sequential"})

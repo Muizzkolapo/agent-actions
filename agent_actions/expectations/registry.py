@@ -293,7 +293,9 @@ def _accepted_values(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     return True, ""
 
 
-@register("matches_regex", params={"pattern": "string", "negate": "boolean"}, required=("pattern",))
+@register(
+    "matches_regex", params={"pattern": "string", "negate": "boolean"}, required=("pattern",)
+)
 def _matches_regex(value: Any, params: dict[str, Any]) -> tuple[bool, str]:
     pattern = params["pattern"]
     matched = re.search(pattern, str(value)) is not None
@@ -356,7 +358,8 @@ def _contains_terms_from(value: Any, params: dict[str, Any]) -> tuple[bool, str]
     if len(hits) < needed:
         return (
             False,
-            f"matched {len(hits)} term(s), expected at least {needed} from {list(params['terms'])!r}",
+            f"matched {len(hits)} term(s), expected at least {needed} from "
+            f"{list(params['terms'])!r}",
         )
     return True, ""
 

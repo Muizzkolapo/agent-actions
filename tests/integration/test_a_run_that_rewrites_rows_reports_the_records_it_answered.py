@@ -121,7 +121,9 @@ def test_a_retry_reports_only_the_record_it_answered(online, monkeypatch):
     refused = {"on": True}
 
     def beta_is_refused(api_key, agent_config, prompt_config, context_data, schema):
-        if refused["on"] and "Page beta." in json.dumps([prompt_config, context_data], default=str):
+        if refused["on"] and "Page beta." in json.dumps(
+            [prompt_config, context_data], default=str
+        ):
             raise ValueError("the provider refused this page")
         return answer(api_key, agent_config, prompt_config, context_data, schema)
 

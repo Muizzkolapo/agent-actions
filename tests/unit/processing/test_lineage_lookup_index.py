@@ -192,7 +192,8 @@ class TestLineageLookupPerformance:
 
         # The dict path should be significantly faster
         assert index_time < linear_time, (
-            f"Dict index ({index_time:.4f}s) should be faster than linear scan ({linear_time:.4f}s)"
+            f"Dict index ({index_time:.4f}s) should be faster than linear scan "
+            f"({linear_time:.4f}s)"
         )
         # For 2000 records, expect at least 5x speedup
         speedup = linear_time / index_time if index_time > 0 else float("inf")

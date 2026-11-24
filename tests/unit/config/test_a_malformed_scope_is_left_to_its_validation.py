@@ -148,8 +148,10 @@ class TestTheRemovalRefusalForAnInheritedReader:
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
             f"'b2' {self.VIA_INCLUDE}, 'b3' {self.VIA_INCLUDE} still read it. "
-            "Remove the readers too, override them so that they do not read it, or remove the read "
-            "from the defaults named above. In an override, null takes away an inherited directive, "
+            "Remove the readers too, override them so that they do not read it, or "
+            "remove the read "
+            "from the defaults named above. In an override, null takes away an inherited "
+            "directive, "
             "and a list is added to it."
         )
 
@@ -165,8 +167,10 @@ class TestTheRemovalRefusalForAnInheritedReader:
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
             f"'b2' {self.VIA_INCLUDE}, 'b3' still read it. "
-            "Remove the readers too, override them so that they do not read it, or remove the read "
-            "from the defaults named above. In an override, null takes away an inherited directive, "
+            "Remove the readers too, override them so that they do not read it, or "
+            "remove the read "
+            "from the defaults named above. In an override, null takes away an inherited "
+            "directive, "
             "and a list is added to it."
         )
 

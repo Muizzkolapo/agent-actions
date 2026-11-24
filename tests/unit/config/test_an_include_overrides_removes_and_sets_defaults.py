@@ -235,7 +235,9 @@ class TestAnOverrideIsRefused:
         )
 
     def test_an_action_named_under_both_override_and_remove(self, tmp_path):
-        message = _refusal(tmp_path, [A, _include(override={"b2": {"intent": "x"}}, remove=["b2"])])
+        message = _refusal(
+            tmp_path, [A, _include(override={"b2": {"intent": "x"}}, remove=["b2"])]
+        )
 
         assert message == (
             f"Include 'pair' in {WF}: 'b2' of {BRANCH_PAIR} is named under both 'override' "
@@ -298,7 +300,9 @@ class TestRemoval:
     def test_a_remove_that_is_not_a_list_of_names(self, tmp_path):
         message = _refusal(tmp_path, [A, _include(remove="b2")])
 
-        assert message == f"Include 'pair' in {WF}: 'remove' must be a list of branch action names."
+        assert (
+            message == f"Include 'pair' in {WF}: 'remove' must be a list of branch action names."
+        )
 
     def test_a_reader_left_behind_is_named(self, tmp_path):
         message = _refusal(tmp_path / "bad", [A, _include(remove=["b1"])])
@@ -608,7 +612,9 @@ class TestTheHashSeesTheFinalValueOnly:
             "model_name": "gpt-4o",
             "guard": None,
         }
-        inline_note = {key: value for key, value in {**NOTE, **values}.items() if value is not None}
+        inline_note = {
+            key: value for key, value in {**NOTE, **values}.items() if value is not None
+        }
         inline = _loaded(tmp_path / "inline", [A, inline_note, B2, C])
         overridden = _loaded(
             tmp_path / "overridden",

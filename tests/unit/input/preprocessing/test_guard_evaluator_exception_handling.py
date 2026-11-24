@@ -23,7 +23,9 @@ class TestGuardBehavior:
         [
             pytest.param(TypeError("Cannot compare"), True, True, id="type_error_passthrough"),
             pytest.param(KeyError("profile"), True, True, id="key_error_passthrough"),
-            pytest.param(AttributeError("missing_method"), True, True, id="attr_error_passthrough"),
+            pytest.param(
+                AttributeError("missing_method"), True, True, id="attr_error_passthrough"
+            ),
             pytest.param(TypeError("Error"), False, False, id="passthrough_false_filters"),
         ],
     )

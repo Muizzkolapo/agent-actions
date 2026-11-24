@@ -82,7 +82,11 @@ def test_an_edit_beside_an_input_change_is_named_and_held_to_until_rerun(complet
     result = _agac(completed, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, result.printed
-    assert _ran(completed) == {"recap": ["delta"], "after_recap": ["delta"], "bystander": ["delta"]}
+    assert _ran(completed) == {
+        "recap": ["delta"],
+        "after_recap": ["delta"],
+        "bystander": ["delta"],
+    }
     assert _recap_saw(completed) == ["alpha:-", "beta:-", "delta:fourth item", "gamma:-"]
     assert "recap was edited since it completed (context scope)" in result.printed
 

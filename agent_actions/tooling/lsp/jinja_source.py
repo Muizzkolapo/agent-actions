@@ -1,4 +1,5 @@
-"""Render a workflow file for the editor, the way `agac` renders it, and map each action to its source line."""
+"""Render a workflow file for the editor, the way `agac` renders it, and map each action to its
+source line."""
 
 import bisect
 import logging
@@ -225,7 +226,8 @@ def _tag_holding(tags: list[Any], starts: list[int], pos: int) -> Any:
 
 
 def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkflow:
-    """Render *yaml_file* with the load step of `agac` only: no prompt fill, no versions, no writes."""
+    """Render *yaml_file* with the load step of `agac` only: no prompt fill, no versions, no
+    writes."""
     raw = yaml_file.read_text(encoding="utf-8")
     try:
         source = _load_yaml_content(yaml_file, project_root=project_root)
@@ -261,7 +263,9 @@ def render_workflow_source(yaml_file: Path, project_root: Path) -> RenderedWorkf
     marked_lines = _LINE_BREAK.split(marked)
     if not _same_text(marked_lines, _LINE_BREAK.split(text)):
         # A mark changed what the render output, so no mark can be trusted.
-        logger.warning("Could not map actions of %s to source lines: the renders differ", yaml_file)
+        logger.warning(
+            "Could not map actions of %s to source lines: the renders differ", yaml_file
+        )
         return _unmapped(shown, data, source)
 
     source_lines = source.split("\n")
@@ -328,12 +332,18 @@ def _lines_as_written(
         text = _MARK_TEXT.sub("", marked).rstrip()
         for mark_origin, line in _LINE_MARK.findall(marked):
             i = int(line)
-            if mark_origin == origin and i < len(source_lines) and source_lines[i].rstrip() == text:
+            if (
+                mark_origin == origin
+                and i < len(source_lines)
+                and source_lines[i].rstrip() == text
+            ):
                 found.append((rendered_line, i))
     return found
 
 
-def _line_owners(nodes: list[_ActionNode], written: list[tuple[int, int]]) -> dict[int, str | None]:
+def _line_owners(
+    nodes: list[_ActionNode], written: list[tuple[int, int]]
+) -> dict[int, str | None]:
     """Each workflow line output as written, and the action whose text it is in the render."""
     owners: dict[int, str | None] = {}
     starts = [node.start_line for node in nodes]
