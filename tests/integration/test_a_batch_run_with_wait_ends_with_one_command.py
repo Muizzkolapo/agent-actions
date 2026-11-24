@@ -32,8 +32,9 @@ def project(tmp_path):
 
 
 def _run(project, *args, checks_until_complete: int):
+    # The scenario holds the batch for the status checks before the one that completes it.
     (project / "sandbox.yml").write_text(
-        f"batch: {{polls_until_complete: {checks_until_complete}, complete_after_seconds: 999}}\n"
+        f"batch: {{polls_until_complete: {checks_until_complete - 1}}}\n"
     )
     result = run_agac(project, "run", "-a", WORKFLOW, "--sandbox", "-u", "tools", *args)
     return result.returncode, result.stdout + result.stderr
@@ -71,4 +72,21 @@ def test_at_the_wait_timeout_it_exits_4_and_a_later_run_collects_the_batch(proje
     code, output = _run(project, *WAIT, checks_until_complete=2)
 
     assert code == 0, output
+    assert _records(project)
+
+
+def test_a_plain_run_at_the_wait_timeout_names_the_plain_command_to_resume(project):
+    """Without --sandbox the hint names no sandbox flag; a timeout of 0 stops after the submit."""
+    result = run_agac(
+        project, "run", "-a", WORKFLOW, "-u", "tools", "--fresh", "--wait", "--wait-timeout", "0"
+    )
+    output = result.stdout + result.stderr
+
+    assert result.returncode == PAUSED, output
+    assert "still open for: summarize" in output, output
+    assert f"to check them and continue: agac run -w {WORKFLOW} --wait" in output, output
+
+    result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools")
+
+    assert result.returncode == 0, result.stdout + result.stderr
     assert _records(project)

@@ -2,8 +2,10 @@
 
 The scenario is `sandbox.yml` at the project root, a preset or a file `--scenario` names.
 Each fault goes through the path a real vendor's fault takes, so retry, repair and the
-failure hint run as they would. The decisions are per record, so a parallel run fails the
-records a serial run fails. A bad scenario stops the run before any call.
+failure hint run as they would. The decisions are per record and its input, so a parallel
+run fails the records a serial run fails, and two fresh runs fail the same records, also
+below an expansion. The attempts count on across runs in the sandbox store. A bad scenario
+stops the run before any call.
 """
 
 from __future__ import annotations
@@ -58,8 +60,15 @@ actions:
     schema: classify_output
     prompt: $scripted.Classify
     context_scope: {{ observe: [source.page_id, source.text] }}
+    expect:
+      repair: auto
+      expectations:
+        - id: label_is_set
+          type: not_null
+          field: label
 """
 
+# Each prompt prints source.text, so the request's context block leaves it out.
 PROMPTS = """# scripted - prompt store
 
 {prompt Extract}
@@ -85,7 +94,14 @@ SCHEMAS = {
 }
 
 
-def _project(base: Path, scenario: str | None = None, *, run_mode="online", repair="auto") -> Path:
+def _project(
+    base: Path,
+    scenario: str | None = None,
+    *,
+    run_mode="online",
+    repair="auto",
+    rows: list[dict] = ROWS,
+) -> Path:
     root = base / "project"
     workflow_dir = root / "agent_workflow" / WORKFLOW
     (workflow_dir / "agent_config").mkdir(parents=True)
@@ -98,7 +114,7 @@ def _project(base: Path, scenario: str | None = None, *, run_mode="online", repa
     (workflow_dir / "agent_config" / f"{WORKFLOW}.yml").write_text(
         CONFIG.format(run_mode=run_mode, repair=repair)
     )
-    (workflow_dir / "agent_io" / "staging" / "pages.json").write_text(json.dumps(ROWS))
+    (workflow_dir / "agent_io" / "staging" / "pages.json").write_text(json.dumps(rows))
     (root / "prompt_store" / f"{WORKFLOW}.md").write_text(PROMPTS)
     for name, text in SCHEMAS.items():
         (root / "schema" / WORKFLOW / f"{name}.yml").write_text(text)
@@ -111,8 +127,8 @@ def _io(root: Path) -> Path:
     return root / "agent_workflow" / WORKFLOW / "agent_io"
 
 
-def _run(root: Path, *args: str, command: str = "run"):
-    return run_agac(root, command, "-w", WORKFLOW, "--sandbox", *args, env=ENV)
+def _run(root: Path, *args: str, command: str = "run", workflow: str = WORKFLOW):
+    return run_agac(root, command, "-w", workflow, "--sandbox", *args, env=ENV)
 
 
 def _said(result) -> str:
@@ -124,9 +140,16 @@ def _ok(result):
     return result
 
 
-def _stored(root: Path, action: str) -> list[dict]:
+def _summary(result) -> str:
+    """The one scenario line the command printed."""
+    lines = [line for line in result.stdout.splitlines() if line.startswith("SANDBOX scenario")]
+    assert len(lines) == 1, _said(result)
+    return lines[0]
+
+
+def _stored(root: Path, action: str, workflow: str = WORKFLOW) -> list[dict]:
     """The answers the action stored; a failed record keeps the parse error it got instead."""
-    shown = _ok(run_agac(root, "records", "-w", WORKFLOW, "-A", action, "--sandbox", env=ENV))
+    shown = _ok(run_agac(root, "records", "-w", workflow, "-A", action, "--sandbox", env=ENV))
     answers = [record["content"][action] for record in json.loads(shown.stdout)]
     return [answer for answer in answers if "_parse_error" not in answer]
 
@@ -142,13 +165,11 @@ def _failed(root: Path, action: str) -> int:
 
 
 ALL_PAGES = {row["page_id"] for row in ROWS}
+KINDS = ["rate_limit", "timeout", "server_error", "refusal", "truncated", "empty", "invalid_json"]
 
 
-@pytest.mark.parametrize(
-    "kind",
-    ["rate_limit", "timeout", "server_error", "refusal", "truncated", "empty", "invalid_json"],
-)
-def test_each_error_kind_recovers_on_the_attempt_it_heals_at(tmp_path, kind):
+@pytest.mark.parametrize("kind", KINDS)
+def test_each_error_kind_fails_its_record_until_the_attempt_it_heals_at(tmp_path, kind):
     root = _project(
         tmp_path,
         f"actions:\n  extract:\n    errors: {{rate: 1.0, kinds: [{kind}], heal_on_attempt: 2}}\n",
@@ -157,9 +178,24 @@ def test_each_error_kind_recovers_on_the_attempt_it_heals_at(tmp_path, kind):
     result = _ok(_run(root))
 
     assert _pages(root, "extract") == ALL_PAGES
-    assert "SANDBOX scenario sandbox.yml: 6 errors, 0 rules broken, 0 batch results dropped" in (
-        _said(result)
+    assert _summary(result) == (
+        "SANDBOX scenario sandbox.yml: 6 errors, 0 rules broken, 0 batch results dropped"
     )
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_each_error_kind_that_never_heals_fails_every_record_through_retry_and_repair(
+    tmp_path, kind
+):
+    root = _project(tmp_path, f"actions:\n  extract:\n    errors: {{rate: 1.0, kinds: [{kind}]}}\n")
+
+    result = _run(root)
+
+    # Every record of extract failed, so the action failed.
+    assert result.returncode == 1, _said(result)
+    assert "Failed actions: extract" in _said(result)
+    assert _failed(root, "extract") == 6
+    assert _pages(root, "classify") == ALL_PAGES
 
 
 MATCHED = """records:
@@ -182,6 +218,24 @@ def test_a_record_that_fails_every_attempt_is_a_failure_the_hint_names(tmp_path)
     assert _pages(root, "classify") == ALL_PAGES
 
 
+PRINTED = """records:
+  - match: {source.text: low tide}
+    actions: {extract: {error: refusal}, classify: {pin: {label: matched}}}
+"""
+
+
+@pytest.mark.parametrize("run_mode", ["online", "batch"])
+def test_a_record_is_matched_on_a_field_its_prompt_prints(tmp_path, run_mode):
+    root = _project(tmp_path, PRINTED, run_mode=run_mode, repair="none")
+
+    result = _run(root, "--wait", "--poll", "1")
+
+    assert result.returncode == 3, _said(result)
+    assert _pages(root, "extract") == ALL_PAGES - {"p3"}
+    labels = {record["page_id"]: record["label"] for record in _stored(root, "classify")}
+    assert {page for page, label in labels.items() if label == "matched"} == {"p3"}
+
+
 def test_the_hint_names_the_scenario_given_and_a_retry_with_another_repairs(tmp_path):
     root = _project(tmp_path)
     (root / "faults.yml").write_text(MATCHED)
@@ -190,13 +244,47 @@ def test_the_hint_names_the_scenario_given_and_a_retry_with_another_repairs(tmp_
 
     assert result.returncode == 3, _said(result)
     assert f"agac retry -w {WORKFLOW} --sandbox --scenario faults.yml." in _said(result)
-    assert "SANDBOX scenario faults.yml: 3 errors" in _said(result)
+    assert _summary(result).startswith("SANDBOX scenario faults.yml: 3 errors")
 
     repaired = _ok(_run(root, "--scenario", "happy", command="retry"))
 
     assert _failed(root, "extract") == 0
     assert _pages(root, "extract") == ALL_PAGES
-    assert "SANDBOX scenario happy: 0 errors, 0 rules broken" in _said(repaired)
+    assert _summary(repaired) == (
+        "SANDBOX scenario happy: 0 errors, 0 rules broken, 0 batch results dropped"
+    )
+
+
+HEALS_ON_RETRY = """records:
+  - match: {source.page_id: p3}
+    actions: {extract: {errors: {rate: 1.0, kinds: [refusal], heal_on_attempt: 2}}}
+"""
+
+
+def test_a_retry_continues_the_count_so_a_fault_heals_in_the_retry_run(tmp_path):
+    root = _project(tmp_path, HEALS_ON_RETRY, repair="none")
+
+    failed = _run(root)
+    retried = _run(root, command="retry")
+
+    assert failed.returncode == 3, _said(failed)
+    assert retried.returncode == 0, _said(retried)
+    assert _pages(root, "extract") == ALL_PAGES
+    assert _summary(retried).startswith("SANDBOX scenario sandbox.yml: 0 errors")
+
+
+def test_a_rerun_of_an_action_starts_its_count_again_and_fresh_starts_every_count(tmp_path):
+    root = _project(tmp_path, HEALS_ON_RETRY, repair="none")
+    assert _run(root).returncode == 3
+    _ok(_run(root, command="retry"))
+
+    rerun = _run(root, "--rerun", "extract")
+    assert rerun.returncode == 3, _said(rerun)
+    assert _pages(root, "extract") == ALL_PAGES - {"p3"}
+
+    fresh = _run(root, "--fresh")
+    assert fresh.returncode == 3, _said(fresh)
+    assert _pages(root, "extract") == ALL_PAGES - {"p3"}
 
 
 BROKEN = "actions:\n  extract:\n    break_rules: {rules: [matches_regex], rate: 1.0%s}\n"
@@ -207,7 +295,9 @@ def test_a_broken_rule_is_repaired_on_the_attempt_it_heals_at(tmp_path):
 
     result = _ok(_run(root))
 
-    assert "6 rules broken" in _said(result)
+    assert _summary(result) == (
+        "SANDBOX scenario sandbox.yml: 0 errors, 6 rules broken, 0 batch results dropped"
+    )
     codes = [record["code"] for record in _stored(root, "extract")]
     assert len(codes) == 6
     assert all(len(code) == 6 and code[3] == "-" for code in codes), codes
@@ -250,9 +340,11 @@ def test_a_matched_record_takes_its_own_pin(tmp_path):
 HALF = "seed: 11\ndefaults:\n  errors: {rate: 0.5, kinds: [refusal]}\n"
 
 
-def test_a_parallel_run_fails_the_records_a_serial_run_fails(tmp_path):
-    serial = _project(tmp_path / "serial", HALF)
-    parallel = _project(tmp_path / "parallel", HALF)
+def test_a_parallel_run_fails_the_records_a_serial_run_fails_in_any_order(tmp_path):
+    serial = _project(tmp_path / "serial", HALF, repair="none")
+    # The records arrive in the other order, so a decision tied to the order of the calls
+    # would fall on other records.
+    parallel = _project(tmp_path / "parallel", HALF, repair="none", rows=ROWS[::-1])
 
     first = _run(serial, "--execution-mode", "sequential")
     second = _run(parallel, "--execution-mode", "parallel", "--concurrency-limit", "4")
@@ -260,9 +352,104 @@ def test_a_parallel_run_fails_the_records_a_serial_run_fails(tmp_path):
     assert first.returncode == second.returncode == 3, _said(first) + _said(second)
     assert "sequential" in _said(first) and "parallel" in _said(second)
     for action in ("extract", "classify"):
-        kept = _pages(serial, action)
-        assert kept == _pages(parallel, action)
-        assert set() < kept < ALL_PAGES, (action, kept)
+        assert _pages(serial, action) == _pages(parallel, action), action
+    # With no repair, extract keeps only the records whose one attempt was not refused.
+    assert set() < _pages(serial, "extract") < ALL_PAGES
+
+
+SPLIT_CONFIG = """name: split_pages
+description: "A tool splits each page in two; an LLM action labels each part"
+version: "0.1.0"
+defaults:
+  json_mode: true
+  granularity: Record
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  data_source: { type: local, folder: ./staging, file_type: [json] }
+actions:
+  - name: split
+    kind: tool
+    intent: "Split each page in two"
+    impl: split_page
+    schema: part_output
+    context_scope: { observe: [source.page_id, source.text] }
+  - name: label
+    intent: "Label each part"
+    dependencies: [split]
+    schema: label_output
+    prompt: $split_pages.Label
+    context_scope: { observe: [split.page_id, split.part, split.text] }
+"""
+
+SPLIT_TOOL = """from typing import Any
+
+from agent_actions import udf_tool
+
+
+def _find(data: Any, key: str) -> Any:
+    if isinstance(data, dict):
+        if key in data:
+            return data[key]
+        for value in data.values():
+            found = _find(value, key)
+            if found is not None:
+                return found
+    return None
+
+
+@udf_tool
+def split_page(data: Any, *args) -> list[dict]:
+    page, text = _find(data, "page_id"), str(_find(data, "text"))
+    return [{"page_id": page, "part": part, "text": f"{text} {part}"} for part in ("a", "b")]
+"""
+
+
+def _split_project(base: Path) -> Path:
+    root = base / "project"
+    workflow_dir = root / "agent_workflow" / "split_pages"
+    (workflow_dir / "agent_config").mkdir(parents=True)
+    (workflow_dir / "agent_io" / "staging").mkdir(parents=True)
+    (root / "schema" / "split_pages").mkdir(parents=True)
+    (root / "prompt_store").mkdir()
+    (root / "tools" / "split_pages").mkdir(parents=True)
+    (root / "agent_actions.yml").write_text(
+        "default_agent_config: {model_name: gpt-4o-mini}\nschema_path: schema\ntool_path: [tools]\n"
+    )
+    (workflow_dir / "agent_config" / "split_pages.yml").write_text(SPLIT_CONFIG)
+    (workflow_dir / "agent_io" / "staging" / "pages.json").write_text(json.dumps(ROWS))
+    (root / "prompt_store" / "split_pages.md").write_text(
+        "# split_pages\n\n{prompt Label}\nLabel this part.\n{{ split.text }}\n{end_prompt}\n"
+    )
+    (root / "tools" / "split_pages" / "split.py").write_text(SPLIT_TOOL)
+    for name, fields in (
+        ("part_output", ("page_id", "part", "text")),
+        ("label_output", ("page_id", "part", "label")),
+    ):
+        body = "".join(
+            f"  - id: {field}\n    type: string\n    required: true\n" for field in fields
+        )
+        (root / "schema" / "split_pages" / f"{name}.yml").write_text(
+            f"name: {name}\nfields:\n{body}"
+        )
+    (root / "sandbox.yml").write_text(
+        "seed: 5\nactions:\n  label:\n    errors: {rate: 0.5, kinds: [refusal]}\n"
+    )
+    return root
+
+
+def test_two_fresh_runs_fail_the_same_records_below_an_expansion(tmp_path):
+    root = _split_project(tmp_path)
+
+    kept = []
+    for _ in range(2):
+        result = _run(root, "--fresh", workflow="split_pages")
+        assert result.returncode == 3, _said(result)
+        kept.append({(r["page_id"], r["part"]) for r in _stored(root, "label", "split_pages")})
+
+    every_part = {(row["page_id"], part) for row in ROWS for part in ("a", "b")}
+    assert kept[0] == kept[1]
+    assert set() < kept[0] < every_part, kept[0]
 
 
 def test_the_chaos_preset_completes_a_workflow_with_retry_and_repair(tmp_path):
@@ -270,7 +457,7 @@ def test_the_chaos_preset_completes_a_workflow_with_retry_and_repair(tmp_path):
 
     result = _ok(_run(root, "--scenario", "chaos"))
 
-    assert "SANDBOX scenario chaos:" in _said(result)
+    assert _summary(result).startswith("SANDBOX scenario chaos:")
     assert _pages(root, "extract") == ALL_PAGES
     assert _pages(root, "classify") == ALL_PAGES
 
@@ -282,6 +469,7 @@ def test_the_chaos_preset_completes_a_workflow_with_retry_and_repair(tmp_path):
         ("actions:\n  summarise: {latency_ms: 1}\n", "actions.summarise"),
         ("defaults:\n  latency_ms: [9, 1]\n", "defaults.latency_ms"),
         ("batch:\n  drops: 0.5\n", "batch.drops"),
+        ("actions:\n  classify:\n    pin: {lable: x}\n", "actions.classify.pin.lable"),
     ],
 )
 def test_a_bad_scenario_stops_the_run_before_any_call(tmp_path, scenario, named):
@@ -291,7 +479,9 @@ def test_a_bad_scenario_stops_the_run_before_any_call(tmp_path, scenario, named)
 
     assert result.returncode != 0
     said = _said(result)
-    assert "sandbox.yml" in said and named in said, said
+    assert named in said, said
+    assert "Invalid configuration in sandbox.yml" in said, said
+    assert "agent configuration file" not in said, said
     assert not (_io(root) / "store" / f"{WORKFLOW}.sandbox.db").exists()
     assert not (_io(root) / "sandbox" / "target").exists()
 
@@ -310,7 +500,9 @@ def test_a_batch_result_dropped_comes_back_in_the_retry_batch(tmp_path):
 
     result = _ok(_run(root, "--wait", "--poll", "1"))
 
-    assert "12 batch results dropped" in _said(result)
+    assert _summary(result) == (
+        "SANDBOX scenario sandbox.yml: 0 errors, 0 rules broken, 12 batch results dropped"
+    )
     assert _pages(root, "extract") == ALL_PAGES
     assert _pages(root, "classify") == ALL_PAGES
 
@@ -324,8 +516,22 @@ def test_a_batch_error_entry_is_retried_until_it_heals(tmp_path):
 
     result = _ok(_run(root, "--wait", "--poll", "1"))
 
-    assert "6 errors" in _said(result)
+    assert _summary(result) == (
+        "SANDBOX scenario sandbox.yml: 6 errors, 0 rules broken, 0 batch results dropped"
+    )
     assert _pages(root, "extract") == ALL_PAGES
+
+
+def test_a_batch_rule_broken_until_it_heals_is_repaired_by_the_repair_batch(tmp_path):
+    root = _project(tmp_path, BROKEN % ", heal_on_attempt: 2", run_mode="batch")
+
+    result = _ok(_run(root, "--wait", "--poll", "1"))
+
+    assert _summary(result) == (
+        "SANDBOX scenario sandbox.yml: 0 errors, 6 rules broken, 0 batch results dropped"
+    )
+    codes = [record["code"] for record in _stored(root, "extract")]
+    assert len(codes) == 6 and all(len(code) == 6 and code[3] == "-" for code in codes), codes
 
 
 def test_a_batch_the_scenario_fails_fails_its_action(tmp_path):
@@ -340,17 +546,15 @@ def test_a_batch_the_scenario_fails_fails_its_action(tmp_path):
     assert _pages(root, "extract") == ALL_PAGES
 
 
-def test_a_batch_waits_the_status_checks_the_scenario_asks_for(tmp_path):
-    root = _project(
-        tmp_path,
-        "batch: {polls_until_complete: 2, complete_after_seconds: 999}\n",
-        run_mode="batch",
-    )
+def test_polls_until_complete_alone_holds_the_batch_for_that_many_checks(tmp_path):
+    root = _project(tmp_path, "batch: {polls_until_complete: 2}\n", run_mode="batch")
 
     submitted = _run(root)
-    checked_once = _run(root)
+    first_check = _run(root)
+    second_check = _run(root)
     collected = _run(root)
 
-    assert submitted.returncode == checked_once.returncode == 4, _said(checked_once)
+    held = (submitted, first_check, second_check)
+    assert [result.returncode for result in held] == [4, 4, 4], _said(second_check)
     assert _ok(collected)
     assert _pages(root, "extract") == ALL_PAGES

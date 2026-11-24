@@ -1032,6 +1032,7 @@ class ActionExecutor:
                 )
         storage_backend.clear_disposition(action_name)
         storage_backend.clear_checkpoint_records(action_name)
+        sandbox.forget_attempts(storage_backend, action_name)
         # Every record is asked again, so a trace of the run being replaced shows a
         # prompt whose answer no longer stands.
         storage_backend.clear_prompt_traces(action_name)

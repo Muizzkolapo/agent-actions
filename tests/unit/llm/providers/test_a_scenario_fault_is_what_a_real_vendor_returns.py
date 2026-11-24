@@ -3,8 +3,9 @@
 A rate limit, a timeout and a server error raise the errors ``wrap_vendor_error`` makes,
 which the retry policy retries. A refusal, an empty answer, a cut-off answer and text
 that is not JSON end as the chat clients end them: a ``_parse_error`` record in JSON mode,
-the error ``chat_no_answer`` names in text mode. In a batch each is the result line such
-a vendor writes, and the mock batch client reads it as the OpenAI batch client does.
+the error ``chat_no_answer`` names in text mode, where a cut-off answer is its first half,
+returned as the answer. In a batch each is the result line such a vendor writes, and the
+mock batch client reads it as the OpenAI batch client does.
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ def test_a_transport_fault_raises_a_retried_error_in_both_modes(kind, error):
     with pytest.raises(error) as json_mode:
         faults.json_answer(kind, HONEST, "gpt-4o-mini")
     with pytest.raises(error) as text_mode:
-        faults.text_answer(kind, "gpt-4o-mini")
+        faults.text_answer(kind, "a calm sea", "gpt-4o-mini")
 
     assert is_retriable_error(json_mode.value) and is_retriable_error(text_mode.value)
 
@@ -64,21 +65,28 @@ def test_an_answer_fault_is_a_parse_error_record_in_json_mode(kind, parse_error)
 
 @pytest.mark.parametrize(
     ("kind", "error", "retried"),
-    [
-        ("refusal", VendorAPIError, False),
-        ("empty", VendorAPIError, False),
-        ("truncated", ResponseTruncatedError, True),
-    ],
+    [("refusal", VendorAPIError, False), ("empty", VendorAPIError, False)],
 )
 def test_an_answer_fault_raises_in_text_mode(kind, error, retried):
     with pytest.raises(error) as caught:
-        faults.text_answer(kind, "gpt-4o-mini")
+        faults.text_answer(kind, "a calm sea", "gpt-4o-mini")
 
     assert is_retriable_error(caught.value) is retried
 
 
+def test_a_cut_off_text_answer_is_its_first_half_as_a_real_client_returns_it():
+    assert faults.text_answer("truncated", "a calm sea today", "gpt-4o-mini") == "a calm s"
+
+
+def test_a_text_answer_cut_off_before_its_first_character_raises_a_retried_error():
+    with pytest.raises(ResponseTruncatedError) as caught:
+        faults.text_answer("truncated", "a", "gpt-4o-mini")
+
+    assert is_retriable_error(caught.value)
+
+
 def test_text_that_is_not_json_is_returned_in_text_mode():
-    assert faults.text_answer("invalid_json", "gpt-4o-mini") == faults.NOT_JSON
+    assert faults.text_answer("invalid_json", None, "gpt-4o-mini") == faults.NOT_JSON
 
 
 def _line(content: str = json.dumps(HONEST)) -> dict:

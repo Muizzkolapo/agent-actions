@@ -26,7 +26,7 @@ resumes from where it stopped.
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` names the same option. |
 | `--sandbox` | Retry the records of a sandbox run (`agac run --sandbox`). The mock provider answers each LLM action, and the retry reads and writes only the sandbox output. See [Sandbox Runs](../../guides/sandbox.md) |
-| `--scenario happy\|chaos\|PATH` | With `--sandbox`: the scenario that the mock follows, as for [`run`](./run.md#options). The attempts of the retry start at 1 again, so the same scenario makes the same decisions. Give `--scenario happy` to retry with no faults. See [The scenario file](../../guides/sandbox.md#scenario) |
+| `--scenario happy\|chaos\|PATH` | With `--sandbox`: the scenario that the mock follows, as for [`run`](./run.md#options). A retry continues the attempt count of each record, online and in a batch, so a fault with `heal_on_attempt` can stop in the retry. A fault with no `heal_on_attempt` fails again. Give `--scenario happy` to retry with no faults. See [The scenario file](../../guides/sandbox.md#scenario) |
 | `--from TEXT` | The action to start the retry from. If you do not give this option, the retry starts from the earliest failure. |
 | `--record TEXT` | Limit the retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what the command would retry, and do not execute |

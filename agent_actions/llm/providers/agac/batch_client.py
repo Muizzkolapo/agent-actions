@@ -5,14 +5,13 @@ Provides a simple mock batch client for testing batch processing
 without hitting real APIs. Uses schema-based fake data generation.
 
 A batch completes at its first status check, unless the sandbox scenario's ``batch``
-block delays it.
+block holds it for status checks or seconds.
 """
 
 import glob
 import hashlib
 import json
 import logging
-import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -37,8 +36,6 @@ logger = logging.getLogger(__name__)
 # short enough that a record abandoned by a killed process is reclaimed by
 # the next run rather than the one after it.
 _ABANDONED_WRITE_SECONDS = 60.0
-# How long a record's submissions are counted after its last one.
-_ATTEMPTS_KEPT_SECONDS = 7 * 24 * 3600.0
 
 
 def _task_action(task: dict[str, Any]) -> str:
@@ -77,8 +74,9 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     """Mock batch client for testing batch processing without real APIs.
 
     A batch completes at its first status check. Under ``agac run --sandbox`` the
-    scenario's ``batch`` block can hold it for ``polls_until_complete`` status checks or
-    ``complete_after_seconds``, drop results, or fail the batch of an action it names.
+    scenario's ``batch`` block can hold it for its first ``polls_until_complete`` status
+    checks and until ``complete_after_seconds`` have passed, drop results, or fail the
+    batch of an action it names.
     """
 
     _vendor_label = faults.VENDOR
@@ -90,8 +88,6 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     _tasks_by_batch: dict[str, list[dict[str, Any]]] = {}
     # The rules a batch's tasks name by key, kept once for the batch.
     _contracts_by_batch: dict[str, dict[str, Any]] = {}
-    # Two actions' batches are submitted at once in a parallel run, and both count in one file.
-    _attempts_lock = threading.Lock()
 
     def __init__(
         self,
@@ -126,13 +122,22 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def prepare_tasks(
         self, data: list[dict[str, Any]], agent_config: dict[str, Any]
     ) -> list[dict[str, Any]]:
-        """Each task also carries the action's rules, which the answer must meet as online."""
+        """Each task also carries the action's rules, which the answer must meet as online.
+
+        Under a sandbox scenario a record's task also names the record (its ``source_guid``)
+        and holds its whole input, which the scenario reads at collect time.
+        """
         from agent_actions.llm.providers.agac.contract import Contract, observed_refs, rules_for
 
         # Read before the base class takes keys off each row.
-        guids = {
-            str(row.get("target_id", row.get("id", ""))): row.get(RECORD_GUID_KEY) for row in data
+        records = {
+            str(row.get("target_id", row.get("id", ""))): (
+                row.get(RECORD_GUID_KEY),
+                row.get("content"),
+            )
+            for row in data
         }
+        followed = sandbox.scenario()
         tasks = super().prepare_tasks(data, agent_config)
         action = AgacClient._action_name(agent_config)
         spec = Contract(
@@ -144,9 +149,10 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         ).to_task()
         for task in tasks:
             task["contract"] = spec
-            guid = guids.get(str(task.get("custom_id")))
-            if isinstance(guid, str) and guid:
+            guid, record_input = records.get(str(task.get("custom_id")), (None, None))
+            if followed is not None and isinstance(guid, str) and guid:
                 task["record"] = guid
+                task["input"] = record_input
         return tasks
 
     def format_task_for_provider(
@@ -304,28 +310,26 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         elapsed = time.time() - state.created_at
         if state.status == "failed":
             logger.debug("Mock batch %s failed at the provider, as the scenario asks", batch_id)
-        elif elapsed >= state.complete_after_seconds:
+        elif (
+            state.poll_count > state.polls_until_complete
+            and elapsed >= state.complete_after_seconds
+        ):
             state.status = "completed"
             logger.debug(
-                "Mock batch %s auto-completed after %.1fs",
-                batch_id,
-                elapsed,
-            )
-        elif state.polls_until_complete > 0 and state.poll_count >= state.polls_until_complete:
-            state.status = "completed"
-            logger.debug(
-                "Mock batch %s completed after %d polls",
+                "Mock batch %s completed at status check %d, after %.1fs",
                 batch_id,
                 state.poll_count,
+                elapsed,
             )
         else:
-            remaining = state.complete_after_seconds - elapsed
             logger.debug(
-                "Mock batch %s status: %s (poll %d, %.1fs remaining)",
+                "Mock batch %s status: %s (status check %d of %d held, %.1fs of %.1fs)",
                 batch_id,
                 state.status,
                 state.poll_count,
-                remaining,
+                state.polls_until_complete,
+                elapsed,
+                state.complete_after_seconds,
             )
 
         # A poll is state: `polls_until_complete` counts them, and a run that
@@ -360,7 +364,7 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         for task in tasks:
             custom_id = task.get("custom_id", "unknown")
 
-            # Stamped at submit; a task this client never submitted counts in memory.
+            # Stamped at submit under a scenario; any other task counts in memory.
             stamped = task.get("attempt")
             attempt = (
                 stamped if isinstance(stamped, int) else self._get_attempt_for_custom_id(custom_id)
@@ -379,20 +383,22 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                         key,
                     )
             contract = Contract.from_task(spec, task.get("user_content"))
-            # A text-mode request that ends by offering its answer's shapes, as a side
-            # call's may (a judge's does), gets one of them, seeded by the request alone.
-            request = task.get("user_content") or ""
+            # A text-mode prompt that ends by offering its answer's shapes, as a side call's
+            # may (a judge's does), gets one of them, chosen as online chooses it.
+            prompt = task.get("prompt") or ""
             text_mode = not (task.get("model_config") or {}).get("json_mode", True)
-            shapes = FakeDataGenerator.offered_answer_shapes(request) if text_mode else None
+            shapes = FakeDataGenerator.offered_answer_shapes(prompt) if text_mode else None
 
             # A side call's task names no record; only judge.pass_rate governs it.
-            record = task.get("record")
-            rules = fault = None
-            if followed is not None and contract is not None and isinstance(record, str):
+            guid = task.get("record")
+            record = rules = fault = None
+            if followed is not None and contract is not None and isinstance(guid, str):
+                record_input = task.get("input")
+                record = followed.record_key(record_input, guid)
                 if followed.drops(contract.action, record, attempt):
                     followed.count("dropped")
                     continue
-                rules = followed.rules_for(contract.action, task.get("user_content"))
+                rules = followed.rules_for(contract.action, record_input)
                 fault = followed.error_for(contract.action, record, attempt, rules)
 
             # Straight off the task this client wrote, which holds both.
@@ -401,13 +407,10 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             )
             message = openai_response["choices"][0]["message"]
             if shapes:
-                passing = (
-                    followed.judge_passes(contract.action, request)
-                    if followed is not None and contract is not None
-                    else None
-                )
+                action = contract.action if contract is not None else "action"
+                passing = followed.judge_passes(action, prompt) if followed is not None else None
                 message["content"] = FakeDataGenerator.generate_offered_answer(
-                    shapes, request, passing
+                    shapes, f"{action}:{prompt}", passing
                 )
             elif rules is not None and fault is None and followed is not None:
                 assert contract is not None and isinstance(record, str)
@@ -491,7 +494,10 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             polls_until_complete=self.polls_until_complete,
             complete_after_seconds=self.complete_after_seconds,
         )
-        self._count_submissions(tasks)
+        if followed is not None:
+            for task in tasks:
+                if isinstance(task.get("record"), str):
+                    task["attempt"] = followed.next_attempt(_task_action(task), task["record"])
         contracts = _shared_contracts(tasks)
         self._batches[batch_id] = state
         self._tasks_by_batch[batch_id] = tasks
@@ -505,44 +511,6 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         )
 
         return batch_id, "in_progress"
-
-    @classmethod
-    def _attempts_file(cls) -> Path:
-        return cls._state_dir().parent / "batch_attempts.json"
-
-    @classmethod
-    def _count_submissions(cls, tasks: list[dict[str, Any]]) -> None:
-        """Stamp each task with its record's submission count for its action, from 1.
-
-        Kept on disk: a retry or repair batch is often submitted and collected by later
-        runs, and a scenario's ``heal_on_attempt`` reads the count.
-        """
-        from agent_actions.utils.atomic_write import atomic_json_write
-        from agent_actions.utils.path_utils import ensure_directory_exists
-
-        path = cls._attempts_file()
-        with cls._attempts_lock:
-            try:
-                counts = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                counts = {}
-            if not isinstance(counts, dict):
-                counts = {}
-            now = time.time()
-            counts = {
-                key: entry
-                for key, entry in counts.items()
-                if isinstance(entry, list)
-                and len(entry) == 2
-                and now - entry[1] < _ATTEMPTS_KEPT_SECONDS
-            }
-            for task in tasks:
-                key = f"{_task_action(task)}:{task.get('custom_id')}"
-                attempt = counts.get(key, [0, now])[0] + 1
-                counts[key] = [attempt, now]
-                task["attempt"] = attempt
-            ensure_directory_exists(path.parent)
-            atomic_json_write(path, counts, fsync=False)
 
     def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """A failed line's own message, as online raises it; else the status the line holds."""
@@ -561,7 +529,6 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         cls._contracts_by_batch.clear()
         for stale in cls._state_dir().glob("*.json"):
             stale.unlink(missing_ok=True)
-        cls._attempts_file().unlink(missing_ok=True)
         cls.discard_partial_writes()
         logger.debug("AgacBatchClient state reset")
 

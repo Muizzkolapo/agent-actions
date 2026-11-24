@@ -55,10 +55,10 @@ def test_the_command_follows_the_scenario_given_and_forgets_it_after(args, flag)
 
 def test_a_scenario_loads_only_for_a_command_that_follows_one(tmp_path):
     with sandbox.sandbox_mode(True):
-        sandbox.load_scenario(tmp_path, ["extract"])
+        sandbox.load_scenario(tmp_path, {"extract": None})
         assert sandbox.scenario() is None
         with sandbox.scenario_choice("chaos"):
-            sandbox.load_scenario(tmp_path, ["extract"])
+            sandbox.load_scenario(tmp_path, {"extract": None})
             assert sandbox.scenario() is not None
             assert sandbox.scenario().name == "chaos"
         assert sandbox.scenario() is None

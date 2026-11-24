@@ -119,3 +119,15 @@ def test_a_pinned_value_is_kept_and_one_that_fails_is_logged_once(caplog):
     assert record["tone"] == "calm" and record["score"] == 99
     warnings = [r.getMessage() for r in caplog.records if "pins field" in r.getMessage()]
     assert len(warnings) == 1 and "'score'" in warnings[0], warnings
+
+
+def test_all_on_an_action_with_no_rule_to_break_breaks_nothing_and_logs_nothing(caplog):
+    contract = Contract(action="extract", rules=[], context={}, observe=[])
+    record = _honest(contract)
+    before = dict(record)
+
+    with caplog.at_level(logging.WARNING):
+        assert contract.break_rules(record, SCHEMA, "all", lambda count: 0) == 0
+
+    assert record == before
+    assert not [r for r in caplog.records if "could not break" in r.getMessage()]

@@ -14,7 +14,7 @@ Use a sandbox run to test the connections of a workflow: the dependencies, guard
 agac run -w my_workflow --sandbox
 ```
 
-The run prints `SANDBOX` on stderr when it starts. After its result, it prints a `SANDBOX scenario` line that counts the faults of the [scenario](#scenario), and a `SANDBOX run` line.
+The run prints `SANDBOX` on stderr when it starts. After its result, it prints a `SANDBOX run` line. At the end of the command, it prints one `SANDBOX scenario` line that counts the faults of the [scenario](#scenario).
 
 ## What Changes in a Sandbox Run
 
@@ -34,7 +34,7 @@ A workflow that declares `outputs:` does not write its database tables in a sand
 
 The mock makes each record from the schema of the action. It also reads the expectation rules of the action, so a record usually passes them. See [Testing rules with the mock provider](../reference/validation/expectations.md#testing-rules-with-the-mock-provider) for the rules that the mock meets. An `llm_judge` rule gets a verdict as [Testing a judge offline](../reference/validation/expectations.md#testing-a-judge-offline) tells.
 
-The mock counts the attempts of each record separately. A repair round is the next attempt of its record. Each run, a retry included, starts each record at the first attempt.
+The mock counts the attempts of each record separately. A repair round is the next attempt of its record. In a sandbox run, a retry and a later run continue the count. See [Each decision is per record](#each-decision-is-per-record).
 
 A judge passes by default in a sandbox run. A [scenario](#scenario) can set the pass rate.
 
@@ -50,7 +50,7 @@ A scenario makes the mock fail, change or delay some calls on purpose. Use it to
 
 `agac retry --sandbox` takes `--scenario` too. Without `--sandbox`, `--scenario` is an error. The read commands do not read a scenario.
 
-Agent Actions reads and checks the scenario when it loads the workflow, before it calls the mock. A problem stops the command, and the message names the file and each key that is wrong.
+Agent Actions reads and checks the scenario when it loads the workflow, before it calls the mock. A problem stops the command. The message names the scenario file (`sandbox.yml` or the path you gave) and each key that is wrong.
 
 ### Format
 
@@ -66,14 +66,14 @@ actions:
     break_rules: {rules: [matches_regex], rate: 0.3, heal_on_attempt: 2}
     errors: {rate: 0.05, kinds: [rate_limit, timeout, refusal, truncated, empty]}
   classify:
-    pin: {label: urgent}        # a fixed value for a field
+    pin: {label: urgent}        # a fixed value for a field of the output schema
 records:
-  - match: {source.page_id: p3} # dotted paths into the context of the request
+  - match: {source.page_id: p3} # dotted paths into the input of the record
     actions:
       extract: {error: refusal} # this record fails each attempt with a refusal
 batch:
-  polls_until_complete: 0       # status checks before a batch completes
-  complete_after_seconds: 0     # seconds before a batch completes
+  polls_until_complete: 0       # status checks that report the batch in progress
+  complete_after_seconds: 0     # seconds before a status check can complete the batch
   drop_rate: 0.0                # results that a collected batch leaves out
   fail: []                      # actions whose batch fails at the provider
 ```
@@ -81,24 +81,48 @@ batch:
 | Key | What it does |
 |-----|--------------|
 | `seed` | Changes every decision. The same seed makes the same decisions |
-| `latency_ms` | The mock waits this time before each answer. A range gives a time in the range |
-| `judge.pass_rate` | The probability that a judge answers `passed: true` |
+| `latency_ms` | Online only: the mock waits this time before each answer. A range gives a time in the range. A batch uses the `batch` timing keys |
+| `judge.pass_rate` | The probability that a judge answers `passed: true`, online and in a batch |
 | `errors` | With the probability `rate`, the call fails with one of `kinds`. See [Error kinds](#error-kinds) |
-| `break_rules` | With the probability `rate`, the mock changes the record so that the real check of a rule fails. `rules: all` breaks one rule of the action. A list of rule types breaks each rule of those types |
-| `heal_on_attempt` | The attempt of a record from which a fault stops. With `heal_on_attempt: 2`, the first attempt fails and the retry or the repair round passes. `null` never stops the fault |
-| `pin` | Sets each named field of the record to the value. The value is kept also when the schema or a rule refuses it. The mock then logs one warning for each action and field |
-| `records` | Each entry gives the rules of the records that its `match` selects. `error: <kind>` makes each attempt of the record fail with that kind. An entry can also set `errors`, `break_rules`, `pin`, `judge` and `latency_ms` |
+| `break_rules` | With the probability `rate`, the mock changes the record so that the real check of a rule fails. `rules: all` breaks one error-severity rule of the action. An action with no such rule is not changed. A list of rule types breaks each rule of those types |
+| `heal_on_attempt` | The attempt of a record from which a fault stops. With `heal_on_attempt: 2`, the first attempt fails and the next attempt passes: the retry, the repair round or `agac retry`. `null` never stops the fault |
+| `pin` | Sets each named field of the record to the value. The field must be in the output schema of the action. The value is kept also when the schema or a rule refuses it. The mock then logs one warning for each action and field |
+| `records` | Each entry gives the rules of the records that its `match` selects. `error: <kind>` makes each attempt of the record fail with that kind. An entry can also set `errors`, `break_rules`, `pin` and `latency_ms` |
 | `batch` | The timing and the faults of the mock batch provider |
 
 A record entry takes precedence over `actions`, and `actions` takes precedence over `defaults`. Each key replaces the key below it whole. For example, the `errors` of an action replace the `errors` of `defaults`.
 
-The checks refuse an unknown key, an action name that names no LLM action of the workflow, an unknown error kind, an unknown rule type in `break_rules.rules`, a rate outside 0 to 1, a `heal_on_attempt` less than 2, and a `latency_ms` range whose minimum is more than its maximum.
+A name under `actions`, under `records[].actions` and in `batch.fail` is an LLM action or the base name of a version group. The base name applies to each version (`score` applies to `score_1` and `score_2`). An entry for the exact name of a version takes precedence over an entry for its base name.
+
+`match` reads the whole input of the record: each field that the action observes, also a field that its prompt prints. For example, `match: {source.page_id: p3}` selects the record whose `source.page_id` is `p3`.
+
+The checks refuse these entries:
+
+- An unknown key.
+- An action name that is not an LLM action or the base name of a version group.
+- An unknown error kind, or an unknown rule type in `break_rules.rules`.
+- A rate outside 0 to 1, a `heal_on_attempt` less than 2, or a `latency_ms` range whose minimum is more than its maximum.
+- `judge` in a `records` entry. A judge call answers no record, so set `judge` under `actions` or `defaults`.
+- A `pin` field that the output schema of the action does not declare.
+- `pin` or `break_rules` under `actions` or `records` for an action with no JSON output schema (text mode). The `break_rules` of `defaults` do not apply to such an action.
 
 ### Each Decision Is Per Record
 
-The mock makes each decision from the seed, the action, the record, the attempt and the name of the decision. The record is its `source_guid`, which each run gives the same record. Thus the order of the calls does not change a decision: a parallel run fails the same records as a sequential run. The same scenario fails the same records in each run.
+The mock makes each decision from the seed, the action, the input of the record, the attempt and the name of the decision. The input of a record is the same in each run, also below an expansion or a FILE tool, where the `source_guid` of a record is new in each run. Thus:
 
-The attempts of each record start at 1 in each run. A retry and a repair round are the next attempt of the record. In a batch, each submission of a record for an action is its next attempt, also when a later run submits it.
+- The order of the calls does not change a decision. A parallel run fails the same records as a sequential run.
+- Two `--fresh` runs with the same input and scenario fail the same records.
+- Two records with the same input get the same decisions.
+
+The mock counts the attempts of each record at each action, from 1. In a sandbox run the count is kept in the sandbox store, `agent_io/store/<workflow>.sandbox.db`. A retry, a repair round, a later pass of `--wait` and `agac retry --sandbox` are each the next attempt of the record, online and in a batch. In a batch, each submission of a record is its next attempt. Thus `heal_on_attempt` can stop a fault in a retry run.
+
+These commands start the count again:
+
+| Command | Count |
+|---------|-------|
+| `agac run --sandbox --fresh` | Starts again for each action |
+| `agac run --sandbox --rerun <action>` | Starts again for that action and the actions that read it |
+| `agac clean --all` | Removed with the sandbox store |
 
 ### Error Kinds {/* #error-kinds */}
 
@@ -110,30 +134,41 @@ Each kind reaches the workflow as the same fault from a real provider does. Thus
 | `timeout` | A network error. The retry policy retries it | Same | A failed line with the error `Request timed out.` |
 | `server_error` | A server error (503). The retry policy retries it | Same | A failed line with status 503 |
 | `refusal` | A record with the parse error `The model refused to answer` | An error that the retry policy does not retry | A line with a refusal |
-| `truncated` | The first half of the answer, with a parse error for the output limit | A truncation error. The retry policy retries it | A line cut off at the output limit |
+| `truncated` | The first half of the answer, with a parse error for the output limit | The first half of the answer, kept as the answer, as a real provider returns it | A line cut off at the output limit |
 | `empty` | A record with the parse error `Empty response from API` | An error that the retry policy does not retry | A line with no content |
 | `invalid_json` | A record that no parse can read | Text that is not JSON | A line with text that is not JSON |
 
-A record with a parse error fails the schema check, so an `expect:` block sends it again as a schema failure. Without an `expect:` block, the record fails. In a batch, the retry batch sends a failed line again.
+A record with a parse error fails the schema check, so an `expect:` block with `repair` sends it again as a schema failure. Without an `expect:` block, or with `repair: none`, the record fails. A transport fault (`rate_limit`, `timeout`, `server_error`) is sent again only when the action sets `retry:`. In a batch, the retry batch sends a failed line again.
 
 ### Batch Actions in a Scenario
 
 The mock batch provider makes the same decisions for each record when it returns the results. A dropped result is left out only the first time that the record is sent, so the retry batch gets it. An action in `batch.fail` gets a batch that the provider reports as failed.
 
-Without a scenario that sets the timing, a mock batch completes at the first status check.
+A batch reports `in_progress` for its first `polls_until_complete` status checks, and until `complete_after_seconds` passed. The first status check after both completes it. With both at 0, which is the default, the first status check completes the batch.
 
 ### Presets
 
 | Preset | Scenario |
 |--------|----------|
 | `happy` | No faults. The judge passes |
-| `chaos` | `seed: 0`. Each LLM action: `errors {rate: 0.1, kinds: [rate_limit, timeout, truncated, empty], heal_on_attempt: 2}`, `break_rules {rules: all, rate: 0.2, heal_on_attempt: 2}` and `judge {pass_rate: 0.7}`. Batch: `polls_until_complete: 1` and `drop_rate: 0.1` |
+| `chaos` | `seed: 0`. Each LLM action: `errors {rate: 0.1, kinds: [rate_limit, timeout, truncated, empty], heal_on_attempt: 2}`, `break_rules {rules: all, rate: 0.2, heal_on_attempt: 2}` and `judge {pass_rate: 0.7}`. Batch: `polls_until_complete: 1` (the first status check of each batch reports `in_progress`) and `drop_rate: 0.1` |
 
-Each fault of `chaos` stops at the second attempt of its record. Thus a workflow whose actions have `retry:` (two attempts or more) and an `expect:` block with `repair: auto` completes. A workflow without them shows which actions do not recover.
+Each fault of `chaos` stops at the second attempt of its record. A `chaos` run completes when each LLM action has both of these:
+
+- `retry:` with two attempts or more, for the transport faults.
+- An `expect:` block with `repair: auto`, for the cut-off and empty answers and the broken rules.
+
+These records fail:
+
+- A record of an action without `retry:`, when its first call gets a transport fault.
+- A record of a JSON action without `repair`, when its first answer is cut off or empty.
+- A record of a text-mode action (no JSON output schema), when its first answer is empty. A real provider's empty text answer is an error that the retry policy does not retry, and a text answer has no repair. A cut-off text answer is kept as the answer.
+
+The summary line and the failure hint show these records.
 
 ### The Summary Line
 
-After its result, a sandbox run or retry prints one line with the counts of this run:
+After the result, a sandbox run or retry prints one line with the counts of the whole command. With `--wait`, the line counts each pass:
 
 ```
 SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped
@@ -159,7 +194,7 @@ The two kinds of run share these items:
 
 - The input: `agent_io/staging/` or the data source of the workflow.
 - The run lock, `agent_io/store/<workflow>.db.lock`. A sandbox run and a real run of one workflow cannot run at the same time. The second run stops with `Another run of workflow '<workflow>' is in progress`.
-- The local records of the mock batch provider, under `.agac/batch_state/`, and its count of the submissions of each record, `.agac/batch_attempts.json`.
+- The local records of the mock batch provider, under `.agac/batch_state/`.
 - The rendered workflow file, under `artefact/rendered_workflows/`.
 
 `--fresh` with `--sandbox` clears the sandbox output only.

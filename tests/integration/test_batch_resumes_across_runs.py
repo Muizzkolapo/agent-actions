@@ -102,18 +102,16 @@ class TestASubmittedBatchIsCollectableByTheNextRun:
     def test_a_poll_counts_towards_the_next_run(self, project):
         """`polls_until_complete` counts status checks across runs.
 
-        Submitting does not poll, so the count runs from the second run on: with
-        a threshold of two, the second run reaches one and the third reaches two.
-        A count that restarted each run would sit at one forever. The sandbox
-        scenario sets the threshold.
+        Submitting does not poll, so the count runs from the second run on: held
+        for one status check, the second run's check is held and the third's
+        completes. A count that restarted each run would hold every check. The
+        sandbox scenario sets how many checks are held.
         """
-        (project / "sandbox.yml").write_text(
-            "batch: {polls_until_complete: 2, complete_after_seconds: 999}\n"
-        )
+        (project / "sandbox.yml").write_text("batch: {polls_until_complete: 1}\n")
         assert _run(project, "--fresh", "--sandbox")[0] == EXIT_PAUSED
         second_code, second = _run(project, "--sandbox")
         assert second_code == EXIT_PAUSED, second
-        assert "paused" in second, "a threshold of two cannot be met by one poll"
+        assert "paused" in second, "the one check held is the second run's"
 
         code, output = _run(project, "--sandbox")
 

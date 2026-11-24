@@ -465,9 +465,10 @@ class Contract:
     ) -> int:
         """Make the rules of the *wanted* types fail on *record*; returns how many now fail.
 
-        ``all`` is one rule, the one *pick* chooses among the error-severity rules. A
-        value is kept only when the real check fails on it, and one the schema accepts
-        is preferred. A rule no value breaks is logged once per run, action and rule.
+        ``all`` is one rule, the one *pick* chooses among the error-severity rules; an
+        action with none has nothing to break. A value is kept only when the real check
+        fails on it, and one the schema accepts is preferred. A named rule type the action
+        lacks, and a rule no value breaks, is logged once per run, action and rule.
         """
         fields = _field_schemas(schema)
         breakable = [
@@ -476,8 +477,9 @@ class Contract:
             if rule.severity == "error" and _unmeetable(rule, fields) is None
         ]
         if wanted == "all":
+            # No rule to break is no fault to report: the action has none.
             targets = [breakable[pick(len(breakable))]] if breakable else []
-            missing = [] if breakable else ["all"]
+            missing = []
         else:
             targets = [rule for rule in breakable if rule.type in wanted]
             missing = [name for name in wanted if not any(rule.type == name for rule in targets)]

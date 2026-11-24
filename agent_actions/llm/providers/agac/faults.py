@@ -84,18 +84,33 @@ def json_answer(kind: str, honest: Any, model: str) -> list[dict[str, Any]]:
     return [unparsed_json_record(NOT_JSON)]
 
 
-def text_answer(kind: str, model: str) -> str:
-    """What a text-mode call returns for *kind*; every fault but ``invalid_json`` raises."""
+def text_answer(kind: str, honest: str | None, model: str) -> str:
+    """What a text-mode call returns for *kind*, or raises as a real client does.
+
+    ``truncated`` is the first half of the *honest* answer, which a real client returns
+    as an answer; a cut before the first character raises there, and here.
+    """
     if kind in TRANSPORT:
         _raise_transport(kind, model)
     if kind == "invalid_json":
         return NOT_JSON
-    content, finish_reason, refusal = {
-        "refusal": (None, "stop", REFUSAL),
-        "empty": (None, "stop", None),
-        "truncated": ("", "length", None),
-    }[kind]
-    raise _no_answer(content, finish_reason, refusal, model).error
+    if kind == "truncated":
+        text = honest or ""
+        content: str | None = text[: len(text) // 2]
+        finish_reason, refusal = "length", None
+    else:
+        content, finish_reason, refusal = {
+            "refusal": (None, "stop", REFUSAL),
+            "empty": (None, "stop", None),
+        }[kind]
+    ended = chat_no_answer(
+        content, finish_reason, refusal, vendor_label=VENDOR, model_name=model, vendor=VENDOR
+    )
+    if ended is None:
+        assert content is not None
+        return content
+    assert ended.error is not None
+    raise ended.error
 
 
 def batch_line(kind: str, line: dict[str, Any]) -> dict[str, Any]:

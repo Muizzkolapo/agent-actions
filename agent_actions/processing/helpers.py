@@ -5,7 +5,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent_actions.utils.constants import RECORD_GUID_KEY, RECORD_ID_KEY, SCHEMA_KEY, VERDICT_KEY
+from agent_actions.config import sandbox
+from agent_actions.utils.constants import (
+    RECORD_GUID_KEY,
+    RECORD_ID_KEY,
+    RECORD_INPUT_KEY,
+    SCHEMA_KEY,
+    VERDICT_KEY,
+)
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation import PassthroughTransformer
@@ -58,14 +65,15 @@ def run_dynamic_agent(
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
 
-        ``dispatched`` is the record's resolved schema, so a retry or repair call writes the
-        schema the record was first given. ``rendered_prompt`` is the record's prepared prompt;
-        a call whose prompt differs from it is a repair call. ``cache_points`` are that
-        prompt's. ``record_id`` and ``source_guid`` name the record on the call's config
-    (``RECORD_ID_KEY``, ``RECORD_GUID_KEY``).
-        Every path here has already evaluated the guard, so ``was_executed`` is always
-        ``True``; callers keep it because other producers set it ``False``. The LLM sees
-        ``llm_context`` (``context`` with ``context_scope.drop`` applied) when it is given.
+    ``dispatched`` is the record's resolved schema, so a retry or repair call writes the
+    schema the record was first given. ``rendered_prompt`` is the record's prepared prompt;
+    a call whose prompt differs from it is a repair call. ``cache_points`` are that
+    prompt's. ``record_id`` and ``source_guid`` name the record on the call's config
+    (``RECORD_ID_KEY``, ``RECORD_GUID_KEY``); under a sandbox scenario the config also
+    holds the record's whole input (``RECORD_INPUT_KEY``). Every path here has already
+    evaluated the guard, so ``was_executed`` is always ``True``; callers keep it because
+    other producers set it ``False``. The LLM sees ``llm_context`` (``context`` with
+    ``context_scope.drop`` applied) when it is given.
     """
     from agent_actions.llm.realtime import builder as agent_builder
 
@@ -86,6 +94,8 @@ def run_dynamic_agent(
         record_config = {**record_config, RECORD_ID_KEY: record_id}
     if source_guid is not None:
         record_config = {**record_config, RECORD_GUID_KEY: source_guid}
+    if sandbox.scenario() is not None and (record_id is not None or source_guid is not None):
+        record_config = {**record_config, RECORD_INPUT_KEY: llm_data}
 
     response = agent_builder.create_dynamic_agent(
         record_config,

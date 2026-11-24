@@ -555,7 +555,7 @@ providers/
 └── agac/
     ├── client.py           ← AgacClient (deterministic mock)
     ├── batch_client.py     ← AgacBatchClient (auto-complete mock)
-    ├── scenario.py         ← Sandbox scenario: faults decided per record
+    ├── scenario.py         ← Sandbox scenario: faults decided per record input, attempts counted in the sandbox store
     └── faults.py           ← Each fault as a real vendor shows it
 ```
 

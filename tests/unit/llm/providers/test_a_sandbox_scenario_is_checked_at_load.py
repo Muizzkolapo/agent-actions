@@ -14,7 +14,7 @@ import pytest
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.agac import scenario as sc
 
-ACTIONS = ["extract", "classify", "vote_1", "vote_2"]
+ACTIONS = {"extract": None, "classify": None, "vote_1": "vote", "vote_2": "vote"}
 
 
 def _write(tmp_path: Path, text: str, name: str = "sandbox.yml") -> Path:
@@ -183,3 +183,74 @@ def test_a_file_that_is_not_a_mapping_is_refused(tmp_path):
 
 def test_a_file_that_is_not_yaml_is_refused(tmp_path):
     assert "sandbox.yml" in _refused(tmp_path, "seed: [1\n")
+
+
+def test_a_name_that_only_looks_like_a_version_group_is_refused(tmp_path):
+    (tmp_path / "sandbox.yml").write_text("actions:\n  foo: {latency_ms: 1}\n")
+
+    with pytest.raises(ConfigurationError, match=r"actions\.foo: names no LLM action"):
+        sc.load(None, tmp_path, {"foo_2": None})
+
+
+def test_a_judge_set_for_a_record_is_refused(tmp_path):
+    message = _refused(
+        tmp_path,
+        "records:\n  - match: {a: 1}\n    actions: {extract: {judge: {pass_rate: 0}}}\n",
+    )
+
+    assert "records.0.actions.extract.judge" in message
+    assert "a judge call answers no record" in message
+
+
+def test_a_refusal_names_the_scenario_file_as_the_file_to_fix(tmp_path):
+    with pytest.raises(ConfigurationError) as caught:
+        _load(tmp_path, "sede: 1\n")
+
+    assert caught.value.context["config_file"] == "sandbox.yml"
+    assert "scenario file" in caught.value.context["hint"]
+
+
+DECLARED = {"extract": {"code", "tone"}, "classify": {"label"}, "vote_1": None, "vote_2": None}
+
+
+@pytest.mark.parametrize(
+    ("text", "named"),
+    [
+        (
+            "actions:\n  classify:\n    pin: {lable: urgent}\n",
+            "actions.classify.pin.lable: the output schema of action 'classify' declares no "
+            "field 'lable' (its fields: label)",
+        ),
+        (
+            "records:\n  - match: {a: 1}\n    actions: {extract: {pin: {mood: calm}}}\n",
+            "records.0.actions.extract.pin.mood",
+        ),
+        (
+            "actions:\n  vote:\n    pin: {label: x}\n",
+            "actions.vote: action 'vote_1' has no JSON output schema (text mode), so it takes "
+            "no pin",
+        ),
+        (
+            "actions:\n  vote_2:\n    break_rules: {rate: 0.5}\n",
+            "actions.vote_2: action 'vote_2' has no JSON output schema (text mode), so it "
+            "takes no break_rules",
+        ),
+    ],
+)
+def test_a_pin_or_break_rules_the_output_cannot_take_is_refused(tmp_path, text, named):
+    scenario = _load(tmp_path, text)
+
+    with pytest.raises(ConfigurationError) as caught:
+        scenario.check_outputs(DECLARED)
+
+    assert named in str(caught.value), str(caught.value)
+    assert "sandbox.yml" in str(caught.value)
+
+
+def test_a_declared_pin_and_default_break_rules_on_text_mode_are_accepted(tmp_path):
+    scenario = _load(
+        tmp_path,
+        "defaults:\n  break_rules: {rate: 0.5}\nactions:\n  classify:\n    pin: {label: urgent}\n",
+    )
+
+    scenario.check_outputs(DECLARED)

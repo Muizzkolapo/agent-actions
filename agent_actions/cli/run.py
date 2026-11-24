@@ -80,10 +80,10 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
 
 
 def report_scenario() -> None:
-    """The line that counts what the sandbox scenario did this pass."""
-    followed = sandbox.scenario()
-    if followed is not None:
-        click.echo(followed.summary())
+    """The one line that counts what the sandbox scenario did over the whole command."""
+    line = sandbox.scenario_summary()
+    if line is not None:
+        click.echo(line)
 
 
 def check_declared_outputs(workflow: AgentWorkflow, project_root: Path | None) -> None:
@@ -212,6 +212,7 @@ class RunCommand:
                 outcome = self._run_holding_the_lock(paths, project_root)
                 if self.args.wait:
                     outcome = self._wait_for_batches(outcome, paths, project_root, started)
+                report_scenario()
         except ProviderQuotaStop as stop:
             report_quota_stop(stop)
             outcome = RunOutcome.QUOTA_STOP
@@ -295,7 +296,6 @@ class RunCommand:
             self._open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
             self._report(outcome, workflow)
             if sandbox.is_active():
-                report_scenario()
                 click.echo(
                     "SANDBOX run: no model was called. Read its results with --sandbox, "
                     f"such as agac records -w {self.args.agent} --sandbox"

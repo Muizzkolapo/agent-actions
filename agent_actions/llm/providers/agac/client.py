@@ -22,7 +22,12 @@ from agent_actions.logging.events import (
 )
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.utils import deep_json
-from agent_actions.utils.constants import MODEL_NAME_KEY, RECORD_GUID_KEY, RECORD_ID_KEY
+from agent_actions.utils.constants import (
+    MODEL_NAME_KEY,
+    RECORD_GUID_KEY,
+    RECORD_ID_KEY,
+    RECORD_INPUT_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -123,19 +128,33 @@ class AgacClient(BaseClient):
         return None
 
     @staticmethod
+    def _attempt(agent_config: dict[str, Any], action: str, identifier: str) -> int:
+        """This call's attempt: counted by the scenario for a main call, else in this run."""
+        followed = sandbox.scenario()
+        record = AgacClient._record_of(agent_config)
+        if followed is not None and record is not None:
+            return followed.next_attempt(action, record)
+        return AgacClient._get_attempt_count(identifier, agent_config)
+
+    @staticmethod
     def _fault(
         agent_config: dict[str, Any], action: str, context_data: Any, attempt: int
     ) -> tuple[Any, str | None, str | None]:
         """The scenario's rules for this main call, the record, and the fault it fails with.
 
-        Waits the call's latency first. ``(None, None, None)`` outside a sandbox scenario
-        and for a side call, which ``judge.pass_rate`` alone governs.
+        The rules and the record are read from the record's whole input
+        (``RECORD_INPUT_KEY``), every field it observes, printed by the prompt or not; a
+        call without it is matched on *context_data*. Waits the call's latency first.
+        ``(None, None, None)`` outside a sandbox scenario and for a side call, which
+        ``judge.pass_rate`` alone governs.
         """
         followed = sandbox.scenario()
-        record = AgacClient._record_of(agent_config)
-        if followed is None or record is None:
+        guid = AgacClient._record_of(agent_config)
+        if followed is None or guid is None:
             return None, None, None
-        rules = followed.rules_for(action, context_data)
+        record_input = agent_config.get(RECORD_INPUT_KEY)
+        rules = followed.rules_for(action, context_data if record_input is None else record_input)
+        record = followed.record_key(record_input, guid)
         wait = followed.latency_ms(action, record, attempt, rules)
         if wait:
             time.sleep(wait / 1000)
@@ -143,11 +162,12 @@ class AgacClient(BaseClient):
         if fault is not None:
             followed.count("errors")
             logger.info(
-                "Sandbox scenario %s: action '%s' fails attempt %d of record %s with %s",
+                "Sandbox scenario %s: action '%s' fails attempt %d of record %s (input %s) with %s",
                 followed.name,
                 action,
                 attempt,
-                record,
+                guid,
+                record[:12],
                 fault,
             )
         return rules, record, fault
@@ -192,7 +212,7 @@ class AgacClient(BaseClient):
         # for one record, and a shared counter would hand them attempt 1, 2 and
         # 3 in whatever order they happened to arrive.
         identifier = f"{action}:{AgacClient._extract_identifier(agent_config, context_data)}"
-        attempt = AgacClient._get_attempt_count(identifier, agent_config)
+        attempt = AgacClient._attempt(agent_config, action, identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
         # Seeds the generator. The action name makes sibling versions of one
         # prompt answer differently, as a vote needs; the record's guid is left
@@ -290,7 +310,7 @@ class AgacClient(BaseClient):
         # for one record, and a shared counter would hand them attempt 1, 2 and
         # 3 in whatever order they happened to arrive.
         identifier = f"{action}:{AgacClient._extract_identifier(agent_config, context_data)}"
-        attempt = AgacClient._get_attempt_count(identifier, agent_config)
+        attempt = AgacClient._attempt(agent_config, action, identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
         # Seeds the generator. The action name makes sibling versions of one
         # prompt answer differently, as a vote needs; the record's guid is left
@@ -321,8 +341,10 @@ class AgacClient(BaseClient):
 
         model = str(agent_config.get(MODEL_NAME_KEY) or "agac-mock")
         _, _, fault = AgacClient._fault(agent_config, action, context_data, attempt)
-        if fault is not None:
-            return ResponseBuilder.wrap_non_json(faults.text_answer(fault, model), agent_config)
+        if fault is not None and fault not in faults.NEEDS_ANSWER:
+            return ResponseBuilder.wrap_non_json(
+                faults.text_answer(fault, None, model), agent_config
+            )
 
         # A prompt that ends by offering the answer's exact shapes gets one of them back.
         shapes = FakeDataGenerator.offered_answer_shapes(prompt)
@@ -334,6 +356,8 @@ class AgacClient(BaseClient):
             content = FakeDataGenerator.generate_offered_answer(shapes, seed_key, passing)
         else:
             content = FakeDataGenerator.generate_text_response(seed_key, attempt)
+        if fault is not None:
+            content = faults.text_answer(fault, content, model)
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 

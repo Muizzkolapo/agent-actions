@@ -11,7 +11,7 @@ import random
 
 from agent_actions.llm.providers.agac import scenario as sc
 
-ACTIONS = ["extract", "classify"]
+ACTIONS = {"extract": None, "classify": None}
 
 
 def _scenario(tmp_path, text: str) -> sc.Scenario:
@@ -163,3 +163,73 @@ def test_the_summary_line_counts_what_the_mock_did(tmp_path):
     assert scenario.summary() == (
         "SANDBOX scenario chaos: 2 errors, 1 rules broken, 0 batch results dropped"
     )
+
+
+def test_a_decision_depends_on_the_attempt(tmp_path):
+    scenario = _scenario(tmp_path, "seed: 1\n")
+    records = [f"r{n}" for n in range(40)]
+
+    first = [scenario.chance("extract", record, 1, "error") for record in records]
+    second = [scenario.chance("extract", record, 2, "error") for record in records]
+
+    assert all(a != b for a, b in zip(first, second, strict=True))
+
+
+def test_a_decision_depends_on_the_action(tmp_path):
+    scenario = _scenario(tmp_path, "seed: 1\n")
+    records = [f"r{n}" for n in range(40)]
+
+    extract = [scenario.chance("extract", record, 1, "error") for record in records]
+    classify = [scenario.chance("classify", record, 1, "error") for record in records]
+
+    assert all(a != b for a, b in zip(extract, classify, strict=True))
+
+
+def test_a_record_is_named_by_its_input_whatever_the_order_of_its_keys():
+    one = sc.Scenario.record_key({"source": {"a": 1, "b": 2}, "up": {"c": 3}}, "g-1")
+    same = sc.Scenario.record_key({"up": {"c": 3}, "source": {"b": 2, "a": 1}}, "g-2")
+    other = sc.Scenario.record_key({"source": {"a": 1, "b": 3}, "up": {"c": 3}}, "g-1")
+
+    assert one == same != other
+    assert sc.Scenario.record_key(None, "g-1") == "g-1"
+
+
+GROUPS = {"score_1": "score", "score_2": "score", "foo_2": None}
+BY_GROUP = """
+actions:
+  score: {latency_ms: 7}
+records:
+  - match: {source.page_id: p3}
+    actions: {score: {error: refusal}}
+batch:
+  fail: [score]
+"""
+
+
+def test_a_version_group_s_base_name_names_each_version_in_every_section(tmp_path):
+    (tmp_path / "sandbox.yml").write_text(BY_GROUP)
+    scenario = sc.load(None, tmp_path, GROUPS)
+    p3 = {"source": {"page_id": "p3"}}
+
+    for version in ("score_1", "score_2"):
+        assert scenario.rules_for(version, {}).latency_ms == (7, 7)
+        assert scenario.rules_for(version, p3).errors.kinds == ["refusal"]
+        assert scenario.fails_batch(version)
+
+
+def test_an_exact_name_takes_its_entry_over_its_group_s(tmp_path):
+    (tmp_path / "sandbox.yml").write_text(
+        "actions:\n  score: {latency_ms: 7}\n  score_2: {latency_ms: 9}\n"
+    )
+    scenario = sc.load(None, tmp_path, GROUPS)
+
+    assert scenario.rules_for("score_1", {}).latency_ms == (7, 7)
+    assert scenario.rules_for("score_2", {}).latency_ms == (9, 9)
+
+
+def test_an_action_named_like_a_version_is_no_group_s(tmp_path):
+    (tmp_path / "sandbox.yml").write_text("actions:\n  foo_2: {latency_ms: 3}\n")
+    scenario = sc.load(None, tmp_path, GROUPS)
+
+    assert scenario.rules_for("foo_2", {}).latency_ms == (3, 3)
+    assert not scenario.fails_batch("foo_2")

@@ -2,17 +2,19 @@
 
 A scenario is ``sandbox.yml`` at the project root, a preset (``happy``, ``chaos``) or a
 file named by ``--scenario``. It is read and checked once, before any call. Every decision
-is a hash of the seed, the action, the record, the attempt and the decision's name, so a
-parallel run makes the decisions a serial run makes.
+is a hash of the seed, the action, the record's input, the attempt and the decision's name,
+so a parallel run makes the decisions a serial run makes, and two runs over the same input
+make the same decisions.
 """
 
 from __future__ import annotations
 
 import hashlib
 import threading
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import yaml
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
@@ -20,7 +22,12 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationErr
 from agent_actions.errors import ConfigurationError
 from agent_actions.utils import deep_json
 
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
 SCENARIO_FILE = "sandbox.yml"
+# A workflow_metadata key of the sandbox store: one record's attempts at one action.
+ATTEMPTS_KEY_PREFIX = "sandbox_attempts:"
 ERROR_KINDS = (
     "rate_limit",
     "timeout",
@@ -149,6 +156,34 @@ PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
+def attempts_key(action: str, record: str) -> str:
+    return f"{ATTEMPTS_KEY_PREFIX}{action}:{record}"
+
+
+class Tally:
+    """What the scenario did over one command, across every load of the workflow."""
+
+    def __init__(self) -> None:
+        self._counts = dict.fromkeys(COUNTS, 0)
+        self._lock = threading.Lock()
+
+    def add(self, kind: str, amount: int = 1) -> None:
+        with self._lock:
+            self._counts[kind] += amount
+
+    def clear(self) -> None:
+        with self._lock:
+            self._counts = dict.fromkeys(COUNTS, 0)
+
+    def line(self, name: str) -> str:
+        with self._lock:
+            counts = dict(self._counts)
+        return (
+            f"SANDBOX scenario {name}: {counts['errors']} errors, "
+            f"{counts['rules_broken']} rules broken, {counts['dropped']} batch results dropped"
+        )
+
+
 @dataclass(frozen=True)
 class CallRules:
     """What one call of an action follows, after the precedence is applied."""
@@ -161,14 +196,47 @@ class CallRules:
 
 
 class Scenario:
-    def __init__(self, name: str, data: _File, llm_actions: list[str]) -> None:
+    def __init__(
+        self,
+        name: str,
+        data: _File,
+        groups: Mapping[str, str | None],
+        tally: Tally | None = None,
+    ) -> None:
         self.name = name
         self.seed = data.seed
         self.batch = data.batch
         self._data = data
-        self._keys = {action: _key_for(action, data.actions) for action in llm_actions}
-        self._counts = dict.fromkeys(COUNTS, 0)
+        self._groups = dict(groups)
+        self._tally = tally or Tally()
+        self._store: StorageBackend | None = None
+        self._attempts: dict[str, int] = {}
         self._lock = threading.Lock()
+
+    def attach(self, store: StorageBackend) -> None:
+        """Count attempts in *store*, where a later process continues the count."""
+        self._store = store
+
+    def next_attempt(self, action: str, record: str) -> int:
+        """This call's attempt for *record* at *action*, from 1.
+
+        In the sandbox store once one is attached, so a repair round, a retry, a later
+        ``--wait`` pass and ``agac retry`` continue the count. The store adds one in a
+        single statement, which two processes cannot interleave.
+        """
+        key = attempts_key(action, record)
+        if self._store is not None:
+            return self._store.increment_metadata(key)
+        with self._lock:
+            self._attempts[key] = self._attempts.get(key, 0) + 1
+            return self._attempts[key]
+
+    def _named(self, names: Collection[str], action: str) -> str | None:
+        """The entry of *names* for *action*: its own name, else its version group's."""
+        if action in names:
+            return action
+        group = self._groups.get(action)
+        return group if group is not None and group in names else None
 
     def rules_for(self, action: str, context: Any) -> CallRules:
         """A matched record's rules over the action's over the defaults, each key whole."""
@@ -180,11 +248,11 @@ class Scenario:
             "break_rules": defaults.break_rules,
             "pin": {},
         }
-        key = self._keys.get(action) or _key_for(action, self._data.actions)
         layers: list[ActionRules] = []
-        if key in self._data.actions:
+        key = self._named(self._data.actions, action)
+        if key is not None:
             layers.append(self._data.actions[key])
-        record = self._record_rules(key, context)
+        record = self._record_rules(action, context)
         if record is not None:
             layers.append(record)
         for layer in layers:
@@ -204,17 +272,38 @@ class Scenario:
             pin=dict(merged["pin"]),
         )
 
-    def _record_rules(self, key: str, context: Any) -> RecordActionRules | None:
-        """The first ``records`` entry whose match the context meets and that names *key*."""
+    def _record_rules(self, action: str, context: Any) -> RecordActionRules | None:
+        """The first ``records`` entry that names *action* and whose match *context* meets.
+
+        *context* is the record's whole input: each field the action observes, whether
+        its prompt prints the field or not.
+        """
         if not self._data.records:
             return None
         parsed = _context(context)
         for entry in self._data.records:
-            if key in entry.actions and all(
+            key = self._named(entry.actions, action)
+            if key is not None and all(
                 _lookup(parsed, path) == (True, value) for path, value in entry.match.items()
             ):
                 return entry.actions[key]
         return None
+
+    @staticmethod
+    def record_key(record_input: Any, fallback: str) -> str:
+        """The record as the decisions name it: a hash of its input, alike in every run.
+
+        A record's ``source_guid`` below an expansion or a FILE tool is new in each run,
+        so it is only the *fallback*, for a call that carries no input.
+        """
+        if record_input is None:
+            return fallback
+        text = (
+            record_input
+            if isinstance(record_input, str)
+            else deep_json.dumps(record_input, sort_keys=True, default=str, ensure_ascii=False)
+        )
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
     def chance(self, action: str, record: str, attempt: int, decision: str) -> float:
         """A number in [0, 1) that only the seed and these four values decide."""
@@ -258,28 +347,69 @@ class Scenario:
         return attempt == 1 and self.chance(action, record, attempt, "drop") < self.batch.drop_rate
 
     def fails_batch(self, action: str) -> bool:
-        return self._key_for(action) in self.batch.fail or action in self.batch.fail
-
-    def _key_for(self, action: str) -> str:
-        return self._keys.get(action) or action
+        return self._named(self.batch.fail, action) is not None
 
     def count(self, kind: str, amount: int = 1) -> None:
-        with self._lock:
-            self._counts[kind] += amount
+        self._tally.add(kind, amount)
 
     def summary(self) -> str:
-        with self._lock:
-            counts = dict(self._counts)
-        return (
-            f"SANDBOX scenario {self.name}: {counts['errors']} errors, "
-            f"{counts['rules_broken']} rules broken, {counts['dropped']} batch results dropped"
-        )
+        return self._tally.line(self.name)
+
+    def check_outputs(self, declared: Mapping[str, Collection[str] | None]) -> None:
+        """Refuse a ``pin`` or ``break_rules`` that an action's output cannot take.
+
+        *declared* holds the output schema fields of each LLM action, or None for an
+        action with no JSON output schema (text mode). An action whose fields are not
+        known before it runs is not in it.
+        """
+        entries: list[tuple[str, str, ActionRules]] = [
+            (f"actions.{name}", name, rules) for name, rules in self._data.actions.items()
+        ]
+        entries += [
+            (f"records.{index}.actions.{name}", name, rules)
+            for index, record in enumerate(self._data.records)
+            for name, rules in record.actions.items()
+        ]
+        problems: list[str] = []
+        for where, name, rules in entries:
+            keys = [key for key in ("pin", "break_rules") if getattr(rules, key) is not None]
+            if not keys:
+                continue
+            for action in self._actions_named(name):
+                if action not in declared:
+                    continue
+                fields = declared[action]
+                if fields is None:
+                    problems.append(
+                        f"{where}: action '{action}' has no JSON output schema (text mode), "
+                        f"so it takes no {' or '.join(keys)}"
+                    )
+                    continue
+                problems += [
+                    f"{where}.pin.{field}: the output schema of action '{action}' declares no "
+                    f"field '{field}' (its fields: {', '.join(sorted(fields)) or 'none'})"
+                    for field in rules.pin or {}
+                    if field not in fields
+                ]
+        if problems:
+            label = f"preset {self.name}" if self.name in PRESETS else self.name
+            raise _refusal(label, list(dict.fromkeys(problems)))
+
+    def _actions_named(self, name: str) -> list[str]:
+        """The LLM actions an entry named *name* applies to: that one, or each version."""
+        return [action for action, group in self._groups.items() if name in (action, group)]
 
 
-def load(source: str | None, project_root: Path, llm_actions: list[str]) -> Scenario:
+def load(
+    source: str | None,
+    project_root: Path,
+    groups: Mapping[str, str | None],
+    tally: Tally | None = None,
+) -> Scenario:
     """The scenario *source* names, checked against the workflow's LLM actions.
 
-    None is ``sandbox.yml`` at *project_root* when it exists, else ``happy``.
+    None is ``sandbox.yml`` at *project_root* when it exists, else ``happy``. *groups*
+    maps each LLM action to the base name of its version group, or to None.
     """
     if source in PRESETS:
         name, label, raw = source, f"preset {source}", PRESETS[source]
@@ -287,14 +417,17 @@ def load(source: str | None, project_root: Path, llm_actions: list[str]) -> Scen
         if source is None:
             path = project_root / SCENARIO_FILE
             if not path.is_file():
-                return load("happy", project_root, llm_actions)
+                return load("happy", project_root, groups, tally)
             name = SCENARIO_FILE
         else:
             path = Path(source)
             if not path.is_file():
                 raise ConfigurationError(
-                    f"--scenario: no scenario file {source}. Give happy, chaos or the path "
-                    "of a scenario file."
+                    f"--scenario: no scenario file {source}.",
+                    context={
+                        "config_file": source,
+                        "hint": "Give happy, chaos or the path of a scenario file.",
+                    },
                 )
             name = source
         label = name
@@ -303,17 +436,26 @@ def load(source: str | None, project_root: Path, llm_actions: list[str]) -> Scen
         data = _File.model_validate(raw)
     except ValidationError as e:
         raise _refusal(label, [_problem(error) for error in e.errors()]) from None
-    problems = _unknown_names(data, llm_actions)
+    problems = _unknown_names(data, groups)
     if problems:
         raise _refusal(label, problems)
-    return Scenario(name, data, llm_actions)
+    return Scenario(name, data, groups, tally)
+
+
+_HINT = (
+    "Correct each key named above in the scenario file, or give another scenario with "
+    "--scenario happy|chaos|PATH"
+)
 
 
 def _read(path: Path, label: str) -> Any:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as e:
-        raise ConfigurationError(f"Scenario {label} cannot be read: {e}") from None
+        raise ConfigurationError(
+            f"Scenario {label} cannot be read: {e}",
+            context={"config_file": label, "hint": _HINT},
+        ) from None
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -331,35 +473,35 @@ def _problem(error: Any) -> str:
 def _refusal(label: str, problems: list[str]) -> ConfigurationError:
     lines = "\n".join(f"  - {problem}" for problem in problems)
     return ConfigurationError(
-        f"Scenario {label} has {len(problems)} problem(s); nothing was called:\n{lines}"
+        f"Scenario {label} has {len(problems)} problem(s); nothing was called:\n{lines}",
+        context={"config_file": label, "hint": _HINT},
     )
 
 
-def _unknown_names(data: _File, llm_actions: list[str]) -> list[str]:
+def _unknown_names(data: _File, groups: Mapping[str, str | None]) -> list[str]:
     from agent_actions.expectations import registry
 
     known = registry.known_types()
-
-    def unknown(name: str) -> bool:
-        return name not in llm_actions and not any(
-            action.startswith(f"{name}_") and action[len(name) + 1 :].isdigit()
-            for action in llm_actions
-        )
-
-    actions = ", ".join(llm_actions) or "none"
+    names = set(groups) | {group for group in groups.values() if group is not None}
+    actions = ", ".join(groups) or "none"
     why = f"names no LLM action of the workflow (its LLM actions: {actions})"
     problems: list[str] = []
     named: list[tuple[str, BreakRules | None]] = [("defaults", data.defaults.break_rules)]
     for name, entry in data.actions.items():
-        if unknown(name):
+        if name not in names:
             problems.append(f"actions.{name}: {why}")
         named.append((f"actions.{name}", entry.break_rules))
     for index, record in enumerate(data.records):
         for name, by_record in record.actions.items():
-            if unknown(name):
+            if name not in names:
                 problems.append(f"records.{index}.actions.{name}: {why}")
+            if by_record.judge is not None:
+                problems.append(
+                    f"records.{index}.actions.{name}.judge: a judge call answers no record, so "
+                    f"a record entry cannot set it; set judge under actions.{name} or defaults"
+                )
             named.append((f"records.{index}.actions.{name}", by_record.break_rules))
-    problems += [f"batch.fail: '{name}' {why}" for name in data.batch.fail if unknown(name)]
+    problems += [f"batch.fail: '{name}' {why}" for name in data.batch.fail if name not in names]
     for where, broken in named:
         if broken is None or broken.rules == "all":
             continue
@@ -369,14 +511,6 @@ def _unknown_names(data: _File, llm_actions: list[str]) -> list[str]:
             if rule not in known
         ]
     return problems
-
-
-def _key_for(action: str, actions: dict[str, Any]) -> str:
-    """The ``actions`` key an action answers to: its own name, or its version group's."""
-    if action in actions:
-        return action
-    base, _, suffix = action.rpartition("_")
-    return base if base and suffix.isdigit() and base in actions else action
 
 
 def _context(context: Any) -> Any:
