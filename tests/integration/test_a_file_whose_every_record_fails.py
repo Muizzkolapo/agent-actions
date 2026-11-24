@@ -70,7 +70,9 @@ def _with_a_reader(root):
 
 def _handed(root):
     handed = root / "handed.jsonl"
-    return [json.loads(line) for line in handed.read_text().splitlines()] if handed.exists() else []
+    return (
+        [json.loads(line) for line in handed.read_text().splitlines()] if handed.exists() else []
+    )
 
 
 @contextmanager
@@ -192,7 +194,9 @@ def test_a_batch_file_whose_every_answer_fails_on_a_rerun_keeps_no_answer_from_b
 
     assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _status(project) == "completed_with_failures"
-    assert _still_holding(before_the_edit, _stored(project)) == [], "an answer from before the edit"
+    assert _still_holding(before_the_edit, _stored(project)) == [], (
+        "an answer from before the edit"
+    )
 
 
 def _stored_files(root, action):

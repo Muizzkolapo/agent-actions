@@ -110,7 +110,9 @@ class TestLoadPromptSearchesOnlyThePromptFolders:
         _prompt(tmp_path / "prompt_store" / "x.md", "live")
         assert PromptLoader.load_prompt("x.Main", tmp_path) == "live"
 
-    def test_two_copies_in_the_shared_and_a_workflow_folder_are_refused_naming_both(self, tmp_path):
+    def test_two_copies_in_the_shared_and_a_workflow_folder_are_refused_naming_both(
+        self, tmp_path
+    ):
         from agent_actions.prompt.handler import PromptLoader
 
         shared = _prompt(tmp_path / "prompt_store" / "x.md", "shared")

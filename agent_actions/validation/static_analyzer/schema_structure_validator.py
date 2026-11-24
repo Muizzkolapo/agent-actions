@@ -414,7 +414,8 @@ class SchemaStructureValidator:
                 elif inner_type not in self.VALID_TYPES:
                     errors.append(
                         StaticTypeError(
-                            message=f"Field '{field_name}' has invalid array item type '{inner_type}'",
+                            message=f"Field '{field_name}' has invalid array item type "
+                            f"'{inner_type}'",
                             location=FieldLocation(
                                 agent_name=action_name,
                                 config_field=f"{config_field}.{field_name}",

@@ -59,7 +59,9 @@ def test_the_manager_renders_the_file_when_it_is_given_no_text(tmp_path):
 def test_loading_a_workflow_for_a_command_renders_its_file_once(tmp_path):
     root = _project(tmp_path)
     (root / "templates").mkdir()
-    paths = ProjectPathsFactory.create_project_paths("w", "w", auto_create=False, project_root=root)
+    paths = ProjectPathsFactory.create_project_paths(
+        "w", "w", auto_create=False, project_root=root
+    )
     workflow_file = root / "agent_workflow" / "w" / "agent_config" / "w.yml"
     calls: list[str] = []
     spy = _counting(calls)

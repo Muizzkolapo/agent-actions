@@ -175,10 +175,14 @@ class TestExtractUsageEdgeCases:
             pytest.param(SimpleNamespace(usage=None), "openai", id="openai-no-usage"),
             pytest.param(SimpleNamespace(usage=None), "anthropic", id="anthropic-no-usage"),
             pytest.param(SimpleNamespace(), "gemini", id="gemini-no-usage-metadata"),
-            pytest.param(SimpleNamespace(usage_metadata=None), "gemini", id="gemini-none-metadata"),
+            pytest.param(
+                SimpleNamespace(usage_metadata=None), "gemini", id="gemini-none-metadata"
+            ),
             pytest.param(SimpleNamespace(), "cohere", id="cohere-no-usage"),
             pytest.param(
-                SimpleNamespace(usage=SimpleNamespace(tokens=None)), "cohere", id="cohere-no-tokens"
+                SimpleNamespace(usage=SimpleNamespace(tokens=None)),
+                "cohere",
+                id="cohere-no-tokens",
             ),
             pytest.param(SimpleNamespace(usage=0), "cohere", id="cohere-falsy-usage"),
             pytest.param(SimpleNamespace(), "ollama_local", id="ollama-missing-attrs"),

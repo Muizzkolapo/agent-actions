@@ -73,7 +73,8 @@ def _connector_class(name: str, settings: dict[str, Any]) -> type[Connector]:
     target = CONNECTORS.get(str(kind))
     if target is None:
         raise ConfigurationError(
-            f"Connection '{name}' has type '{kind}'; the types are {', '.join(sorted(CONNECTORS))}",
+            f"Connection '{name}' has type '{kind}'; the types are "
+            f"{', '.join(sorted(CONNECTORS))}",
             context={"connection": name, "type": kind},
         )
     module_name, _, class_name = target.partition(":")

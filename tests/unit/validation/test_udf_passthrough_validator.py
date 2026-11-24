@@ -53,9 +53,14 @@ _TWO_LEVEL = (
 # Reads via subscript, not .get.
 _SUBSCRIPT = "def flatten(data):\n    return data['ns']\n"
 # Bus param named something other than `data` — the runtime passes it positionally.
-_NONDATA_PARAM = "def flatten(bus):\n    out = []\n    for c in bus.get('ns'):\n        out.append(c)\n    return out\n"
+_NONDATA_PARAM = (
+    "def flatten(bus):\n    out = []\n    for c in bus.get('ns'):\n        "
+    "out.append(c)\n    return out\n"
+)
 # out = out + bus_read (plain Assign with BinOp, the sibling of +=).
-_BINOP_ASSIGN = "def flatten(data):\n    out = []\n    out = out + data.get('ns')\n    return out\n"
+_BINOP_ASSIGN = (
+    "def flatten(data):\n    out = []\n    out = out + data.get('ns')\n    return out\n"
+)
 # Returns the whole input unchanged (pure filter) — input already conforms, safe.
 _RETURN_INPUT = "def keep(record):\n    return record if record['ok'] else {}\n"
 # Mutates the input record and returns it — out of scope (not a namespace read); safe.

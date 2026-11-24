@@ -243,7 +243,11 @@ def _retried(tmp_path: Path, finalize: str, fail_at: str) -> tuple[Path, str, li
     (project / "FAIL_AT").unlink()
     (project / "handed.log").unlink(missing_ok=True)
     output = _agac(
-        project, "retry", "-a", WORKFLOW, exits=EXIT_PAUSED if finalize == "batch" else EXIT_SUCCESS
+        project,
+        "retry",
+        "-a",
+        WORKFLOW,
+        exits=EXIT_PAUSED if finalize == "batch" else EXIT_SUCCESS,
     )
     if finalize == "batch":
         output += _run(project, ends_with=EXIT_SUCCESS)

@@ -89,7 +89,9 @@ def write_much() -> int:
 
 def exit_cleanly() -> int:
     """A non-daemon thread and an atexit handler both run before a normal interpreter exits."""
-    threading.Thread(target=lambda: (time.sleep(0.2), print("thread finished", flush=True))).start()
+    threading.Thread(
+        target=lambda: (time.sleep(0.2), print("thread finished", flush=True))
+    ).start()
     atexit.register(print, "atexit ran")
     return 0
 

@@ -75,7 +75,8 @@ class ProjectInitializer:
         - seed_data/: Static reference data files
         - agent_actions.yml: Project configuration
 
-        Runtime directories (artefact/, logs/, agent_io/) are created automatically during execution.
+        Runtime directories (artefact/, logs/, agent_io/) are created automatically during
+        execution.
         """
         # Create standard user-managed directories
         directories = [

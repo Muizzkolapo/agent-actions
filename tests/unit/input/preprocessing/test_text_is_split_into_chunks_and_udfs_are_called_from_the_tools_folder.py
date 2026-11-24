@@ -179,7 +179,9 @@ class TestOtherSplitters:
         )
         monkeypatch.setenv("TOOLS_PATH", str(tools))
 
-        with pytest.raises(AgentActionsError, match="custom split_method 'boom_split_i'") as raised:
+        with pytest.raises(
+            AgentActionsError, match="custom split_method 'boom_split_i'"
+        ) as raised:
             Tokenizer.split_text_content("a", 3, 1, split_method="boom_split_i")
 
         assert isinstance(raised.value.__cause__, RuntimeError)

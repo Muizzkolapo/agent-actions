@@ -14,8 +14,6 @@ import uuid
 from dataclasses import replace
 from typing import Any, ClassVar
 
-logger = logging.getLogger(__name__)
-
 import httpx
 import openai
 from openai import OpenAI
@@ -51,6 +49,8 @@ from agent_actions.logging.events import (
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
+
+logger = logging.getLogger(__name__)
 
 build_sdk_models(ChatCompletion)
 
@@ -117,7 +117,8 @@ class OpenAIClient(BaseClient):
 
     @classmethod
     def _client_options(cls, agent_config: dict[str, Any]) -> dict[str, Any]:
-        """Constructor kwargs for the SDK client; a declared endpoint adds headers and a timeout."""
+        """Constructor kwargs for the SDK client; a declared endpoint adds headers and a
+        timeout."""
         return {"base_url": agent_config.get("base_url")}
 
     @classmethod

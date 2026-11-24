@@ -390,7 +390,9 @@ class PromptPreparationService:
                 mode=request.mode,
             )
 
-        logger.debug("Preparing prompt for agent '%s' in %s mode", request.agent_name, request.mode)
+        logger.debug(
+            "Preparing prompt for agent '%s' in %s mode", request.agent_name, request.mode
+        )
 
         agent_indices = request.agent_indices or {}
 
@@ -643,7 +645,8 @@ class PromptPreparationService:
                                 "loaded_count": ns_meta.get("loaded_count", 0),
                             }
                     else:
-                        # Takes first matching namespace; ambiguous if bare field exists in multiple
+                        # Takes first matching namespace; ambiguous if bare field exists in
+                        # multiple
                         field = var
                         for ns, ns_meta in field_context_metadata.items():
                             stored = ns_meta.get("stored_fields", [])
@@ -729,7 +732,8 @@ class PromptPreparationService:
         *,
         shared: bool = False,
     ) -> dict[str, Any]:
-        """Load the seed files `context_scope.seed` declares for one record; `{}` when it declares none.
+        """Load the seed files `context_scope.seed` declares for one record; `{}` when it declares
+        none.
 
         The prompt and the guard context (`build_guard_context`) both load through here.
         ``source`` is the record's own fields, read by a seed entry that selects its file

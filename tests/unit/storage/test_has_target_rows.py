@@ -108,7 +108,8 @@ def test_the_store_refuses_a_file_without_its_count(backend):
     """The probe reads only record_count, so a file stored without one would hide its rows."""
     with pytest.raises(sqlite3.IntegrityError, match="record_count"):
         backend.connection.execute(
-            "INSERT INTO target_data (action_name, relative_path, data) VALUES ('act', 'a.json', x'00')"
+            "INSERT INTO target_data (action_name, relative_path, data) VALUES ('act', "
+            "'a.json', x'00')"
         )
 
 

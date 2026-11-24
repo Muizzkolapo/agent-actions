@@ -9,7 +9,8 @@ class TestSeedFolders:
     """Tests for PromptPreparationService._seed_folders (G-4 regression)."""
 
     def test_none_workflow_config_path_raises_static_data_load_error(self):
-        """G-4: workflow_seed_dir must be None-inited; no NameError when workflow_config_path is None."""
+        """G-4: workflow_seed_dir must be None-inited; no NameError when workflow_config_path is
+        None."""
         from agent_actions.prompt.context.static_loader import StaticDataLoadError
 
         # Before the fix, `"workflow_seed_dir" in locals()` could mask a NameError if the
@@ -19,7 +20,8 @@ class TestSeedFolders:
             PromptPreparationService._seed_folders(None)
 
     def test_nonexistent_workflow_config_path_raises_static_data_load_error(self, tmp_path):
-        """When workflow_config_path points to a directory without seed_data/, raise StaticDataLoadError."""
+        """When workflow_config_path points to a directory without seed_data/, raise
+        StaticDataLoadError."""
         from agent_actions.prompt.context.static_loader import StaticDataLoadError
 
         config_path = str(tmp_path / "workflow" / "agent_config" / "workflow.yml")
@@ -29,7 +31,8 @@ class TestSeedFolders:
             PromptPreparationService._seed_folders(config_path)
 
     def test_no_name_error_when_workflow_config_path_is_none(self):
-        """G-4: workflow_seed_dir = None init prevents NameError; must raise StaticDataLoadError, not NameError."""
+        """G-4: workflow_seed_dir = None init prevents NameError; must raise StaticDataLoadError,
+        not NameError."""
         from agent_actions.prompt.context.static_loader import StaticDataLoadError
 
         # The old locals() pattern would raise NameError if the branch never ran.

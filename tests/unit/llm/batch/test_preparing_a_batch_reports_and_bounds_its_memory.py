@@ -93,7 +93,8 @@ def _record_size() -> int:
 
 @contextmanager
 def _no_log_records() -> Iterator[None]:
-    """No log record is made: a capture that keeps every record (pytest at DEBUG) would be counted."""
+    """No log record is made: a capture that keeps every record (pytest at DEBUG) would be
+    counted."""
     before = logging.root.manager.disable
     logging.disable(logging.CRITICAL)
     try:

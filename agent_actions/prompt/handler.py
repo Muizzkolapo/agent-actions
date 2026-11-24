@@ -68,7 +68,8 @@ class PromptLoader:
 
     @staticmethod
     def discover_prompt_files(project_root: Path | None = None) -> list[Path]:
-        """Every ``.md`` file in the project's ``prompt_store/`` and each workflow's, recursively."""
+        """Every ``.md`` file in the project's ``prompt_store/`` and each workflow's,
+        recursively."""
         root = resolve_project_root(project_root)
         found: list[Path] = []
         seen: set[tuple[str, Path]] = set()
@@ -114,7 +115,9 @@ class PromptLoader:
         prompt_names = PromptLoader.get_all_prompt_names(content)
         duplicates = [item for item, count in Counter(prompt_names).items() if count > 1]
         if duplicates:
-            raise ValueError(f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}")
+            raise ValueError(
+                f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}"
+            )
 
     @staticmethod
     def validate_prompt_blocks(filename: str, content: str) -> None:
@@ -156,7 +159,8 @@ class PromptLoader:
         """
         if "." not in prompt_name:
             raise ValueError(
-                f"Invalid prompt format: '{prompt_name}'. Expected 'filename.prompt_key' (with a dot separator)."
+                f"Invalid prompt format: '{prompt_name}'. Expected 'filename.prompt_key' "
+                "(with a dot separator)."
             )
 
         prompt_file_name, prompt_key = prompt_name.split(".", 1)

@@ -182,7 +182,7 @@ class RetryService:
     def _wait_before_retry(
         self, error: Exception, attempt: int, log_context: str, reason: str
     ) -> None:
-        """Wait the provider's Retry-After when the error carries one, capped at max_delay; else backoff.
+        """Wait the provider's Retry-After, capped at max_delay; with none, the backoff.
 
         A sandbox run does not wait, since its mock needs no time to recover; the log
         names the wait that was skipped.

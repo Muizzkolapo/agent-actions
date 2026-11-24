@@ -153,7 +153,9 @@ class DbApiConnector(Connector):
         target = dialect.identifier(table)
         for chunk in _statement_chunks(rows, len(columns), dialect.max_params):
             markers = iter(dialect.markers(len(chunk) * len(columns)))
-            values = ", ".join("(" + ", ".join(next(markers) for _ in columns) + ")" for _ in chunk)
+            values = ", ".join(
+                "(" + ", ".join(next(markers) for _ in columns) + ")" for _ in chunk
+            )
             # Names are validated identifiers and every value is bound.
             statement = f"INSERT INTO {target} ({names}) VALUES {values}"  # nosec B608
             cursor.execute(statement, dialect.bound([value for row in chunk for value in row]))

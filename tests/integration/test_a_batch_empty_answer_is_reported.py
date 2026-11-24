@@ -17,7 +17,9 @@ from tests.integration.test_batch_content_materialization import (  # noqa: F401
 
 def _process(config, context_map, content):  # noqa: F811
     return BatchResultStrategy().process(
-        batch_results=[BatchResult(custom_id="tid_001", content=content, success=True, error=None)],
+        batch_results=[
+            BatchResult(custom_id="tid_001", content=content, success=True, error=None)
+        ],
         context_map=context_map,
         output_directory="/tmp/test",
         agent_config=config,

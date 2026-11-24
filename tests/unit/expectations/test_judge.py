@@ -7,6 +7,7 @@ import pytest
 
 from agent_actions.expectations import registry
 from agent_actions.expectations.judge import build_judge_prompt
+from agent_actions.expectations.types import Expectation
 from tests.unit.expectations.judging import SIDE_CALL, invoke_judge, voted
 
 INVOKE = "agent_actions.llm.realtime.services.invocation.ClientInvocationService.invoke_client"
@@ -331,7 +332,9 @@ class TestInvokeJudgeWithVotes:
         assert mock_invoke.call_count == 3
         first, *rest = mock_invoke.call_args_list
         assert all(call == first for call in rest)
-        assert first.kwargs["prompt_config"] == build_judge_prompt("rule text", "value", {"a": "b"})
+        assert first.kwargs["prompt_config"] == build_judge_prompt(
+            "rule text", "value", {"a": "b"}
+        )
         assert first.kwargs["agent_config"]["model_name"] == "claude-opus-5"
 
 
@@ -339,9 +342,6 @@ class TestVotesRegistration:
     def test_llm_judge_accepts_votes_param(self):
         etype = registry.get("llm_judge")
         assert "votes" in etype.params
-
-
-from agent_actions.expectations.types import Expectation
 
 
 def _judged_expectation(**overrides):
@@ -438,7 +438,9 @@ class TestCachedJudge:
             SideCall(
                 kind="judge",
                 key=verdict_key(cache_key(exp, "value")),
-                prompt=build_judge_prompt("be specific", "value", {"source_context": "docs say X"}),
+                prompt=build_judge_prompt(
+                    "be specific", "value", {"source_context": "docs say X"}
+                ),
                 model="claude-opus-5",
                 copies=3,
             )

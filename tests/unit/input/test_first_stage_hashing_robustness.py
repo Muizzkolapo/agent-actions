@@ -88,4 +88,6 @@ def test_online_csv_source_guid_column_does_not_hijack_identity(tmp_path):
 def test_online_xlsx_source_guid_column_does_not_hijack_identity():
     rows = [{"source_guid": "collide", "a": "1"}, {"source_guid": "collide", "a": "2"}]
     _dc, st = _online([dict(r) for r in rows], ".xlsx", "/tmp/d.xlsx")
-    assert st[0]["source_guid"] != st[1]["source_guid"], "xlsx source_guid column hijacked identity"
+    assert st[0]["source_guid"] != st[1]["source_guid"], (
+        "xlsx source_guid column hijacked identity"
+    )

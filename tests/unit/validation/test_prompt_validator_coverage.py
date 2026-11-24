@@ -36,7 +36,10 @@ class TestFindPromptIds:
     """Test prompt ID extraction from {prompt ID} tokens."""
 
     def test_finds_ids(self):
-        content = "{prompt analyze}\nDo something\n{end_prompt}\n{prompt summarize}\nDo more\n{end_prompt}"
+        content = (
+            "{prompt analyze}\nDo something\n{end_prompt}\n{prompt summarize}\nDo "
+            "more\n{end_prompt}"
+        )
         ids = PromptValidator._find_prompt_ids_in_content(content)
         assert ids == ["analyze", "summarize"]
 
@@ -147,7 +150,9 @@ class TestValidatePromptFormatLogic:
         ("content", "fragment"),
         [
             pytest.param(
-                "# Section\nSome text without prompt blocks.", "no prompt ids", id="sections-no-ids"
+                "# Section\nSome text without prompt blocks.",
+                "no prompt ids",
+                id="sections-no-ids",
             ),
             pytest.param(
                 "{prompt analyze}\nDo analysis without closing", "unclosed", id="unclosed"
@@ -241,7 +246,9 @@ class TestValidateMethod:
         (tmp_path / "other.md").write_text("# Bad\n{prompt other}\n{end_prompt}")
         result = validator.validate([given])
         assert result is False
-        assert validator.get_errors() == ["Empty prompt content for ID 'given' in file 'given.md'."]
+        assert validator.get_errors() == [
+            "Empty prompt content for ID 'given' in file 'given.md'."
+        ]
 
     def test_an_id_in_two_files_is_not_reported(self, validator, tmp_path):
         a = tmp_path / "a.md"

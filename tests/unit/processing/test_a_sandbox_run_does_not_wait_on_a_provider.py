@@ -53,7 +53,9 @@ def test_a_sandbox_retry_does_not_sleep_and_logs_the_backoff_it_skipped(sleeps, 
     assert sleeps == []
     logged = _info(caplog)
     assert len(logged) == 2
-    assert logged[0].startswith("Retry attempt 1/3 (extract): network_error - Request timed out. (")
+    assert logged[0].startswith(
+        "Retry attempt 1/3 (extract): network_error - Request timed out. ("
+    )
     assert all(line.endswith("s; skipped in sandbox)") and "(backoff " in line for line in logged)
 
 

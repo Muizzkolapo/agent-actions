@@ -106,7 +106,9 @@ class TestOnlineStrategy:
         assert strategy.supports_recovery() is True
 
     @patch("agent_actions.processing.helpers.run_dynamic_agent")
-    def test_retry_succeeds_after_failure(self, mock_run_agent, basic_prepared_task, basic_context):
+    def test_retry_succeeds_after_failure(
+        self, mock_run_agent, basic_prepared_task, basic_context
+    ):
         """Test retry service succeeds after initial failure — recovery metadata populated."""
         from agent_actions.processing.recovery.retry import RetryResult, RetryService
 
@@ -214,8 +216,11 @@ class TestBatchStrategy:
         assert result.response is None
         assert strategy.queued_count == 0
 
-    def test_flush_submits_to_provider_and_returns_result(self, basic_prepared_task, basic_context):
-        """Test flush() submits tasks to provider and returns BatchSubmissionResult with batch_id."""
+    def test_flush_submits_to_provider_and_returns_result(
+        self, basic_prepared_task, basic_context
+    ):
+        """Test flush() submits tasks to provider and returns BatchSubmissionResult with
+        batch_id."""
         provider = MagicMock()
         provider.prepare_tasks.return_value = [{"formatted": "task"}]
         provider.submit_batch.return_value = ("batch-abc-123", "pending")

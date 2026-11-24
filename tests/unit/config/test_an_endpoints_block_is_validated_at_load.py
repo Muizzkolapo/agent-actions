@@ -1,4 +1,5 @@
-"""An `endpoints:` block in agent_actions.yml is validated beside its reader, like the other blocks.
+"""An `endpoints:` block in agent_actions.yml is validated beside its reader, like the other
+blocks.
 
 `load_project_endpoints` validates the block and makes it the project's endpoint registry;
 `ConfigManager` calls it where it reads the project defaults. Every refusal names the
@@ -41,7 +42,8 @@ endpoints:
 
 VERTEX_URL = "https://aiplatform.googleapis.com/v1/projects/p/locations/global/endpoints/openapi"
 BAD_BLOCK = (
-    "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n    format: custom\n"
+    "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: none\n  "
+    "  format: custom\n"
 )
 URL_HINT = "give the base URL, for example http://gpu-box:8000/v1; agac adds /chat/completions"
 
@@ -121,7 +123,8 @@ REFUSALS = [
         "endpoints.lab-vllm: unknown key '1'",
     ),
     (
-        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, true: x }\n",
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, "
+        "true: x }\n",
         "endpoints.lab-vllm.auth: unknown key 'true'",
     ),
     (
@@ -190,7 +193,8 @@ REFUSALS = [
         "for example [gcloud, auth, print-access-token]",
     ),
     (
-        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: gcloud }\n",
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: "
+        "gcloud }\n",
         "endpoints.lab-vllm.auth.command: give the command as a non-empty list of text, "
         "for example [gcloud, auth, print-access-token]",
     ),
@@ -210,7 +214,8 @@ REFUSALS = [
         "endpoints.lab-vllm.auth.refresh_seconds: must be a whole number greater than 0",
     ),
     (
-        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1/chat/completions\n    auth: none\n",
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1/chat/completions\n    "
+        "auth: none\n",
         f"endpoints.lab-vllm.url: {URL_HINT}",
     ),
     (
@@ -300,7 +305,8 @@ REFUSALS = [
         "for example [gcloud, auth, print-access-token]",
     ),
     (
-        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: ['', ''] }\n",
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { command: "
+        "['', ''] }\n",
         "endpoints.lab-vllm.auth.command: give the command as a non-empty list of text, "
         "for example [gcloud, auth, print-access-token]",
     ),
@@ -310,11 +316,13 @@ REFUSALS = [
         "credential, for example AZURE_OPENAI_KEY",
     ),
     (
-        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, header: '' }\n",
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, "
+        "header: '' }\n",
         "endpoints.lab-vllm.auth.header: must be a header name: letters, digits and - _ .",
     ),
     (
-        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, header: 'X Api Key' }\n",
+        "endpoints:\n  lab-vllm:\n    url: http://gpu-box:8000/v1\n    auth: { env: A, "
+        "header: 'X Api Key' }\n",
         "endpoints.lab-vllm.auth.header: must be a header name: letters, digits and - _ .",
     ),
     (

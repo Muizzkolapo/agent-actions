@@ -105,7 +105,7 @@ _LLM = """
     schema: {{ summary: string }}
     context_scope:
       observe: [vote_direct.*, note_direct.*]
-"""
+"""  # noqa: E501
 
 _TOOLS = '''\
 from pathlib import Path

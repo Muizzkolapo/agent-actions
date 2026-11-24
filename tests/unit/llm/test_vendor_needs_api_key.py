@@ -126,7 +126,9 @@ class TestInspect:
         assert result.returncode == 0, result.stdout + result.stderr
 
     def test_a_workflow_on_openai_is_refused_and_told_its_own_variable(self, tmp_path):
-        result = run_agac(_project(tmp_path, "openai"), "inspect", "-a", "repair_auto", env=NO_KEYS)
+        result = run_agac(
+            _project(tmp_path, "openai"), "inspect", "-a", "repair_auto", env=NO_KEYS
+        )
         output = result.stdout + result.stderr
 
         assert result.returncode != 0

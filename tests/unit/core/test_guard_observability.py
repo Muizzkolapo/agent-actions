@@ -192,7 +192,8 @@ class TestAllFilteredWarning:
             for _ in range(n_success)
         ]
         results.extend(
-            ProcessingResult(status=ProcessingStatus.FILTERED, data=None) for _ in range(n_filtered)
+            ProcessingResult(status=ProcessingStatus.FILTERED, data=None)
+            for _ in range(n_filtered)
         )
         return results
 
@@ -247,7 +248,9 @@ class TestAllFilteredWarning:
         ]
         agent_config = {}
         with caplog.at_level(logging.WARNING, logger="agent_actions.processing.result_collector"):
-            ResultCollector.collect_results(results, agent_config, "no_guard", is_first_stage=False)
+            ResultCollector.collect_results(
+                results, agent_config, "no_guard", is_first_stage=False
+            )
 
         assert not any("records filtered by guard" in record.message for record in caplog.records)
 
@@ -269,7 +272,9 @@ class TestGuardResultWarnMode:
     @pytest.mark.parametrize(
         ("filter_kwargs", "passthrough_on_error", "behavior"),
         [
-            pytest.param({"success": True, "matched": False}, True, "warn", id="not-matched-warns"),
+            pytest.param(
+                {"success": True, "matched": False}, True, "warn", id="not-matched-warns"
+            ),
             # Passed: no warn needed.
             pytest.param({"success": True, "matched": True}, True, None, id="matched-passes"),
             pytest.param(

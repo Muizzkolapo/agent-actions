@@ -207,7 +207,9 @@ class TestFileModeObserve:
 
     def _make_records(self, ns_name, *contents):
         """Build file-mode records with namespaced content."""
-        return [{"content": {ns_name: c}, "source_guid": f"sg_{i}"} for i, c in enumerate(contents)]
+        return [
+            {"content": {ns_name: c}, "source_guid": f"sg_{i}"} for i, c in enumerate(contents)
+        ]
 
     def test_file_mode_wildcard_single_ns_includes_all(self):
         """observe: ['dep.*'] extracts all fields from namespace."""

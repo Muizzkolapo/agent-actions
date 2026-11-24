@@ -112,7 +112,8 @@ class TestMultiBatchCorrelationConsistency:
             batch_1_2_id = original_results[source_guid]
             batch_3_id = batch_3_results[source_guid]
             assert batch_1_2_id == batch_3_id, (
-                f"Correlation ID mismatch for {source_guid}: Batch 1&2: {batch_1_2_id}, Batch 3: {batch_3_id}"
+                f"Correlation ID mismatch for {source_guid}: Batch 1&2: {batch_1_2_id}, "
+                f"Batch 3: {batch_3_id}"
             )
         print("✅ All batches produced consistent correlation IDs:")
         for record in source_records:
@@ -128,22 +129,27 @@ class TestMultiBatchCorrelationConsistency:
         file_context = "batch_file.json"
         batch_1_results = {}
         for position in positions:
-            correlation_id = VersionIdGenerator.get_or_create_position_based_version_correlation_id(
-                position, version_base_name, shared_session_id, file_context
+            correlation_id = (
+                VersionIdGenerator.get_or_create_position_based_version_correlation_id(
+                    position, version_base_name, shared_session_id, file_context
+                )
             )
             batch_1_results[position] = correlation_id
         VersionIdGenerator.clear_version_correlation_registry()
         batch_2_results = {}
         for position in positions:
-            correlation_id = VersionIdGenerator.get_or_create_position_based_version_correlation_id(
-                position, version_base_name, shared_session_id, file_context
+            correlation_id = (
+                VersionIdGenerator.get_or_create_position_based_version_correlation_id(
+                    position, version_base_name, shared_session_id, file_context
+                )
             )
             batch_2_results[position] = correlation_id
         for position in positions:
             batch_1_id = batch_1_results[position]
             batch_2_id = batch_2_results[position]
             assert batch_1_id == batch_2_id, (
-                f"Position-based correlation ID mismatch for position {position}: Batch 1: {batch_1_id}, Batch 2: {batch_2_id}"
+                f"Position-based correlation ID mismatch for position {position}: Batch "
+                f"1: {batch_1_id}, Batch 2: {batch_2_id}"
             )
 
     def test_concurrent_multi_batch_scenario(self):
@@ -181,7 +187,8 @@ class TestMultiBatchCorrelationConsistency:
                 reference_id = reference_results[source_guid]
                 batch_id_result = batch_results[source_guid]
                 assert reference_id == batch_id_result, (
-                    f"Correlation ID mismatch between batch 0 and batch {batch_id} for {source_guid}: {reference_id} vs {batch_id_result}"
+                    f"Correlation ID mismatch between batch 0 and batch {batch_id} for "
+                    f"{source_guid}: {reference_id} vs {batch_id_result}"
                 )
         print(f"✅ All {num_batches} concurrent batches produced identical correlation IDs")
 
@@ -219,7 +226,8 @@ class TestMultiBatchCorrelationConsistency:
         assert "version_correlation_id" in result2
         assert result1["version_correlation_id"] == result2["version_correlation_id"]
         print(
-            f"✅ add_version_correlation_id produces deterministic results: {result1['version_correlation_id']}"
+            "✅ add_version_correlation_id produces deterministic results: "
+            f"{result1['version_correlation_id']}"
         )
 
     def test_missing_session_id_raises_error(self):

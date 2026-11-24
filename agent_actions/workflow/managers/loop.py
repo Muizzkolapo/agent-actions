@@ -143,7 +143,8 @@ class VersionOutputCorrelator:
     def _versions_of_file(
         self, relative_path: str, version_agents: list[str], lost: list[str]
     ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
-        """Each version's rows of one file where it holds any, and the versions whose read found it."""
+        """Each version's rows of one file where it holds any, and the versions whose read found
+        it."""
         outputs: dict[str, list[dict[str, Any]]] = {}
         found: list[str] = []
         for version_agent in version_agents:

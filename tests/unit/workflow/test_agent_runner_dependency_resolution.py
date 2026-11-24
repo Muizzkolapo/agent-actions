@@ -116,7 +116,9 @@ class TestResolveDependencyDirectories:
         # Cleanup
         shutil.rmtree(temp_dir)
 
-    def test_missing_first_dependency_directory_raises_error(self, agent_runner, temp_agent_folder):
+    def test_missing_first_dependency_directory_raises_error(
+        self, agent_runner, temp_agent_folder
+    ):
         """Test that a missing first dependency's directory raises DependencyError."""
         # action_A is listed first but doesn't exist, action_B exists
         (temp_agent_folder / "target" / "action_B").mkdir(parents=True, exist_ok=True)
@@ -302,5 +304,6 @@ class TestStrategySelectionByDependencies:
         for call in mock_process_and_generate.call_args_list:
             params = call[0][0]
             assert params.strategy == runner.strategies["intermediate"], (
-                f"Loop iteration {params.action_name} with dependencies should use StandardStrategy"
+                f"Loop iteration {params.action_name} with dependencies should use "
+                "StandardStrategy"
             )

@@ -42,7 +42,9 @@ def scan_vendors(project_root: Path) -> dict[str, Any]:
                 continue
 
             # Check for VendorType enum
-            is_enum = any((isinstance(b, ast.Name) and b.id in ("Enum", "str")) for b in node.bases)
+            is_enum = any(
+                (isinstance(b, ast.Name) and b.id in ("Enum", "str")) for b in node.bases
+            )
             if node.name == "VendorType" and is_enum:
                 for item in node.body:
                     if isinstance(item, ast.Assign):

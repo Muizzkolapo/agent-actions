@@ -24,7 +24,9 @@ def _values(schema: dict, field: str) -> list:
     for seed in range(50):
         for attempt in (1, 2, 3):
             FakeDataGenerator.set_context(seed=seed)
-            values.append(FakeDataGenerator.generate_from_schema(schema, attempt, field_name=field))
+            values.append(
+                FakeDataGenerator.generate_from_schema(schema, attempt, field_name=field)
+            )
     return values
 
 
@@ -157,7 +159,9 @@ def test_a_value_never_lands_on_an_open_edge():
 
 @pytest.mark.parametrize("step", [10, 10.0])
 def test_a_bounded_integer_keeps_its_multiple(step):
-    values = _values({"type": "integer", "minimum": 0, "maximum": 100, "multipleOf": step}, "count")
+    values = _values(
+        {"type": "integer", "minimum": 0, "maximum": 100, "multipleOf": step}, "count"
+    )
 
     assert all(v % 10 == 0 and 0 <= v <= 100 for v in values), sorted(set(values))
     assert len(set(values)) > 3

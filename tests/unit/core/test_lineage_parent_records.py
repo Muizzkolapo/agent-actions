@@ -74,7 +74,8 @@ class TestParentRecordsLineagePropagation:
         )
 
     def test_parent_records_preferred_over_source_data(self):
-        """When both are present, parent_records wins — even if source_data has the same source_guid."""
+        """When both are present, parent_records wins — even if source_data has the same
+        source_guid."""
         parent_node_id = "stage_one_xyz789"
         parent = {
             "source_guid": "guid_shared",
@@ -151,7 +152,8 @@ class TestParentRecordsLineagePropagation:
         assert enriched_item["lineage"] == [enriched_item["node_id"]]
 
     def test_per_item_parent_lookup_resolves_correct_parent_for_each_item(self):
-        """Per-item lookups (source_guid is None at result level) must pick the right parent for each output."""
+        """Per-item lookups (source_guid is None at result level) must pick the right parent for
+        each output."""
         parents = [
             {"source_guid": f"guid_{i}", "node_id": f"n_{i}", "lineage": [f"n_{i}"]}
             for i in range(5)
@@ -261,7 +263,9 @@ class TestGetParentItemDirect:
     def test_current_item_skipped_when_source_guid_mismatches(self):
         """Misconfigured strategy: current_item.source_guid != requested → fall through."""
         current = {"source_guid": "wrong_guid", "node_id": "stale"}
-        parents = [{"source_guid": "g", "node_id": "correct_parent", "lineage": ["correct_parent"]}]
+        parents = [
+            {"source_guid": "g", "node_id": "correct_parent", "lineage": ["correct_parent"]}
+        ]
         ctx = self._ctx(current_item=current, parent_records=parents)
         assert LineageEnricher()._get_parent_item("g", ctx)["node_id"] == "correct_parent"
 
@@ -280,7 +284,8 @@ class TestGetParentItemDirect:
         assert LineageEnricher()._get_parent_item("g", ctx, parent_index=index) is target
 
     def test_parent_index_miss_falls_through_to_source_data(self):
-        """Miss in parent_records falls through to source_data so FILE-mode lookups still resolve."""
+        """Miss in parent_records falls through to source_data so FILE-mode lookups still
+        resolve."""
         parents = [{"source_guid": "other", "node_id": "o"}]
         index = {p["source_guid"]: p for p in parents}
         source_match = {"source_guid": "g", "node_id": "from_source"}

@@ -17,7 +17,9 @@ def _project(tmp_path: Path, schema_lines: str) -> tuple[Path, Path]:
     (workflow / "agent_config").mkdir(parents=True)
     (root / "agent_actions.yml").write_text("tool_path: [tools]\nschema_path: schema\n")
     (root / "tools").mkdir()
-    (root / "tools" / "pick_schema.py").write_text("def pick_schema(record):\n    return 'short'\n")
+    (root / "tools" / "pick_schema.py").write_text(
+        "def pick_schema(record):\n    return 'short'\n"
+    )
     (root / "schema" / "wf").mkdir(parents=True)
     (root / "schema" / "wf" / "short.yml").write_text("name: short\nfields: []\n")
     config = workflow / "agent_config" / "wf.yml"

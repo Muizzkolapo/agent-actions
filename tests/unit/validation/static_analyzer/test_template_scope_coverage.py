@@ -26,7 +26,8 @@ class TestTemplateScopeCoverage:
                 {
                     "name": "write_question",
                     "context_scope": {"observe": ["source.*"]},
-                    "prompt": "Based on {{ classify.category }}, write a question about {{ source.text }}",
+                    "prompt": "Based on {{ classify.category }}, write a question about "
+                    "{{ source.text }}",
                 },
             ]
         }
@@ -62,7 +63,9 @@ class TestTemplateScopeCoverage:
 
         result = analyze_workflow(workflow_config)
 
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
+        coverage_errors = [
+            e for e in result.errors if "template references namespace" in e.message
+        ]
         assert len(coverage_errors) == 0
 
     def test_framework_namespaces_not_flagged(self):
@@ -84,7 +87,9 @@ class TestTemplateScopeCoverage:
 
         result = analyze_workflow(workflow_config)
 
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
+        coverage_errors = [
+            e for e in result.errors if "template references namespace" in e.message
+        ]
         assert len(coverage_errors) == 0
 
     def test_source_not_flagged(self):
@@ -101,7 +106,9 @@ class TestTemplateScopeCoverage:
 
         result = analyze_workflow(workflow_config)
 
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
+        coverage_errors = [
+            e for e in result.errors if "template references namespace" in e.message
+        ]
         assert len(coverage_errors) == 0
 
     def test_passthrough_namespace_not_flagged(self):
@@ -127,7 +134,9 @@ class TestTemplateScopeCoverage:
 
         result = analyze_workflow(workflow_config)
 
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
+        coverage_errors = [
+            e for e in result.errors if "template references namespace" in e.message
+        ]
         assert len(coverage_errors) == 0
 
     def test_no_prompt_skipped(self):
@@ -144,7 +153,9 @@ class TestTemplateScopeCoverage:
 
         result = analyze_workflow(workflow_config)
 
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
+        coverage_errors = [
+            e for e in result.errors if "template references namespace" in e.message
+        ]
         assert len(coverage_errors) == 0
 
     def test_no_context_scope_skipped(self):
@@ -162,7 +173,9 @@ class TestTemplateScopeCoverage:
         result = analyze_workflow(workflow_config)
 
         # Should have context_scope_required error, not a coverage error
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
+        coverage_errors = [
+            e for e in result.errors if "template references namespace" in e.message
+        ]
         assert len(coverage_errors) == 0
 
         required_errors = [e for e in result.errors if "has no context_scope" in e.message]
@@ -240,7 +253,9 @@ class TestTemplateScopeCoverage:
 
         result = analyze_workflow(workflow_config)
 
-        coverage_errors = [e for e in result.errors if "template references namespace" in e.message]
+        coverage_errors = [
+            e for e in result.errors if "template references namespace" in e.message
+        ]
         flagged = {e.referenced_agent for e in coverage_errors}
         for name in local_names:
             assert name not in flagged

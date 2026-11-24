@@ -486,7 +486,9 @@ class AgentWorkflow:
             return
         backend.save_metadata("execution_order", json.dumps(self.execution_order))
         orchestrator = self.services.core.action_level_orchestrator
-        backend.save_metadata("dependency_graph", json.dumps(orchestrator.upstream_actions(levels)))
+        backend.save_metadata(
+            "dependency_graph", json.dumps(orchestrator.upstream_actions(levels))
+        )
 
     async def async_run(self, concurrency_limit: int = 5):
         """Execute workflow level-by-level with parallelism within each level."""

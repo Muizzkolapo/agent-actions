@@ -171,7 +171,8 @@ class TestADeclaredEndpoint:
             "Action 'classify': endpoint 'lab-vllm' reads its url from LAB_VLLM_URL, "
             "which is not set",
             "Action 'classify': endpoint 'lab-vllm' reads LAB_TOKEN, which is not set",
-            "Action 'review': endpoint 'vertex' auth command 'agac-no-such-command' is not on PATH",
+            "Action 'review': endpoint 'vertex' auth command 'agac-no-such-command' is "
+            "not on PATH",
         ]
 
     def test_a_set_variable_with_a_bad_value_is_refused_in_both_modes(self, monkeypatch):

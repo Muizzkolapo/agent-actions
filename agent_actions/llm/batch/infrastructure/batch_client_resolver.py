@@ -6,8 +6,6 @@ from typing import Any
 
 from pydantic import SecretStr
 
-logger = logging.getLogger(__name__)
-
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.config.vendor import NON_LLM_VENDORS
 from agent_actions.llm.providers.batch_base import BaseBatchClient
@@ -16,6 +14,8 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import CacheHitEvent, CacheMissEvent
 from agent_actions.utils.constants import API_KEY_KEY
+
+logger = logging.getLogger(__name__)
 
 
 def _client_settings(agent_config: dict[str, Any] | None) -> dict[str, Any]:
@@ -129,7 +129,8 @@ class BatchClientResolver:
                 f"Provider SDK not installed for '{client_type}'",
                 context={
                     "client_type": client_type,
-                    "hint": f"Install the provider package: pip install agent-actions[{client_type}]",
+                    "hint": "Install the provider package: pip install "
+                    f"agent-actions[{client_type}]",
                 },
                 cause=e,
             ) from e
@@ -219,7 +220,8 @@ class BatchClientResolver:
                     f"Provider SDK not installed for '{client_type}'",
                     context={
                         "client_type": client_type,
-                        "hint": f"Install the provider package: pip install agent-actions[{client_type}]",
+                        "hint": "Install the provider package: pip install "
+                        f"agent-actions[{client_type}]",
                     },
                     cause=e,
                 ) from e
@@ -257,7 +259,9 @@ class BatchClientResolver:
         )
 
     @staticmethod
-    def _resolve_api_key_config(vendor: str, agent_config: dict[str, Any] | None) -> dict[str, Any]:
+    def _resolve_api_key_config(
+        vendor: str, agent_config: dict[str, Any] | None
+    ) -> dict[str, Any]:
         """Build a config dict with the API key for creating a batch client.
 
         Resolution order:
@@ -291,7 +295,8 @@ class BatchClientResolver:
                     f"Provider SDK not installed for vendor '{vendor}'",
                     context={
                         "vendor": vendor,
-                        "hint": f"Install the provider package: pip install agent-actions[{vendor}]",
+                        "hint": "Install the provider package: pip install "
+                        f"agent-actions[{vendor}]",
                     },
                     cause=e,
                 ) from e

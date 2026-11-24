@@ -47,7 +47,9 @@ def _batch_line(vendor: str, config: dict[str, Any]) -> dict[str, Any]:
     return task  # type: ignore[no-any-return]
 
 
-def _online_chat_request(vendor: str, config: dict[str, Any], schema: Any = None) -> dict[str, Any]:
+def _online_chat_request(
+    vendor: str, config: dict[str, Any], schema: Any = None
+) -> dict[str, Any]:
     path, client = OPENAI_SHAPED[vendor]
     with patch(path) as sdk:
         choice = MagicMock(finish_reason="stop")
@@ -137,7 +139,9 @@ def test_gemini_asks_for_json_in_both_modes():
         GeminiClient.call_json("k", config, "p", {"t": "x"}, None)
 
     online_mime = generate.call_args.kwargs["config"].response_mime_type
-    batch_mime = _batch_line("gemini", config)["request"]["generation_config"]["response_mime_type"]
+    batch_mime = _batch_line("gemini", config)["request"]["generation_config"][
+        "response_mime_type"
+    ]
     assert batch_mime == online_mime == "application/json"
 
 

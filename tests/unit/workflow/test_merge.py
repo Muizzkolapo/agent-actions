@@ -119,7 +119,8 @@ class TestParallelBranchLineageSources:
     """Tests for lineage_sources population during parallel branch merges."""
 
     def test_two_branch_merge_populates_lineage_sources(self):
-        """Merging records from two parallel branches sets lineage_sources with both leaf node_ids."""
+        """Merging records from two parallel branches sets lineage_sources with both leaf
+        node_ids."""
         existing = {
             "source_guid": "book-001",
             "node_id": "generate_concept_explanation_def",
@@ -201,7 +202,8 @@ class TestParallelBranchLineageSources:
         assert "lineage_sources" not in existing
 
     def test_pre_existing_lineage_sources_not_inherited(self):
-        """When new_record carries lineage_sources from a prior fan-in, it is ignored — only current-level branches tracked."""
+        """When new_record carries lineage_sources from a prior fan-in, it is ignored — only
+        current-level branches tracked."""
         existing = {
             "source_guid": "book-001",
             "node_id": "action_g_456",

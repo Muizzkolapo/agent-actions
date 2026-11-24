@@ -115,7 +115,10 @@ class TestCompressedTracesAcrossInstancesAndClears:
         backend.write_prompt_trace(ACTION, "tid-2", _prompt(2), llm_context=_context(2))
 
         traces = backend.get_prompt_traces(ACTION)
-        assert [t["compiled_prompt"] for t in traces] == ["a different prompt entirely", _prompt(2)]
+        assert [t["compiled_prompt"] for t in traces] == [
+            "a different prompt entirely",
+            _prompt(2),
+        ]
         assert traces[1]["llm_context"] == _context(2)
 
     def test_a_second_writer_on_the_same_store_reads_the_firsts_traces(self, backend, tmp_path):

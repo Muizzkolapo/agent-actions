@@ -1,4 +1,5 @@
-"""A run that stops after a judge batch is registered and before its state is saved loses no records.
+"""A run that stops after a judge batch is registered and before its state is saved loses no
+records.
 
 The registration replaces the file's live repair round, so the next run finds the
 judge batch with the state of the round before. It must not write the file from

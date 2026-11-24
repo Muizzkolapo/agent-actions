@@ -163,7 +163,8 @@ def _discover_udfs_from_path(
         # typo'd path is visible at default log level instead of silently
         # loading zero UDFs and failing later with "function not found".
         logger.warning(
-            "Skipping UDF discovery: configured tool path does not exist or is not a directory: %s",
+            "Skipping UDF discovery: configured tool path does not exist or is not a "
+            "directory: %s",
             abs_path,
         )
         return 0
@@ -178,7 +179,9 @@ def _discover_udfs_from_path(
             display_path = f"./{abs_path.relative_to(project_root)}"
         except ValueError:
             pass
-    console.print(f"[cyan]\U0001f50d Discovering tools in {display_path}...[/cyan]", soft_wrap=True)
+    console.print(
+        f"[cyan]\U0001f50d Discovering tools in {display_path}...[/cyan]", soft_wrap=True
+    )
     skipped: list[UDFLoadError] = []
     try:
         registry = discover_udfs(abs_path, skipped=skipped)

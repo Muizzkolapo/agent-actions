@@ -67,7 +67,9 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
         from agent_actions.storage import get_storage_backend
 
-        backend = get_storage_backend(workflow_path=str(io_dir.parent), workflow_name=workflow_name)
+        backend = get_storage_backend(
+            workflow_path=str(io_dir.parent), workflow_name=workflow_name
+        )
         backend.initialize()
         try:
             for action in statuses:
@@ -278,7 +280,8 @@ class RunCommand:
         click.echo(
             f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
             f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
-            f"to check them and continue: agac run -w {self.args.agent}{sandbox.run_flags()} --wait"
+            "to check them and continue: "
+            f"agac run -w {self.args.agent}{sandbox.run_flags()} --wait"
         )
 
     def _run_holding_the_lock(
@@ -501,7 +504,8 @@ class RunCommand:
     "--verify-keys",
     is_flag=True,
     default=False,
-    help="Verify API keys by probing vendor endpoints, and declared endpoints with one structured-output request, before execution",
+    help="Verify API keys by probing vendor endpoints, and declared endpoints with one "
+    "structured-output request, before execution",
 )
 @click.option(
     "--wait",

@@ -41,7 +41,8 @@ class TestPassthroughOnErrorLogging:
             if r.levelname == "DEBUG" and "passthrough_on_error" in r.message
         ]
         assert len(passthrough_debugs) == 1, (
-            "Must log exactly one DEBUG mentioning passthrough_on_error when exception is swallowed"
+            "Must log exactly one DEBUG mentioning passthrough_on_error when exception "
+            "is swallowed"
         )
 
     def test_passthrough_on_error_false_no_passthrough_warning(self, caplog):

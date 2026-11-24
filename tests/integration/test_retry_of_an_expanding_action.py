@@ -277,7 +277,9 @@ class TestARecordTheLimitDropped:
         built again: the combine stays the size it was."""
         selected = _record_ids(diamond, ACTION)[0]
         replaced = _split_rows_of(diamond, selected)
-        before = {r["source_guid"] for r in _rows(diamond, "combine") if not _built_on(r, replaced)}
+        before = {
+            r["source_guid"] for r in _rows(diamond, "combine") if not _built_on(r, replaced)
+        }
         assert before
         _fail(diamond, selected, ACTION)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")

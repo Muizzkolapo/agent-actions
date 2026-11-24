@@ -36,7 +36,9 @@ def _answer(custom_id: str, usage: dict | None) -> BatchResult:
 
 
 def _online_call(prompt: int, completion: int) -> None:
-    response = SimpleNamespace(usage=SimpleNamespace(input_tokens=prompt, output_tokens=completion))
+    response = SimpleNamespace(
+        usage=SimpleNamespace(input_tokens=prompt, output_tokens=completion)
+    )
     ResponseBuilder.record_usage_and_event(response, "anthropic", "m", 1.0, "r")
 
 
@@ -78,7 +80,8 @@ def _online_tokens(*usages: tuple[int, int]) -> dict | None:
 
 
 def _check(collect, tmp_path=None, status: str = "completed"):
-    """A batch check that reads its batches as *collect* does; with *tmp_path*, into a run history."""
+    """A batch check that reads its batches as *collect* does; with *tmp_path*, into a run
+    history."""
 
     def handle(*_args, **_kwargs):
         collect()

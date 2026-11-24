@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from types import SimpleNamespace as NS
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -90,8 +90,10 @@ class _Vendor:
 
 def _openai_compatible(name: str, client_type, finished: str) -> _Vendor:
     vendor = _Vendor(name, client_type(api_key="test"), finished, {})
-    vendor.client.client = NS(
-        batches=NS(retrieve=lambda batch_id: NS(id=batch_id, status=vendor.reports[batch_id]))
+    vendor.client.client = SimpleNamespace(
+        batches=SimpleNamespace(
+            retrieve=lambda batch_id: SimpleNamespace(id=batch_id, status=vendor.reports[batch_id])
+        )
     )
     return vendor
 
@@ -106,10 +108,10 @@ def _groq() -> _Vendor:
 
 def _anthropic() -> _Vendor:
     vendor = _Vendor("anthropic", AnthropicBatchClient(api_key="test"), "ended", {})
-    vendor.client.client = NS(
-        messages=NS(
-            batches=NS(
-                retrieve=lambda batch_id: NS(
+    vendor.client.client = SimpleNamespace(
+        messages=SimpleNamespace(
+            batches=SimpleNamespace(
+                retrieve=lambda batch_id: SimpleNamespace(
                     id=batch_id, processing_status=vendor.reports[batch_id]
                 )
             )
@@ -121,12 +123,16 @@ def _anthropic() -> _Vendor:
 def _gemini() -> _Vendor:
     vendor = _Vendor("gemini", GeminiBatchClient(api_key="test"), "JOB_STATE_SUCCEEDED", {})
 
-    def get(name: str) -> NS:
+    def get(name: str) -> SimpleNamespace:
         reported = vendor.reports[name]
-        state = JobState[reported] if reported in JobState.__members__ else NS(name=reported)
-        return NS(name=name, state=state)
+        state = (
+            JobState[reported]
+            if reported in JobState.__members__
+            else SimpleNamespace(name=reported)
+        )
+        return SimpleNamespace(name=name, state=state)
 
-    vendor.client.client = NS(batches=NS(get=get))
+    vendor.client.client = SimpleNamespace(batches=SimpleNamespace(get=get))
     return vendor
 
 

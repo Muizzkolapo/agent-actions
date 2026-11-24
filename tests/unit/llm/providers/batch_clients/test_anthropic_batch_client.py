@@ -252,6 +252,8 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
                 endpoint="messages.batches.results",
                 context={"message": "Batch not found"},
             )
-            monkeypatch.setattr("agent_actions.llm.providers.batch_base.time.sleep", lambda _: None)
+            monkeypatch.setattr(
+                "agent_actions.llm.providers.batch_base.time.sleep", lambda _: None
+            )
             with pytest.raises(VendorAPIError):
                 provider.retrieve_results("nonexistent-batch-id", str(tmp_path))

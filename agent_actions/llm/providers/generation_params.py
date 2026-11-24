@@ -72,7 +72,8 @@ class VendorParamSpec:
         return problems
 
     def fit(self, request: dict[str, Any]) -> dict[str, Any]:
-        """*request* with each key the installed SDK's request does not take moved to ``extra_body``.
+        """*request* with each key the installed SDK's request does not take moved to
+        ``extra_body``.
 
         A setting agac builds, such as ``temperature`` on anthropic 1.x (whose ``create``
         dropped it), still reaches the API, which accepts or refuses it, rather than the
@@ -180,6 +181,8 @@ def connect_limited_timeout(seconds: float, sdk: ModuleType) -> Any:
     return timeout_class(seconds, connect=LLMDefaults.CONNECT_TIMEOUT_SECONDS)
 
 
-def connect_limited_timeout_kwargs(agent_config: dict[str, Any], sdk: ModuleType) -> dict[str, Any]:
+def connect_limited_timeout_kwargs(
+    agent_config: dict[str, Any], sdk: ModuleType
+) -> dict[str, Any]:
     """The action's request timeout as the ``timeout`` kwarg of *sdk*'s request."""
     return {"timeout": connect_limited_timeout(request_timeout_seconds(agent_config), sdk)}

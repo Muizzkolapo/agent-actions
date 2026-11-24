@@ -70,7 +70,9 @@ def _preflight(head_raises: Exception) -> int:
     "error",
     [
         pytest.param(
-            RecordContextError("[RECORD NAMESPACE] 'extract': declared fields ['body'] not found."),
+            RecordContextError(
+                "[RECORD NAMESPACE] 'extract': declared fields ['body'] not found."
+            ),
             id="an_observed_field_is_missing",
         ),
         pytest.param(
@@ -96,7 +98,9 @@ def test_a_record_that_fails_alone_does_not_end_the_preflight(error):
         ),
         pytest.param(
             _raised_by(
-                _render("{% macro f() %}{{ f() }}{% endmacro %}{{ f() }}", {"source": {"p": [[1]]}})
+                _render(
+                    "{% macro f() %}{{ f() }}{% endmacro %}{{ f() }}", {"source": {"p": [[1]]}}
+                )
             ),
             id="a_render_error_no_variable_explains",
         ),

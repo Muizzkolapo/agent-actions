@@ -196,7 +196,10 @@ def test_a_reference_the_action_does_not_observe_fails_as_online_fails_it():
     provider, batch = _batch(config, DISTINCT)
 
     assert batch == online
-    assert batch["r1"] == (False, "context reference 'extract.notes' is not present in llm_context")
+    assert batch["r1"] == (
+        False,
+        "context reference 'extract.notes' is not present in llm_context",
+    )
     assert provider.batches == [], "a rule that cannot resolve its context sends no judge request"
 
 

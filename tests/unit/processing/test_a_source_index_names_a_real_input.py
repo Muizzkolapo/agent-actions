@@ -69,7 +69,8 @@ class TestAContainerOfPositions:
         reads as one contributor that is itself a list. Nothing named that shape, though
         the rule already refuses it.
 
-        These add breadth rather than closing a hole: ``test_a_value_that_is_only_index_like_is_refused``
+        These add breadth rather than closing a hole:
+        ``test_a_value_that_is_only_index_like_is_refused``
         above already fails if the rule is rewritten as a denylist of the refused types,
         which is how a container would get through to ``_resolve_input_record`` and be
         reported as an index out of a range it was never in.
@@ -102,7 +103,9 @@ class TestAnIntegralValueThatIsNotABuiltinInt:
         """Stands in for numpy's integer: an int subclass, still an int."""
 
     def test_an_int_subclass_is_accepted(self):
-        assert FileUDFResult(outputs=_outputs([self.Position(0)])).outputs[0]["source_index"] == [0]
+        assert FileUDFResult(outputs=_outputs([self.Position(0)])).outputs[0]["source_index"] == [
+            0
+        ]
 
     def test_a_value_that_is_only_index_like_is_refused(self):
         class Integral:
@@ -124,7 +127,9 @@ class TestWhereATooBigIndexIsAndIsNotTolerated:
         return [{"source_guid": f"G{i}", "content": {"prev": {"id": i}}} for i in range(n)]
 
     def test_a_contributor_past_the_end_is_dropped_and_the_row_survives(self):
-        rows, _ = reconcile_outputs(FileUDFResult(outputs=_outputs([0, 99])), "a2", self._records())
+        rows, _ = reconcile_outputs(
+            FileUDFResult(outputs=_outputs([0, 99])), "a2", self._records()
+        )
 
         assert [r["source_guid"] for r in rows] == ["G0"]
 

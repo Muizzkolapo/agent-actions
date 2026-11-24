@@ -248,7 +248,9 @@ class BatchResultReconciler:
         placeholders = [
             str(getattr(batch_result, "custom_id", ""))
             for batch_result in batch_results or []
-            if BatchResultReconciler.is_provider_placeholder(getattr(batch_result, "custom_id", ""))
+            if BatchResultReconciler.is_provider_placeholder(
+                getattr(batch_result, "custom_id", "")
+            )
         ]
         if placeholders:
             logger.warning(

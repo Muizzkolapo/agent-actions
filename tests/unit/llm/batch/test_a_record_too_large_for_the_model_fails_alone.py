@@ -1,4 +1,5 @@
-"""A record whose prompt is too large for the model fails alone in batch, as online fails its call."""
+"""A record whose prompt is too large for the model fails alone in batch, as online fails its
+call."""
 
 from __future__ import annotations
 

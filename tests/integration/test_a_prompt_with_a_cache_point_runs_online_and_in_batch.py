@@ -1,4 +1,5 @@
-"""A workflow whose prompts hold `{% cache_point %}` loads, runs and stores the answers of the same workflow without the tag."""
+"""A workflow whose prompts hold `{% cache_point %}` loads, runs and stores the answers of the same
+workflow without the tag."""
 
 from __future__ import annotations
 

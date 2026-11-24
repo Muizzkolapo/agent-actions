@@ -37,7 +37,9 @@ def test_a_round_in_a_later_run_keeps_the_action_base_url_and_workers(vendor):
     config = _agent(vendor, base_url=_ACTION_HOST, batch_max_workers=6)
     with patch(_SDK) as sdk:
         first = BatchClientResolver().get_for_config(config)
-        later = BatchClientResolver().get_for_batch_id("b1", _registry(vendor), agent_config=config)
+        later = BatchClientResolver().get_for_batch_id(
+            "b1", _registry(vendor), agent_config=config
+        )
 
     assert [call.kwargs["host"] for call in sdk.call_args_list] == [_ACTION_HOST, _ACTION_HOST]
     assert (first._get_max_workers(), later._get_max_workers()) == (6, 6)

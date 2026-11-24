@@ -45,7 +45,11 @@ def test_each_version_is_returned_with_its_group_s_base_name():
         "foo_2": {"kind": "llm"},
     }
 
-    assert sandbox.point_at_mock(configs) == {"score_1": "score", "score_2": "score", "foo_2": None}
+    assert sandbox.point_at_mock(configs) == {
+        "score_1": "score",
+        "score_2": "score",
+        "foo_2": None,
+    }
 
 
 def test_tool_and_other_actions_are_unchanged():

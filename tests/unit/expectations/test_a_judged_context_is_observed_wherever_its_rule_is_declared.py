@@ -172,7 +172,9 @@ class TestEveryJudgedRuleOfASuiteIsRead:
 
     def test_a_judged_rule_on_a_field(self, load):
         field_rule = {k: v for k, v in RULE.items() if k != "field"}
-        on_a_field = {"fields": [{"id": "summary", "type": "string", "expectations": [field_rule]}]}
+        on_a_field = {
+            "fields": [{"id": "summary", "type": "string", "expectations": [field_rule]}]
+        }
 
         inspector = load({"suite": "quality", "repair": "none"}, suite=on_a_field)
 
@@ -237,7 +239,9 @@ class TestAScopeFromTheDefaultsIsNotShared:
         assert inspector.action_configs["src"]["context_scope"] == {
             "observe": ["source.page_content"]
         }
-        assert inspector.execution_order.index("src") < inspector.execution_order.index("summarize")
+        assert inspector.execution_order.index("src") < inspector.execution_order.index(
+            "summarize"
+        )
 
 
 NOT_NULL = {"id": "present", "type": "not_null", "field": "summary"}

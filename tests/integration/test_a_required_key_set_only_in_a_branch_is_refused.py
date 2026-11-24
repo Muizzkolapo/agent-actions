@@ -148,7 +148,9 @@ def test_a_key_set_only_in_a_branch_is_refused_in_every_spelling(tmp_path, mode,
     ],
     ids=["ior", "update", "setdefault", "optional-key"],
 )
-def test_a_key_set_on_every_path_or_not_required_runs(tmp_path, initialiser, after, items_required):
+def test_a_key_set_on_every_path_or_not_required_runs(
+    tmp_path, initialiser, after, items_required
+):
     project = _project(tmp_path, "online", initialiser, after=after, items_required=items_required)
 
     result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")

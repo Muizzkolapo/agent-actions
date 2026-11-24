@@ -55,7 +55,9 @@ def printed_fields(template: str) -> tuple[tuple[str, ...], ...]:
     followed; a name set to anything else is a local value, not a field.
     """
     try:
-        ast = Environment(extensions=PROMPT_EXTENSIONS).parse(escape_jinja_in_inline_code(template))  # nosec B701  # prompt text, not HTML
+        # Prompt text, not HTML, so nothing to escape.
+        environment = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701
+        ast = environment.parse(escape_jinja_in_inline_code(template))
     except TemplateSyntaxError:
         return ()
     aliases: dict[str, str | None] = {}

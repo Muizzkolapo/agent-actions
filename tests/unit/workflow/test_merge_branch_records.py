@@ -149,7 +149,9 @@ class TestMergeBranchRecordsVersionPattern:
             },
         }
 
-        result = merge_branch_records({"voter_1": voter_1, "voter_2": voter_2}, base_record=voter_1)
+        result = merge_branch_records(
+            {"voter_1": voter_1, "voter_2": voter_2}, base_record=voter_1
+        )
         content = result["content"]
 
         assert "source" not in content["voter_1"]

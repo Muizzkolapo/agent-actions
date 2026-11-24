@@ -143,7 +143,13 @@ def _open(kind: str, tmp_path: Path, monkeypatch):
     [
         (
             "redshift",
-            {"host": "rs.example", "port": 5439, "database": "dev", "user": "loader", "iam": False},
+            {
+                "host": "rs.example",
+                "port": 5439,
+                "database": "dev",
+                "user": "loader",
+                "iam": False,
+            },
         ),
         (
             "snowflake",
@@ -255,7 +261,9 @@ def test_a_table_the_database_will_not_show_is_refused_not_taken_as_absent(
     monkeypatch.setattr(_Cursor, "probe_error", "permission denied for table labels")
 
     with _open("redshift", tmp_path, monkeypatch) as connector:
-        with pytest.raises(ConfigurationError, match="Cannot read table labels: permission denied"):
+        with pytest.raises(
+            ConfigurationError, match="Cannot read table labels: permission denied"
+        ):
             connector.write("labels", COLUMNS, [], mode=WriteMode.REPLACE)
 
     assert not any(statement.startswith(("CREATE", "DELETE")) for statement in driver.statements)

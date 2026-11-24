@@ -85,12 +85,12 @@ OPERATORS: dict[str, Any] = {
     "NOT_LIKE": lambda left, right=None: not _sql_like(left, right),
     # Range
     "BETWEEN": lambda left, right=None: (
-        _safe_compare(lambda l, r: r[0] <= l <= r[1])(left, right)
+        _safe_compare(lambda value, bounds: bounds[0] <= value <= bounds[1])(left, right)
         if _validate_range(right)
         else False
     ),
     "NOT_BETWEEN": lambda left, right=None: (
-        not _safe_compare(lambda l, r: r[0] <= l <= r[1])(left, right)
+        not _safe_compare(lambda value, bounds: bounds[0] <= value <= bounds[1])(left, right)
         if _validate_range(right)
         else False
     ),
@@ -145,7 +145,9 @@ OPERATOR_INFO: dict[str, OperatorInfo] = {
     "LE": OperatorInfo(
         "LE", "<=", OperatorType.COMPARISON, 6, "left", 2, "Less than or equal comparison"
     ),
-    "GT": OperatorInfo("GT", ">", OperatorType.COMPARISON, 6, "left", 2, "Greater than comparison"),
+    "GT": OperatorInfo(
+        "GT", ">", OperatorType.COMPARISON, 6, "left", 2, "Greater than comparison"
+    ),
     "GE": OperatorInfo(
         "GE", ">=", OperatorType.COMPARISON, 6, "left", 2, "Greater than or equal comparison"
     ),
@@ -157,7 +159,13 @@ OPERATOR_INFO: dict[str, OperatorInfo] = {
         "CONTAINS", "CONTAINS", OperatorType.COMPARISON, 7, "left", 2, "String contains"
     ),
     "NOT_CONTAINS": OperatorInfo(
-        "NOT_CONTAINS", "NOT CONTAINS", OperatorType.COMPARISON, 7, "left", 2, "String not contains"
+        "NOT_CONTAINS",
+        "NOT CONTAINS",
+        OperatorType.COMPARISON,
+        7,
+        "left",
+        2,
+        "String not contains",
     ),
     "LIKE": OperatorInfo(
         "LIKE", "LIKE", OperatorType.COMPARISON, 7, "left", 2, "SQL LIKE pattern matching"

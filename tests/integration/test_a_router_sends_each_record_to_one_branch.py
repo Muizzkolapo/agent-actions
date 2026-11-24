@@ -300,7 +300,9 @@ def test_7_2_a_record_whose_value_has_no_case_goes_to_the_default_branch(tmp_pat
 
 
 @RUN_MODES
-def test_a_join_after_a_branch_that_received_no_record_holds_every_other_record(tmp_path, run_mode):
+def test_a_join_after_a_branch_that_received_no_record_holds_every_other_record(
+    tmp_path, run_mode
+):
     root = _project(tmp_path, run_mode, ["multi_choice", "matching"] * 3)
 
     transcript = _run_to_the_end(root, "--fresh")

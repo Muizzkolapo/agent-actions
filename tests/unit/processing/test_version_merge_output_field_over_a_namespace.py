@@ -141,7 +141,9 @@ class TestTheOutputStillWins:
         assert _batch_content(processor, {"source": "oops"})["source"] == "oops"
 
     def test_an_upstream_namespace_is_still_replaced(self):
-        content = _build_record("aggregate", {"voter_1": "chosen"}, _matched_row(), True)["content"]
+        content = _build_record("aggregate", {"voter_1": "chosen"}, _matched_row(), True)[
+            "content"
+        ]
         assert content["voter_1"] == "chosen"
 
     def test_untouched_namespaces_are_kept(self):
@@ -151,7 +153,9 @@ class TestTheOutputStillWins:
 
 class TestAnOutputFieldTakingNoNamespaceIsSilent:
     def test_the_intended_case_passes_through(self):
-        content = _build_record("aggregate", {"winner": "voter_1"}, _matched_row(), True)["content"]
+        content = _build_record("aggregate", {"winner": "voter_1"}, _matched_row(), True)[
+            "content"
+        ]
         assert content["winner"] == "voter_1"
         assert content["source"] == SOURCE_DOCUMENT
         assert content["voter_1"] == {"vote": "keep"}
@@ -245,7 +249,9 @@ class TestTheShapesTheseTestsRelyOn:
     """Premise guards: each asserts a fixture is exercising what the test names."""
 
     def test_the_path_under_test_really_is_the_flat_spread(self):
-        content = _build_record("aggregate", {"winner": "voter_1"}, _matched_row(), True)["content"]
+        content = _build_record("aggregate", {"winner": "voter_1"}, _matched_row(), True)[
+            "content"
+        ]
         assert "winner" in content, "not the flat-spread branch — output was nested"
         assert "aggregate" not in content
 

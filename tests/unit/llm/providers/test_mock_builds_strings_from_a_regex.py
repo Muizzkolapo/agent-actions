@@ -114,7 +114,9 @@ def _answer_with_rule_pattern(pattern: str) -> dict:
         },
     }
     schema = {"type": "object", "properties": {"code": {"type": "string"}}}
-    [record] = AgacClient.call_json(None, config, "Extract.", "{}", {"name": "o", "schema": schema})
+    [record] = AgacClient.call_json(
+        None, config, "Extract.", "{}", {"name": "o", "schema": schema}
+    )
     return record
 
 

@@ -55,7 +55,9 @@ def _all_records_guard_filtered(deps, filtered: bool = True):
     """
 
     def has_disposition(action_name, disposition, record_id=None, **_):
-        return filtered and disposition == DISPOSITION_SKIPPED and record_id == NODE_LEVEL_RECORD_ID
+        return (
+            filtered and disposition == DISPOSITION_SKIPPED and record_id == NODE_LEVEL_RECORD_ID
+        )
 
     deps.action_runner.storage_backend.has_disposition.side_effect = has_disposition
     deps.action_runner.storage_backend.has_target_rows.return_value = not filtered

@@ -145,7 +145,9 @@ class TestObserveBasic:
         }
         context_scope = {"observe": ["dep.field"]}
 
-        prompt_context, _, _ = apply_context_scope(field_context, context_scope, action_name="test")
+        prompt_context, _, _ = apply_context_scope(
+            field_context, context_scope, action_name="test"
+        )
 
         assert "version" in prompt_context
         assert prompt_context["version"]["i"] == 2
@@ -376,7 +378,9 @@ class TestObserveCrossNamespace:
         }
         context_scope = {"observe": ["extract.answer", "extract.score"]}
 
-        _, llm_context, _ = apply_context_scope(field_context, context_scope, action_name="consume")
+        _, llm_context, _ = apply_context_scope(
+            field_context, context_scope, action_name="consume"
+        )
 
         # Must get the correct record (r3), not r1
         assert llm_context["extract"]["answer"] == "correct_answer"
@@ -706,7 +710,8 @@ class TestDropSecurity:
         assert llm_context["dep"]["value"] == "public_value"
 
     def test_observe_dropped_field_raises(self):
-        """drop: ['dep.x'], observe: ['dep.x'] -> raises (contradictory config, secret not leaked)."""
+        """drop: ['dep.x'], observe: ['dep.x'] -> raises (contradictory config, secret not
+        leaked)."""
         field_context = {
             "dep": {"x": "secret_value", "y": "other", "z": "more"},
         }
@@ -968,7 +973,8 @@ class TestContextScopeEdgeCases:
             )
 
     def test_empty_observe_list(self):
-        """observe: [] -> no fields in llm_context (but prompt_context has framework namespaces)."""
+        """observe: [] -> no fields in llm_context (but prompt_context has framework
+        namespaces)."""
         field_context = {
             "dep": {"field1": "a", "field2": "b", "field3": "c"},
             "version": {"i": 1, "length": 3},

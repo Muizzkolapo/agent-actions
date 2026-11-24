@@ -97,7 +97,9 @@ class TestEachRecordGetsItsOwnFile:
         assert _render(config, {"tier": "1", "title": "b"}) == "DBT-LABEL"
 
     def test_the_selector_does_not_have_to_be_observed(self, tmp_path):
-        config = _config(tmp_path, SYLLABUS, "{{ seed.exam_syllabus.label }}", drop=["source.exam"])
+        config = _config(
+            tmp_path, SYLLABUS, "{{ seed.exam_syllabus.label }}", drop=["source.exam"]
+        )
 
         assert _render(config, {"exam": "snowflake", "title": "a"}) == "SNOW-LABEL"
 

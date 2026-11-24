@@ -324,7 +324,9 @@ class TestProcessRecordResponseHandling:
 
     @patch("agent_actions.processing.strategies.online_llm.get_task_preparer")
     @patch("agent_actions.processing.strategies.online_llm.fire_event")
-    def test_expectations_raise_policy_propagates_out_of_invoke(self, mock_fire, mock_get_preparer):
+    def test_expectations_raise_policy_propagates_out_of_invoke(
+        self, mock_fire, mock_get_preparer
+    ):
         from agent_actions.expectations.service import ExpectationsExhaustedError
 
         prepared = _make_prepared()
@@ -382,7 +384,9 @@ class TestProcessRecordEmptyOutput:
         mock_get_preparer.return_value.prepare.return_value = prepared
 
         mock_invocation = MagicMock()
-        mock_invocation.invoke.return_value = InvocationResult.immediate(response={}, executed=True)
+        mock_invocation.invoke.return_value = InvocationResult.immediate(
+            response={}, executed=True
+        )
 
         from agent_actions.errors.processing import EmptyOutputError
 
@@ -409,7 +413,9 @@ class TestProcessRecordEmptyOutput:
         mock_get_preparer.return_value.prepare.return_value = prepared
 
         mock_invocation = MagicMock()
-        mock_invocation.invoke.return_value = InvocationResult.immediate(response={}, executed=True)
+        mock_invocation.invoke.return_value = InvocationResult.immediate(
+            response={}, executed=True
+        )
 
         strategy = OnlineLLMStrategy(
             agent_config={"agent_type": "test", "on_empty": "warn"},
@@ -463,7 +469,9 @@ class TestProcessRecordEmptyOutput:
         mock_get_preparer.return_value.prepare.return_value = prepared
 
         mock_invocation = MagicMock()
-        mock_invocation.invoke.return_value = InvocationResult.immediate(response=[], executed=True)
+        mock_invocation.invoke.return_value = InvocationResult.immediate(
+            response=[], executed=True
+        )
 
         strategy = OnlineLLMStrategy(
             agent_config={"agent_type": "test", "on_empty": "skip"},

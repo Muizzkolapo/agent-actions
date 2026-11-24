@@ -154,7 +154,8 @@ def test_preflight_warns_even_when_the_producer_requires_the_field(caplog):
     }
     msgs = _capture_preflight_warnings(cfgs, caplog)
     assert any(
-        "dag-fit" in m and "flatten_code: code_block, description" in m and _TOOL in m for m in msgs
+        "dag-fit" in m and "flatten_code: code_block, description" in m and _TOOL in m
+        for m in msgs
     ), msgs
 
 

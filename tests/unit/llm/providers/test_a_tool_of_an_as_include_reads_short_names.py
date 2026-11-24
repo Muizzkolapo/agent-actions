@@ -1,4 +1,5 @@
-"""A tool of an `as:` include gets its record's namespaces under the short names of its instance."""
+"""A tool of an `as:` include gets its record's namespaces under the short names of its
+instance."""
 
 from __future__ import annotations
 

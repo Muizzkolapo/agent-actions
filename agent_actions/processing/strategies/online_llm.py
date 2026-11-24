@@ -497,7 +497,9 @@ class OnlineLLMStrategy:
             return
 
         disposition = (
-            DISPOSITION_SUCCESS if result.status == ProcessingStatus.SUCCESS else DISPOSITION_FAILED
+            DISPOSITION_SUCCESS
+            if result.status == ProcessingStatus.SUCCESS
+            else DISPOSITION_FAILED
         )
         reason = result.error if result.status == ProcessingStatus.FAILED else None
 
@@ -762,7 +764,9 @@ class OnlineLLMStrategy:
 
             if on_empty == "warn":
                 return ProcessingResult.failed(
-                    error=_empty_warn_reason(context.agent_config, context.agent_name, source_guid),
+                    error=_empty_warn_reason(
+                        context.agent_config, context.agent_name, source_guid
+                    ),
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
                     input_record=input_record,

@@ -70,7 +70,9 @@ class TestFileLimitReached:
             pytest.param({"file_limit": 5}, 3, False, id="below_limit"),
             pytest.param({"file_limit": 5}, 5, True, id="at_limit"),
             pytest.param({"file_limit": 5}, 10, True, id="above_limit"),
-            pytest.param({FILE_LIMIT_KEY: 2}, 2, True, id="run_level_limit_where_config_sets_none"),
+            pytest.param(
+                {FILE_LIMIT_KEY: 2}, 2, True, id="run_level_limit_where_config_sets_none"
+            ),
             pytest.param(
                 {"file_limit": 1, FILE_LIMIT_KEY: 5},
                 1,
@@ -147,7 +149,10 @@ class TestFileLimitReached:
 
         assert (
             _stops(
-                {"file_limit": 1}, 5, retried=frozenset({"r1"}), probe=lambda: bool(asked.append(1))
+                {"file_limit": 1},
+                5,
+                retried=frozenset({"r1"}),
+                probe=lambda: bool(asked.append(1)),
             )
             is False
         )
@@ -511,7 +516,9 @@ class TestRecordLimitInitialStage:
         [
             pytest.param({"record_limit": 10, "run_mode": "online"}, 50, 10, id="limit_slices"),
             pytest.param({"run_mode": "online"}, 50, 50, id="no_limit_passes_all"),
-            pytest.param({"record_limit": 100, "run_mode": "online"}, 5, 5, id="limit_above_total"),
+            pytest.param(
+                {"record_limit": 100, "run_mode": "online"}, 5, 5, id="limit_above_total"
+            ),
         ],
     )
     @patch("agent_actions.input.preprocessing.staging.initial_pipeline._save_source_data")
@@ -786,7 +793,9 @@ class TestLimitStatusInvalidation:
     def test_no_limits_old_status_no_invalidation(self, executor, mock_deps):
         """Old status file without limit keys + config with no limits = no invalidation."""
         mock_deps.state_manager.get_status.return_value = ActionStatus.COMPLETED
-        mock_deps.state_manager.get_status_details.return_value = {"status": ActionStatus.COMPLETED}
+        mock_deps.state_manager.get_status_details.return_value = {
+            "status": ActionStatus.COMPLETED
+        }
         action_config = {}
 
         storage = MagicMock()
@@ -1362,7 +1371,8 @@ class TestTheBatchPauseIsAProcessBoundary:
 
     @staticmethod
     def _process(status_file, rows_written):
-        """An executor as a fresh process builds one: its own backend, the status file from disk."""
+        """An executor as a fresh process builds one: its own backend, the status file from
+        disk."""
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = ActionStateManager(status_file, ["act"])
         deps.action_runner = MagicMock()

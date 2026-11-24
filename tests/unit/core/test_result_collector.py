@@ -1105,7 +1105,9 @@ class TestCollectorStateStamping:
             # FILE prefilter skip is resettable, like a per-record guard skip.
             pytest.param("guard_prefilter_skip", "guard_skipped", id="guard-prefilter"),
             pytest.param("guard_skip", "guard_skipped", id="guard-skip"),
-            pytest.param("upstream_unprocessed", "cascade_skipped", id="non-guard-reason-cascades"),
+            pytest.param(
+                "upstream_unprocessed", "cascade_skipped", id="non-guard-reason-cascades"
+            ),
         ],
     )
     def test_unprocessed_skip_reason_sets_state(self, skip_reason, state):
@@ -1306,7 +1308,9 @@ class TestCollectionCreditsTheRowsItProduced:
             ProcessingResult.success(data=[{"content": {"act": {"a": 1}}}], source_guid="p2"),
         ]
 
-        output, _ = collect_results_from_processing_results(results, "act", storage_backend=backend)
+        output, _ = collect_results_from_processing_results(
+            results, "act", storage_backend=backend
+        )
 
         assert len(output) == 2
         assert backend.credited == {"act": 1}

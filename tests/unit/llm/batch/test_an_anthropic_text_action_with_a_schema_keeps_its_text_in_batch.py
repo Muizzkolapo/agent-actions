@@ -133,7 +133,11 @@ def test_a_tool_answer_with_no_text_fails_the_record_as_online_raises(tmp_path):
     blocks = [{"type": "tool_use", "id": "t1", "name": "compact_write_text", "input": TOOL_INPUT}]
     with pytest.raises(Exception) as online_error:
         _online_api_args(
-            [SimpleNamespace(type="tool_use", id="t1", name="compact_write_text", input=TOOL_INPUT)]
+            [
+                SimpleNamespace(
+                    type="tool_use", id="t1", name="compact_write_text", input=TOOL_INPUT
+                )
+            ]
         )
 
     result = _retrieved(blocks, _config(), tmp_path)

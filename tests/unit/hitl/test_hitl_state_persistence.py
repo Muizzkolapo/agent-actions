@@ -105,7 +105,10 @@ class TestStateLoading:
         )
 
         assert server.record_reviews[0] == {"hitl_status": "approved", "user_comment": ""}
-        assert server.record_reviews[1] == {"hitl_status": "rejected", "user_comment": "needs work"}
+        assert server.record_reviews[1] == {
+            "hitl_status": "rejected",
+            "user_comment": "needs work",
+        }
         assert server.record_reviews[2] is None
         assert server.record_reviews[3] is None
 

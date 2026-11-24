@@ -1,4 +1,5 @@
-"""Tests for AgentWorkflow sequential execution (_run_single_action, _run_workflow_with_context)."""
+"""Tests for AgentWorkflow sequential execution (_run_single_action,
+_run_workflow_with_context)."""
 
 import copy
 from datetime import datetime
@@ -219,7 +220,8 @@ class TestRunWorkflowWithContext:
         assert wf.state.failed is True
 
     def test_unexpected_exception_calls_handle_workflow_error_and_reraises(self):
-        """Unexpected crash (not a failed result) should call handle_workflow_error and re-raise."""
+        """Unexpected crash (not a failed result) should call handle_workflow_error and
+        re-raise."""
         wf = _build_workflow(execution_order=["agent_a"])
         wf.services.core.state_manager.is_completed.return_value = False
         wf.services.core.action_executor.execute_action_sync.side_effect = RuntimeError(
@@ -307,7 +309,9 @@ class TestClearForFreshRun:
         wf.storage_backend = MagicMock()
         wf.services.core.state_manager = MagicMock()
         wf.services.core.action_runner = MagicMock()
-        wf.services.core.action_runner.get_action_folder.return_value = "/tmp/fake_project/agent_io"
+        wf.services.core.action_runner.get_action_folder.return_value = (
+            "/tmp/fake_project/agent_io"
+        )
 
         wf._clear_for_fresh_run()
 
@@ -322,7 +326,9 @@ class TestClearForFreshRun:
         wf.storage_backend.clear_prompt_traces.side_effect = RuntimeError("DB locked")
         wf.services.core.state_manager = MagicMock()
         wf.services.core.action_runner = MagicMock()
-        wf.services.core.action_runner.get_action_folder.return_value = "/tmp/fake_project/agent_io"
+        wf.services.core.action_runner.get_action_folder.return_value = (
+            "/tmp/fake_project/agent_io"
+        )
 
         # Should not raise
         wf._clear_for_fresh_run()

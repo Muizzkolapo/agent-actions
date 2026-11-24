@@ -1,4 +1,5 @@
-"""A list under a field's ``required`` is a nested object's property list, not the field's flag (1346)."""
+"""A list under a field's ``required`` is a nested object's property list, not the field's flag
+(1346)."""
 
 from __future__ import annotations
 

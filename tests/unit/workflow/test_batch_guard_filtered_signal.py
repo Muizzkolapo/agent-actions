@@ -49,7 +49,9 @@ def _batch_filtered_every_record(backend, records=()):
     fix's discriminator.
     """
     backend.write_target(ACTION, CHUNK, list(records))
-    write_node_level_disposition(backend, ACTION, DISPOSITION_PASSTHROUGH, "All records tombstoned")
+    write_node_level_disposition(
+        backend, ACTION, DISPOSITION_PASSTHROUGH, "All records tombstoned"
+    )
 
 
 def _executor(backend):
@@ -127,7 +129,9 @@ class TestTheRealBatchSignalReachesTheUser:
         _batch_filtered_every_record(backend)
         ex = _executor(backend)
         _drive(ex, ex.deps, resume)
-        assert ex.deps.state_manager.update_status.call_args.kwargs.get("execution_mode") == "batch"
+        assert (
+            ex.deps.state_manager.update_status.call_args.kwargs.get("execution_mode") == "batch"
+        )
 
     def test_an_action_that_produced_records_still_completes(self, resume, backend):
         """A tombstone carrying real records is a passthrough, not a skip."""

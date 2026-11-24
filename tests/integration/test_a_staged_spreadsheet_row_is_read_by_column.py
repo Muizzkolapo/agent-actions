@@ -51,7 +51,9 @@ def _stage(staging: Path, file_type: str, rows: list[dict]) -> None:
         pd.DataFrame(rows).to_excel(staging / "items.xlsx", index=False)
 
 
-def _project(base: Path, file_type: str, actions: str, run_mode: str = "online", rows=ROWS) -> Path:
+def _project(
+    base: Path, file_type: str, actions: str, run_mode: str = "online", rows=ROWS
+) -> Path:
     root = base / "project"
     directory = root / "agent_workflow" / WORKFLOW
     (directory / "agent_config").mkdir(parents=True)

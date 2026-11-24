@@ -394,7 +394,9 @@ class TestAnthropicCallNonJson:
 
     @patch("agent_actions.llm.providers.anthropic.client.fire_event")
     @patch("agent_actions.llm.providers.anthropic.client.anthropic")
-    def test_no_tools_parameter_in_api_args(self, mock_anthropic_mod, mock_fire, base_agent_config):
+    def test_no_tools_parameter_in_api_args(
+        self, mock_anthropic_mod, mock_fire, base_agent_config
+    ):
         """Non-JSON mode must NOT include tools in the API call."""
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
@@ -543,7 +545,9 @@ class TestOllamaTokenCounts:
 
         # LLMResponseEvent now fires from ResponseBuilder
         response_events = [
-            call for call in mock_rb_fire.call_args_list if isinstance(call[0][0], LLMResponseEvent)
+            call
+            for call in mock_rb_fire.call_args_list
+            if isinstance(call[0][0], LLMResponseEvent)
         ]
         assert len(response_events) >= 1
         event = response_events[0][0][0]
@@ -996,7 +1000,9 @@ class TestCallJsonDictWrapping:
         mock_client.models.generate_content.return_value = mock_response
         mock_build_client.return_value = mock_client
 
-        result = GeminiClient.call_json("key", {"model_name": "gemini-pro"}, "prompt", "data", None)
+        result = GeminiClient.call_json(
+            "key", {"model_name": "gemini-pro"}, "prompt", "data", None
+        )
         assert isinstance(result, list)
         assert result == [{"name": "Alice"}]
 

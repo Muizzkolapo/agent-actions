@@ -1,4 +1,5 @@
-"""A formatter that builds its own context keeps the workflow as the agent and the action as the action."""
+"""A formatter that builds its own context keeps the workflow as the agent and the action as the
+action."""
 
 from pathlib import Path
 

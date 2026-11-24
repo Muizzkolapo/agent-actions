@@ -624,9 +624,13 @@ def _breaking_values(
     if isinstance(current, list):
         values += [[], current[:1], current * 10]
     values += ["", "x", "!!!", "zzzz zzzz", 0, -1, 10**9, 0.5, None, True, [], {}]
-    values += [FakeDataGenerator.generate_from_schema(schema, 3, field_name=name) for _ in range(3)]
+    values += [
+        FakeDataGenerator.generate_from_schema(schema, 3, field_name=name) for _ in range(3)
+    ]
     if isinstance(rule.field, str) and rule.field.endswith(WILDCARD_SUFFIX):
-        values = [[value] for value in values] + [list(current or []) + [value] for value in values]
+        values = [[value] for value in values] + [
+            list(current or []) + [value] for value in values
+        ]
     return values
 
 

@@ -115,7 +115,9 @@ class TestWhatIsRefusedAtLoad:
 
     @pytest.mark.parametrize("directive", ["passthrough", "drop"])
     @pytest.mark.parametrize(
-        "entry", ["review.text?", {"field": "review.text", "optional": True}], ids=["suffix", "map"]
+        "entry",
+        ["review.text?", {"field": "review.text", "optional": True}],
+        ids=["suffix", "map"],
     )
     def test_passthrough_and_drop_have_no_optional_form(self, directive, entry):
         with pytest.raises(ConfigurationError, match=f"context_scope.{directive}"):

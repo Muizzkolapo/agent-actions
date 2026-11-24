@@ -32,7 +32,8 @@ class TestFindProjectRootReturnsNone:
         assert (result / "agent_actions.yml").exists()
 
     def test_returns_path_when_marker_exists_in_child(self, tmp_path):
-        """When agent_actions.yml exists in a subdirectory (depth=1), LSP downward search finds it."""
+        """When agent_actions.yml exists in a subdirectory (depth=1), LSP downward search finds
+        it."""
         child = tmp_path / "project"
         child.mkdir()
         marker = child / "agent_actions.yml"

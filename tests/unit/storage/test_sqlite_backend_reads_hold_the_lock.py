@@ -11,11 +11,11 @@ def _make_tracking_lock(backend):
     original = backend._lock
 
     class TrackingLock:
-        def __enter__(self_inner):
+        def __enter__(self):
             acquired.append("locked")
             return original.__enter__()
 
-        def __exit__(self_inner, *args):
+        def __exit__(self, *args):
             return original.__exit__(*args)
 
     return TrackingLock(), acquired
@@ -45,7 +45,9 @@ class TestSQLiteBackendThreadSafeReads:
             pytest.param(_seed_target, "read_target", ("action_a", "out.json"), id="read_target"),
             pytest.param(_seed_source, "read_source", ("in.json",), id="read_source"),
             pytest.param(_seed_source, "list_source_files", (), id="list_source_files"),
-            pytest.param(_seed_disposition, "get_disposition", ("action_a",), id="get_disposition"),
+            pytest.param(
+                _seed_disposition, "get_disposition", ("action_a",), id="get_disposition"
+            ),
             pytest.param(
                 _seed_disposition,
                 "has_disposition",

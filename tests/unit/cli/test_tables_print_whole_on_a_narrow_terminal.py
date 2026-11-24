@@ -72,7 +72,9 @@ def test_an_action_level_row_prints_whole(backend):
 def test_an_expect_report_rule_id_and_type_print_whole():
     rules = (
         RuleTally(id="never_matches_warn_rule_id", type="match_like_pattern", severity="warn"),
-        RuleTally(id="no_forbidden_phrases_in_body", type="no_forbidden_phrases", severity="error"),
+        RuleTally(
+            id="no_forbidden_phrases_in_body", type="no_forbidden_phrases", severity="error"
+        ),
     )
     tally = ActionTally(
         action="ql_honesty_probe",

@@ -80,7 +80,9 @@ def test_a_repair_after_the_edit_touches_only_the_record_it_named(chained):  # n
     _fail(chained, other, SECOND)
     _filter_the_first_page(chained)
 
-    result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--from", SECOND, "--record", named])
+    result = CliRunner().invoke(
+        cli, ["retry", "-a", WORKFLOW, "--from", SECOND, "--record", named]
+    )
 
     assert result.exit_code == EXIT_RECORD_FAILURES, result.output
     assert _disposition(chained, named, SECOND) == "success"

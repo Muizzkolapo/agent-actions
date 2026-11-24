@@ -55,7 +55,8 @@ class ActionStrategy(ABC):
         """Execute the strategy and return the path to the generated output file."""
 
     def precheck(self, params: StrategyExecutionParams) -> None:
-        """The checks to run on a file before any file is processed; only the first stage has them."""
+        """The checks to run on a file before any file is processed; only the first stage has
+        them."""
         logger.debug("%s reads no staged file, so it checks none ahead of the walk", self)
 
     def _execute_generate_target(self, params: StrategyExecutionParams) -> str:
@@ -119,7 +120,8 @@ class InitialStrategy(ActionStrategy):
 
 
 class StandardStrategy(ActionStrategy):
-    """Standard strategy for non-initial actions that read upstream data and generate target output."""
+    """Standard strategy for non-initial actions that read upstream data and generate target
+    output."""
 
     def __eq__(self, other):
         return isinstance(other, StandardStrategy)

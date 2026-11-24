@@ -16,7 +16,8 @@ NOISY_LOGGERS = list(_THIRD_PARTY_NOISY_LOGGERS)
 
 @pytest.fixture(autouse=True)
 def reset_factory_and_logger_state():
-    """Reset factory and restore third-party logger levels; force root to INFO so suppression isn't a tautology."""
+    """Reset factory and restore third-party logger levels; force root to INFO so suppression isn't
+    a tautology."""
     LoggerFactory.reset()
 
     saved_root = logging.getLogger().level
@@ -113,7 +114,8 @@ class TestModuleLevelOverrides:
         assert logging.getLogger("my_custom_lib").level == logging.WARNING
 
     def test_invalid_module_level_emits_stderr_warning(self, capsys):
-        """Garbage value is rejected with stderr warning; WARNING clamp stands (start from DEBUG to prove sequence)."""
+        """Garbage value is rejected with stderr warning; WARNING clamp stands (start from DEBUG to
+        prove sequence)."""
         logging.getLogger("httpx").setLevel(logging.DEBUG)
 
         config = LoggingConfig(module_levels={"httpx": "NOT_A_LEVEL"})
@@ -140,7 +142,8 @@ class TestModuleLevelOverrides:
         assert logging.getLogger("httpx").level == logging.WARNING
 
     def test_value_that_stringifies_to_valid_level_still_rejected(self, capsys):
-        """Type-guard (not str-coercion) — a non-string whose __str__ returns 'INFO' must NOT override."""
+        """Type-guard (not str-coercion) — a non-string whose __str__ returns 'INFO' must NOT
+        override."""
 
         class StringifiesToInfo:
             def __str__(self):
@@ -151,7 +154,8 @@ class TestModuleLevelOverrides:
 
         err = capsys.readouterr().err
         assert "httpx" in err
-        # If the helper coerced via str(), httpx would be INFO; type-guard keeps it at WARNING (clamp).
+        # If the helper coerced via str(), httpx would be INFO; type-guard keeps it at WARNING
+        # (clamp).
         assert logging.getLogger("httpx").level == logging.WARNING
 
     def test_non_string_key_rejected_without_crash(self, capsys):
@@ -177,7 +181,9 @@ class TestModuleLevelOverrides:
 
     def test_agent_actions_child_override_refused(self, capsys):
         """Children of ``agent_actions`` are guarded for the same reason."""
-        config = LoggingConfig(module_levels={"agent_actions.llm.providers.openai.client": "ERROR"})
+        config = LoggingConfig(
+            module_levels={"agent_actions.llm.providers.openai.client": "ERROR"}
+        )
 
         LoggerFactory.initialize(config=config)
 
@@ -192,7 +198,8 @@ class TestResetIsolatesThirdPartyLoggers:
     """``LoggerFactory.reset()`` must restore loggers to their pre-init state."""
 
     def test_reset_restores_pre_init_level_not_notset(self):
-        """Host app set httpx=ERROR before our init; reset() must restore ERROR, not blow it away to NOTSET."""
+        """Host app set httpx=ERROR before our init; reset() must restore ERROR, not blow it away
+        to NOTSET."""
         logging.getLogger("httpx").setLevel(logging.ERROR)
 
         LoggerFactory.initialize()
@@ -226,7 +233,8 @@ class TestSuppressionIdempotency:
         assert logging.getLogger("httpx").level == logging.WARNING
 
     def test_force_reinit_drops_module_level_no_longer_in_config(self):
-        """A logger set via module_levels in the FIRST config must be restored when the SECOND config omits it."""
+        """A logger set via module_levels in the FIRST config must be restored when the SECOND
+        config omits it."""
         # Pre-existing host-app level we must respect.
         logging.getLogger("my_custom_lib").setLevel(logging.NOTSET)
 
@@ -241,7 +249,8 @@ class TestSuppressionIdempotency:
         assert logging.getLogger("my_custom_lib").level == logging.NOTSET
 
     def test_force_reinit_without_a_config_keeps_the_resolved_one(self):
-        """A run attaching its file handlers passes no config; the CLI's module_levels must survive."""
+        """A run attaching its file handlers passes no config; the CLI's module_levels must
+        survive."""
         LoggerFactory.initialize(config=LoggingConfig(module_levels={"httpx": "INFO"}))
         assert logging.getLogger("httpx").level == logging.INFO
 

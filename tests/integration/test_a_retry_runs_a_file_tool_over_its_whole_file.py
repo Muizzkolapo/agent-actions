@@ -150,7 +150,9 @@ def roll_pages(data: list) -> FileUDFResult:
             {
                 "source_index": i,
                 "data": {
-                    "summary": 7 if refuse and "alpha" in page else f"{page} ({i + 1} of {len(pages)})",
+                    "summary": (
+                        7 if refuse and "alpha" in page else f"{page} ({i + 1} of {len(pages)})"
+                    ),
                     "exam_density": "low",
                 },
             }
@@ -666,7 +668,9 @@ class TestWhatReadsTheToolAnswersTheFileAgain:
         assert [r["_state"] for r in _rows(project, "restate", as_stored=True)["pages1.json"]] == [
             "processed"
         ]
-        assert [r["source_guid"] for r in rows["pages2.json"]] == [r["source_guid"] for r in before]
+        assert [r["source_guid"] for r in rows["pages2.json"]] == [
+            r["source_guid"] for r in before
+        ]
 
 
 def test_a_record_limit_on_the_roll_up_admits_what_a_run_admits(tmp_path):
@@ -1172,7 +1176,9 @@ class TestARowAnExpandingToolWritesAgainUnchangedIsCarriedBelow:
             "FINAL[Page beta. part 2]",
         ]
 
-    def test_each_row_written_again_unchanged_keeps_the_identity_it_was_stored_under(self, project):
+    def test_each_row_written_again_unchanged_keeps_the_identity_it_was_stored_under(
+        self, project
+    ):
         before = _failed_then_fixed(project)["pages1.json"]
         stored = {
             summary: _row_of(before, "roll_up", summary)

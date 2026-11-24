@@ -108,7 +108,8 @@ class PathValidator(BaseValidator):
                     path_obj.mkdir(parents=True, exist_ok=True)
                     if must_be_writable_after_creation and not os.access(path_obj, os.W_OK):
                         self.add_error(
-                            f"Created directory {directory_name} but it is not writable: {path_obj}"
+                            f"Created directory {directory_name} but it is not writable: "
+                            f"{path_obj}"
                         )
                 except (OSError, ValueError) as e:
                     msg = f"Failed to create {directory_name} directory at {path_obj}: {e}"
@@ -219,7 +220,9 @@ class PathValidator(BaseValidator):
         if operation == "validate_user_code_path":
             self._handle_user_code_path_operation(path_input)
         elif path_obj is None:
-            self.add_error("'path' (Path or str) is required for this operation and must be valid.")
+            self.add_error(
+                "'path' (Path or str) is required for this operation and must be valid."
+            )
         elif operation in ("validate_file", "validate_directory"):
             self._handle_file_or_directory_operation(operation, path_obj, data)
         elif operation == "ensure_directory_exists":

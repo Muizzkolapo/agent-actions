@@ -162,7 +162,8 @@ class AgacClient(BaseClient):
         if fault is not None:
             followed.count("errors")
             logger.info(
-                "Sandbox scenario %s: action '%s' fails attempt %d of record %s (input %s) with %s",
+                "Sandbox scenario %s: action '%s' fails attempt %d of record %s "
+                "(input %s) with %s",
                 followed.name,
                 action,
                 attempt,

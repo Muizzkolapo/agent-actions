@@ -228,7 +228,9 @@ def test_get_disposition_error_fails_open(tmp_path):
     storage = MagicMock()
     storage.load_metadata.return_value = None
     storage.list_target_files.return_value = ["data.json"]
-    storage.read_target.side_effect = lambda action, rel: ({"a": a_records, "b": b_records}[action])
+    storage.read_target.side_effect = lambda action, rel: (
+        {"a": a_records, "b": b_records}[action]
+    )
     storage.get_disposition.side_effect = ValueError("disposition read failed")
     runner = MagicMock()
     runner.storage_backend = storage
@@ -278,7 +280,9 @@ def test_node_level_filtered_disposition_is_ignored(tmp_path):
     storage = MagicMock()
     storage.load_metadata.return_value = None
     storage.list_target_files.return_value = ["data.json"]
-    storage.read_target.side_effect = lambda action, rel: ({"a": a_records, "b": b_records}[action])
+    storage.read_target.side_effect = lambda action, rel: (
+        {"a": a_records, "b": b_records}[action]
+    )
 
     def _get_disposition(action, record_id=None, disposition=None, *, snapshots=True):
         if action == "a" and disposition == DISPOSITION_FILTERED:

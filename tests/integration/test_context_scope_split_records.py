@@ -26,7 +26,10 @@ def split_records_data():
     Returns the 3 split records from node_5 that demonstrate the bug.
     """
     fixture_path = (
-        Path(__file__).parent.parent / "fixtures" / "historical_loader" / "split_records_node5.json"
+        Path(__file__).parent.parent
+        / "fixtures"
+        / "historical_loader"
+        / "split_records_node5.json"
     )
     with open(fixture_path) as f:
         return json.load(f)

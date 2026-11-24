@@ -59,7 +59,9 @@ class TestBatchClientFactorySecretStr:
     def test_openai_factory_unwraps_secret_str(self):
         from agent_actions.llm.providers.batch_client_factory import _create_openai
 
-        with patch("agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient") as mock_cls:
+        with patch(
+            "agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient"
+        ) as mock_cls:
             mock_cls.return_value = MagicMock()
             _create_openai({"api_key": SecretStr("sk-openai-test")})
 
@@ -68,7 +70,9 @@ class TestBatchClientFactorySecretStr:
     def test_openai_factory_passes_plain_str_unchanged(self):
         from agent_actions.llm.providers.batch_client_factory import _create_openai
 
-        with patch("agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient") as mock_cls:
+        with patch(
+            "agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient"
+        ) as mock_cls:
             mock_cls.return_value = MagicMock()
             _create_openai({"api_key": "sk-plain"})
 
@@ -133,7 +137,9 @@ class TestBatchClientFactorySecretStr:
         from agent_actions.llm.providers.batch_client_factory import _create_openai
 
         monkeypatch.setenv("MY_CUSTOM_KEY", "sk-custom-123")
-        with patch("agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient") as mock_cls:
+        with patch(
+            "agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient"
+        ) as mock_cls:
             mock_cls.return_value = MagicMock()
             _create_openai({"api_key": "${MY_CUSTOM_KEY}"})
 

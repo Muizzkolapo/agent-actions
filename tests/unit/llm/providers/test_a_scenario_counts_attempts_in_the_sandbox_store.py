@@ -136,7 +136,10 @@ def test_forgetting_one_action_keeps_the_others_and_forgetting_all_keeps_none(tm
         left = store.list_metadata_prefix(sc.ATTEMPTS_KEY_PREFIX)
         sandbox.forget_attempts(store)
 
-    assert left == [f"{sc.ATTEMPTS_KEY_PREFIX}classify:r1", f"{sc.ATTEMPTS_KEY_PREFIX}extract_2:r1"]
+    assert left == [
+        f"{sc.ATTEMPTS_KEY_PREFIX}classify:r1",
+        f"{sc.ATTEMPTS_KEY_PREFIX}extract_2:r1",
+    ]
     assert store.list_metadata_prefix(sc.ATTEMPTS_KEY_PREFIX) == []
 
 

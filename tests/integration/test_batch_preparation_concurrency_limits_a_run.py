@@ -1,4 +1,5 @@
-"""`batch_preparation_concurrency` reaches the step of an `agac run`, and its batch actions take turns.
+"""`batch_preparation_concurrency` reaches the step of an `agac run`, and its batch actions take
+turns.
 
 Two batch actions and one online action read the same upstream in one step. With the
 key at 1, no two batch preparations overlap, and the online action still runs (#1865).

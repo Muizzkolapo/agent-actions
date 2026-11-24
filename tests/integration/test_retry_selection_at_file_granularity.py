@@ -114,7 +114,9 @@ def _unobservable(project, record_id):  # noqa: F811
 
 class TestTheContextScopeNeverSeesARecordTheRepairDidNotName:
     @pytest.mark.parametrize(
-        "which", ["unnamed", "selected"], ids=["unnamed-keeps-its-disposition", "named-is-repaired"]
+        "which",
+        ["unnamed", "selected"],
+        ids=["unnamed-keeps-its-disposition", "named-is-repaired"],
     )
     def test_the_repair_leaves_every_record_succeeded(self, project, monkeypatch, which):  # noqa: F811
         """The scope's `skipped` is terminal and is written above the gate, so a

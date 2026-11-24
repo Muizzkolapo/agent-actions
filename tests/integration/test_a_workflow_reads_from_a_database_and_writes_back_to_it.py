@@ -159,8 +159,8 @@ def test_a_retry_that_repairs_a_record_writes_it_to_the_table(project):
         "from pathlib import Path\n"
         + text.replace(
             READ_SPEC,
-            READ_SPEC
-            + '    if source["topic"] == "photosynthesis" and Path(__file__).with_name("fail").exists():\n'
+            READ_SPEC + '    if source["topic"] == "photosynthesis" and '
+            'Path(__file__).with_name("fail").exists():\n'
             + '        raise ValueError("refused on purpose")\n',
         ),
         encoding="utf-8",

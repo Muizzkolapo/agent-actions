@@ -73,7 +73,9 @@ def normalize_context_scope(
             expanded_scope[directive_name] = directive_value
 
     # Again on the expanded names: 'ext.x?' becomes 'ext_1.x', which a drop of 'ext_1.*' removes.
-    _refuse_dropped_optional(expanded_scope.get(OPTIONAL_DIRECTIVE, {}), expanded_scope.get("drop"))
+    _refuse_dropped_optional(
+        expanded_scope.get(OPTIONAL_DIRECTIVE, {}), expanded_scope.get("drop")
+    )
     return expanded_scope
 
 

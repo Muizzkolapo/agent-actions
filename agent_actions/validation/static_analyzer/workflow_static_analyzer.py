@@ -47,9 +47,9 @@ from .schema_checks import SchemaChecksMixin
 from .schema_extractor import SchemaExtractor
 from .schema_structure_validator import SchemaStructureValidator as SchemaStructureValidator
 from .scope_checks import ContextScopeChecksMixin
+from .type_checker import StaticTypeChecker
 
 logger = logging.getLogger(__name__)
-from .type_checker import StaticTypeChecker
 
 
 class WorkflowStaticAnalyzer(
@@ -305,7 +305,8 @@ class WorkflowStaticAnalyzer(
                 action_name = action_config.get("name", "unknown")
                 self._build_errors.append(
                     StaticTypeError(
-                        message=f"Template syntax error in '{action_name}': {exc.message} (line {exc.lineno})",
+                        message=f"Template syntax error in '{action_name}': {exc.message} "
+                        f"(line {exc.lineno})",
                         location=FieldLocation(
                             agent_name=action_name,
                             config_field="prompt",
@@ -436,7 +437,9 @@ class WorkflowStaticAnalyzer(
         if not any(req.location == "guard" for req in requirements):
             return requirements
         configs = {
-            a.get("name"): a for a in self.workflow_config.get("actions", []) if isinstance(a, dict)
+            a.get("name"): a
+            for a in self.workflow_config.get("actions", [])
+            if isinstance(a, dict)
         }
         declared = action_config.get("dependencies") or []
         if isinstance(declared, str):

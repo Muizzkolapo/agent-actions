@@ -191,7 +191,9 @@ class TestTheIncludeExpands:
             "version_consumption": {"source": "vote", "pattern": "merge"},
             "context_scope": {"observe": ["vote.text"]},
         }
-        rendered = _render(tmp_path, [A, INCLUDE, tally], {"pair": _pair([vote], outputs=["vote"])})
+        rendered = _render(
+            tmp_path, [A, INCLUDE, tally], {"pair": _pair([vote], outputs=["vote"])}
+        )
         assert _names(rendered) == ["a", "vote_1", "vote_2", "tally"]
         actions = {action["name"]: action for action in rendered["actions"]}
         assert actions["vote_2"]["_include"]["local_name"] == "vote"
@@ -274,7 +276,8 @@ class TestTheIncludeEntryIsRefused:
         message = _refusal(tmp_path / "bad", [A, {"include": "pairr", "inputs": {"a": "a"}}])
 
         assert message == (
-            f"Include 'pairr' in {WF}: no branch file branches/pairr.yml. Branch files found: pair."
+            f"Include 'pairr' in {WF}: no branch file branches/pairr.yml. Branch files "
+            "found: pair."
         )
         assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
 
@@ -298,7 +301,8 @@ class TestTheIncludeEntryIsRefused:
         message = _refusal(tmp_path / "bad", [A, {"include": "pair"}])
 
         assert message == (
-            f"Include 'pair' in {WF}: input 'a' of branch 'pair' (branches/pair.yml) is not bound. "
+            f"Include 'pair' in {WF}: input 'a' of branch 'pair' (branches/pair.yml) is "
+            "not bound. "
             "Bind it under 'inputs:' to an action of workflow 'wf'."
         )
         assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
@@ -372,7 +376,8 @@ class TestTheIncludeEntryIsRefused:
         message = _refusal(tmp_path / "bad", [A, INCLUDE, INCLUDE])
 
         assert message == (
-            f"Workflow 'wf' ({WF}) includes branch 'pair' (branches/pair.yml) twice with the instance name "
+            f"Workflow 'wf' ({WF}) includes branch 'pair' (branches/pair.yml) twice with "
+            "the instance name "
             "'pair'. Give each include its own instance name with 'as:'."
         )
         assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
@@ -421,7 +426,8 @@ class TestANameCollisionIsRefusedWithBothOrigins:
         )
 
         assert message == (
-            f"Action name 'b1' is defined twice in {WF}: by branch 'pair' (branches/pair.yml) and by "
+            f"Action name 'b1' is defined twice in {WF}: by branch 'pair' "
+            "(branches/pair.yml) and by "
             "branch 'twin' (branches/twin.yml). Rename one of them."
         )
 
@@ -448,7 +454,8 @@ class TestTheHostReadsOnlyDeclaredOutputs:
         message = _refusal(tmp_path / "bad", [A, INCLUDE, reader])
 
         assert message == (
-            f"Action 'c' in {WF} reads 'b1', which branch 'pair' (branches/pair.yml) does not list under "
+            f"Action 'c' in {WF} reads 'b1', which branch 'pair' (branches/pair.yml) does "
+            "not list under "
             "outputs. Outputs of 'pair': b2."
         )
         assert _names(_render(tmp_path / "good", [A, INCLUDE, C])) == ["a", "b1", "b2", "c"]
@@ -476,7 +483,8 @@ class TestABranchReadsOnlyItsOwnActionsAndInputs:
         message = _refusal(tmp_path / "bad", [A, Z, INCLUDE], {"pair": _pair([B1, reader])})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b2': reads 'z', which is not a "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b2': reads "
+            "'z', which is not a "
             "branch action or a declared input. Declare it under 'inputs:'."
         )
         declared = _pair([B1, reader], inputs={"a": "Holds the text", "z": "Holds more"})
@@ -502,7 +510,8 @@ class TestTheBranchFileIsRefused:
         message = _refusal(tmp_path, [A, INCLUDE], {"pair": nested})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: the branch contains an include. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: the branch contains an "
+            "include. "
             "A branch cannot include another branch."
         )
 
@@ -525,7 +534,8 @@ class TestTheBranchFileIsRefused:
         message = _refusal(tmp_path / "bad", [A, INCLUDE], {"pair": renamed})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action '{name}': the name {reason} "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action '{name}': the "
+            f"name {reason} "
             "Use letters, digits and single underscores, starting with a letter."
         )
         assert _names(_render(tmp_path / "good", [A, INCLUDE])) == ["a", "b1", "b2"]
@@ -534,7 +544,8 @@ class TestTheBranchFileIsRefused:
         message = _refusal(tmp_path, [A, INCLUDE], {"pair": _pair(defaults={"run_mode": "batch"})})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: key 'defaults' is not a branch key. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: key 'defaults' is not "
+            "a branch key. "
             "Branch keys: branch, description, inputs, outputs, actions."
         )
 
@@ -542,7 +553,8 @@ class TestTheBranchFileIsRefused:
         message = _refusal(tmp_path, [A, INCLUDE], {"pair": _pair([_with(B1, promt="x"), B2])})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': promt: Extra inputs are not permitted"
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': promt: "
+            "Extra inputs are not permitted"
         )
 
     def test_an_inline_prompt(self, tmp_path):
@@ -557,7 +569,8 @@ class TestTheBranchFileIsRefused:
         message = _refusal(tmp_path / "bad", [A, INCLUDE], {"pair": _pair([inline, B2])})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': the prompt is written inline. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': the "
+            "prompt is written inline. "
             "A branch action names a prompt store block, for example 'prompt: $store.Block'."
         )
         stored = _pair([_with(inline, prompt="$pair.Write_Note"), B2])
@@ -573,7 +586,8 @@ class TestTheBranchFileIsRefused:
         )
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': 'intent' holds Jinja. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': 'intent' "
+            "holds Jinja. "
             "A branch file is plain YAML and is not rendered."
         )
 
@@ -581,7 +595,8 @@ class TestTheBranchFileIsRefused:
         message = _refusal(tmp_path, [A, INCLUDE], {"pair": _pair(outputs=["b3"])})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: output 'b3' is not an action of the branch. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: output 'b3' is not an "
+            "action of the branch. "
             "Branch actions: b1, b2."
         )
 

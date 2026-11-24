@@ -61,7 +61,8 @@ class SideCallExecutor(Protocol):
     """Runs a side call the way the action's run mode says."""
 
     def run(self, call: SideCall) -> SideReplies | None:
-        """The call's replies, or None when it is held for a batch that answers it on a later pass."""
+        """The call's replies, or None when it is held for a batch that answers it on a later
+        pass."""
 
 
 class OnlineSideCalls:

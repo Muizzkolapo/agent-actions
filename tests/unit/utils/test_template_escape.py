@@ -129,7 +129,7 @@ class TestRenderIntegration:
 ## PATTERNS
 {% for p in seed_patterns %}
 - {{ p }}
-{% endfor %}"""
+{% endfor %}"""  # noqa: E501
         escaped = escape_jinja_in_inline_code(template)
         rendered = jinja_env.from_string(escaped).render(seed_patterns=["pattern_a", "pattern_b"])
         assert "{% test %}" in rendered

@@ -134,7 +134,9 @@ class TestAnInputThatWasExpanded:
         minted = {o["source_guid"] for o in output}
 
         rows = _rows(backend)
-        assert len(rows) == len(minted) + 2, f"expected one row per input beside the minted: {rows}"
+        assert len(rows) == len(minted) + 2, (
+            f"expected one row per input beside the minted: {rows}"
+        )
         assert sorted({r["record_id"] for r in rows} - minted) == ["r0", "r1"]
 
 

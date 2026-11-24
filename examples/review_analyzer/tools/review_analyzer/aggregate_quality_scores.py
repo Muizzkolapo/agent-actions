@@ -61,7 +61,8 @@ def aggregate_quality_scores(data: dict[str, Any]) -> dict[str, Any]:
         )
 
         all_reasoning.append(
-            f"Scorer {i} ({weighted:.1f}/10): {scorer_data.get('scoring_reasoning', 'No reasoning')}"
+            f"Scorer {i} ({weighted:.1f}/10): "
+            f"{scorer_data.get('scoring_reasoning', 'No reasoning')}"
         )
 
         red_flags = scorer_data.get("red_flags", [])

@@ -213,7 +213,10 @@ class TestSchemaKeywords:
 
     @pytest.mark.parametrize("mode", sorted(ANSWER))
     def test_a_pattern_on_a_unified_field_conforms(self, mode):
-        schema = {"name": "out", "fields": [{"id": "code", "type": "string", "pattern": r"^Z\d+$"}]}
+        schema = {
+            "name": "out",
+            "fields": [{"id": "code", "type": "string", "pattern": r"^Z\d+$"}],
+        }
         record = ANSWER[mode](schema, [], SEEDS[0])
 
         assert record["code"].startswith("Z") and record["code"][1:].isdigit()
@@ -293,7 +296,9 @@ class TestUpstreamEcho:
             ],
         }
         data, _ = expand_workflow_includes(workflow, "wf.yml", {"rewrite_round": branch}, [])
-        writer = next(a for a in expand_loops(data)["actions"] if a["name"] == "round_iter2__write")
+        writer = next(
+            a for a in expand_loops(data)["actions"] if a["name"] == "round_iter2__write"
+        )
         [observed] = writer["context_scope"]["observe"]
         context = {observed.split(".")[0]: {"invoice_id": "INV-1"}}
 

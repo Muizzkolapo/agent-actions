@@ -29,7 +29,8 @@ class DataTransformer:
     def update_schema_objects(
         data_old: dict[str, Any], data_new: dict[str, Any], keys_to_update: list[str]
     ) -> dict[str, Any]:
-        """Merge keys from data_old into data_new: replace if same type, combine if types differ."""
+        """Merge keys from data_old into data_new: replace if same type, combine if types
+        differ."""
         result = plain_copy(data_new)
 
         for key in keys_to_update:

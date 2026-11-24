@@ -19,8 +19,9 @@ _sentinel = object()
 if sys.modules.get("agent_actions.workflow.pipeline_file_mode", _sentinel) is _sentinel:
     sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
 
-from agent_actions.errors import ConfigurationError
-from agent_actions.llm.batch.services.processing import BatchProcessingService
+# Imported only once the module stub above is in place.
+from agent_actions.errors import ConfigurationError  # noqa: E402
+from agent_actions.llm.batch.services.processing import BatchProcessingService  # noqa: E402
 
 
 def _make_service(
@@ -351,7 +352,9 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         )
 
         result = service._merge_carry_forward(
-            "test_action", [{"source_guid": "i0", "gen": "new", "_state": "processed"}], "data.json"
+            "test_action",
+            [{"source_guid": "i0", "gen": "new", "_state": "processed"}],
+            "data.json",
         )
 
         assert [r["source_guid"] for r in result] == ["i0"]
@@ -425,8 +428,12 @@ class TestAStoredRowIsNotResurrectedBesideItsReplacement:
         forward = _make_service(storage_backend=self._backend(list(rows)))
         backward = _make_service(storage_backend=self._backend(list(reversed(rows))))
 
-        assert forward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "second"
-        assert backward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "first"
+        assert (
+            forward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "second"
+        )
+        assert (
+            backward._merge_carry_forward("test_action", batch, "data.json")[1]["gen"] == "first"
+        )
 
     def test_an_input_the_batch_carried_but_did_not_answer_for_keeps_its_row(self):
         """`producer_source_guids` is the consumed set MINUS the row's own guid, so a

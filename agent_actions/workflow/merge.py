@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 def deep_merge_record(existing: dict[str, Any], new_record: dict[str, Any]) -> None:
-    """Merge new_record into existing in place: content dicts merge, lineage deduplicates, other fields first-wins."""
+    """Merge new_record into existing in place: content dicts merge, lineage deduplicates, other
+    fields first-wins."""
     for key, value in new_record.items():
         if key == "content" and isinstance(value, dict):
             if "content" not in existing:

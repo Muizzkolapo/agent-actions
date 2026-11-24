@@ -164,7 +164,9 @@ def test_a_name_two_files_define_is_the_later_named_files_everywhere(tmp_path, r
         "summarize": "Summarize the page in one sentence.",
         "direct": "one sentence",
     }
-    warnings = [r.getMessage() for r in caplog.records if "redefines global name" in r.getMessage()]
+    warnings = [
+        r.getMessage() for r in caplog.records if "redefines global name" in r.getMessage()
+    ]
     assert len(warnings) == 1
     assert "'helpers.j2'" in warnings[0] and "house_length" in warnings[0]
 

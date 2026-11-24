@@ -181,7 +181,9 @@ def test_matches_regex_detail_names_the_observed_value():
 
 
 def test_no_forbidden_phrases_handles_a_non_string_phrase_under_case_sensitive():
-    passed, detail = run("no_forbidden_phrases", "the value is 5", phrases=[5], case_sensitive=True)
+    passed, detail = run(
+        "no_forbidden_phrases", "the value is 5", phrases=[5], case_sensitive=True
+    )
     assert passed is False
     assert "5" in detail
 

@@ -208,7 +208,9 @@ class TestPreflightWiring:
         with FakeEndpoint(mode="ignore") as server:
             _declare(server.base_url)
 
-            result = WorkflowResolutionService(action_configs={"classify": _action()}).resolve_all()
+            result = WorkflowResolutionService(
+                action_configs={"classify": _action()}
+            ).resolve_all()
 
         assert result.errors == []
         assert server.requests == []

@@ -2,7 +2,8 @@
 
 Each block is loaded as `agac run` loads it and put to three refusals of its pre-flight:
 naming an action that is not upstream through `dependencies`, in a guard, a prompt or
-any part of its context scope, and reading at FILE granularity with no `dependencies`. They are called on their own because a fragment
+any part of its context scope, and reading at FILE granularity with no `dependencies`. They are
+called on their own because a fragment
 leaves out the `context_scope` and schema fields the rest of pre-flight asks for. An
 intent, a prompt, a tool's impl and a schema are filled in, and an action a block names
 without showing stands in. A block the loader refuses for another reason is named in
@@ -42,14 +43,21 @@ _NOT_REACHABLE = "is not reachable from action"
 
 # Blocks the loader refuses for a reason other than the two this test is about,
 # by page and the actions shown.
+_REFERENCE = "docs.agent-actions/docs/reference"
+_PATTERNS = "examples/incident_triage/docs/PATTERNS.md"
+_WRONG_FORM = "shows the wrong form beside the right one"
 _NOT_LOADED = {
-    "docs.agent-actions/docs/guides/troubleshooting.md::generate_report+generate_report": "shows the wrong form beside the right one",
-    "docs.agent-actions/docs/reference/validation/index.md::action_a+action_b": "shows a circular dependency",
-    "docs.agent-actions/docs/reference/cli/expect.md::Check output quality": "a CI step, not a workflow",
-    "docs.agent-actions/docs/reference/prompts/prompt-store.md::analyze": "loads a store prompt this project lacks",
-    "docs.agent-actions/docs/reference/configuration/endpoints.md::extract+classify+review+final_check": "selects endpoints this project does not declare",
-    "examples/incident_triage/docs/PATTERNS.md::validate_data+validate_data+use_validated": "shows the wrong form beside the right one",
-    "examples/incident_triage/docs/PATTERNS.md::inject_data+inject_data": "shows the wrong form beside the right one",
+    "docs.agent-actions/docs/guides/troubleshooting.md::generate_report+generate_report": (
+        _WRONG_FORM
+    ),
+    f"{_REFERENCE}/validation/index.md::action_a+action_b": "shows a circular dependency",
+    f"{_REFERENCE}/cli/expect.md::Check output quality": "a CI step, not a workflow",
+    f"{_REFERENCE}/prompts/prompt-store.md::analyze": "loads a store prompt this project lacks",
+    f"{_REFERENCE}/configuration/endpoints.md::extract+classify+review+final_check": (
+        "selects endpoints this project does not declare"
+    ),
+    f"{_PATTERNS}::validate_data+validate_data+use_validated": _WRONG_FORM,
+    f"{_PATTERNS}::inject_data+inject_data": _WRONG_FORM,
 }
 # Pages with a block that lists actions and is not YAML until its template is rendered.
 _TEMPLATED = {

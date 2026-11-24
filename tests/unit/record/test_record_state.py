@@ -12,9 +12,9 @@ from agent_actions.record.state import (
 
 class TestPublicPackageContract:
     def test_record_state_importable_from_package(self):
-        from agent_actions.record import RecordState as RS
+        from agent_actions.record import RecordState as PackageRecordState
 
-        assert RS.ACTIVE == "active"
+        assert PackageRecordState.ACTIVE == "active"
 
 
 class TestRecordStateEnum:

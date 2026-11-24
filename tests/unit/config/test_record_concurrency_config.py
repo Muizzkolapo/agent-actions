@@ -53,7 +53,8 @@ def _agents(
     expanded = {
         "name": "w",
         "actions": [
-            a.model_dump(mode="python", exclude_unset=True, by_alias=True) for a in workflow.actions
+            a.model_dump(mode="python", exclude_unset=True, by_alias=True)
+            for a in workflow.actions
         ],
         "defaults": {
             **(project or {}),

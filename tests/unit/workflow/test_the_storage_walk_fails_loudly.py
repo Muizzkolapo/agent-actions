@@ -149,7 +149,9 @@ class TestTheActionActuallyFails:
         from agent_actions.workflow.runner_file_processing import process_files
 
         with pytest.raises(DependencyError) as excinfo:
-            process_files(_runner(reading=sqlite3.Error("row gone")), self._target_params(tmp_path))
+            process_files(
+                _runner(reading=sqlite3.Error("row gone")), self._target_params(tmp_path)
+            )
 
         message = str(excinfo.value)
         assert "r1.json" in message and "r2.json" in message, message

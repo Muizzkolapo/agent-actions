@@ -76,7 +76,10 @@ class TestRecordText:
         ("Page {{ slots.fact }} {% cache_point %}\nSlot", "Page {{ slots.fact }} \nSlot"),
         ("Page {{ slots.fact }}\n{% cache_point %}\nSlot", "Page {{ slots.fact }}\nSlot"),
         ("Page {{ slots.fact }} {%- cache_point -%}\nSlot", "Page {{ slots.fact }}Slot"),
-        ("Page {{ slots.fact }}{% cache_point %} after\nSlot", "Page {{ slots.fact }} after\nSlot"),
+        (
+            "Page {{ slots.fact }}{% cache_point %} after\nSlot",
+            "Page {{ slots.fact }} after\nSlot",
+        ),
     ],
     ids=["tag-at-the-end-of-a-line", "tag-alone-on-its-line", "tag-that-trims", "tag-mid-line"],
 )

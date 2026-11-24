@@ -526,7 +526,10 @@ def _index_workflow_lines(  # noqa: C901
         ):
             # Not an action of the render: a name a tag renders, a line in a dropped branch,
             # or a `- name:` inside a prompt or schema. A sibling of the current action ends it.
-            if current_action_indent is None or len(action_match.group(1)) <= current_action_indent:
+            if (
+                current_action_indent is None
+                or len(action_match.group(1)) <= current_action_indent
+            ):
                 current_action = None
                 current_action_indent = None
             continue

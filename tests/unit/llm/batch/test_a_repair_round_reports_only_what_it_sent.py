@@ -45,7 +45,9 @@ def test_sent_ids_name_only_the_admitted_record():
     for result in failed:
         strategy.evaluate(result)
     provider = RecordingProvider()
-    with patch("agent_actions.processing.task_preparer.TaskPreparer.prepare", side_effect=_prepare):
+    with patch(
+        "agent_actions.processing.task_preparer.TaskPreparer.prepare", side_effect=_prepare
+    ):
         submission = submit_repair_batch(
             action_indices={ACTION: 0},
             dependency_configs={},

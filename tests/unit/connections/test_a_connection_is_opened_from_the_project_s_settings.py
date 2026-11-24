@@ -97,7 +97,9 @@ def test_a_reference_to_a_variable_that_is_not_set_names_it():
 
 
 def test_a_setting_the_type_does_not_take_names_the_ones_it_does():
-    with pytest.raises(ConfigurationError, match="hostname.*Its settings are host, password, port"):
+    with pytest.raises(
+        ConfigurationError, match="hostname.*Its settings are host, password, port"
+    ):
         read_settings("warehouse", {"host": "db", "hostname": "db"}, _Settings)
 
 
@@ -120,7 +122,9 @@ def test_a_snowflake_key_passphrase_written_in_the_project_file_is_refused():
 
     raw = {"account": "acme", "user": "loader", "private_key_file_pwd": "hunter2"}
 
-    with pytest.raises(ConfigurationError, match="'private_key_file_pwd' must name an environment"):
+    with pytest.raises(
+        ConfigurationError, match="'private_key_file_pwd' must name an environment"
+    ):
         read_settings("warehouse", raw, SnowflakeSettings)
 
 

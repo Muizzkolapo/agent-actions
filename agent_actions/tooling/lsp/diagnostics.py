@@ -5,15 +5,15 @@ from pathlib import Path
 from lsprotocol import types as lsp
 
 from agent_actions.record.envelope import RECORD_FRAMEWORK_FIELDS
+from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES, SPECIAL_NAMESPACES
+
+from .models import Location, ProjectIndex, ReferenceType
+from .resolver import resolve_reference
 
 # The evaluator promotes every record key EXCEPT `content`, whose namespaces it spreads
 # instead. So `content == 'x'` resolves against nothing and filters every record -- the
 # one member of the set that must stay reportable.
 _PROMOTED_RECORD_FIELDS = RECORD_FRAMEWORK_FIELDS - {"content"}
-from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES, SPECIAL_NAMESPACES
-
-from .models import Location, ProjectIndex, ReferenceType
-from .resolver import resolve_reference
 
 
 def publish_diagnostics(uri: str, *, get_index_for_file, get_text_document, publish_fn) -> None:
@@ -360,7 +360,9 @@ def _dotted_suggestions(action, index: ProjectIndex, file_path: Path, field: str
     return sorted(matches)
 
 
-def _in_this_file(location: Location, file_path: Path, index: ProjectIndex) -> tuple[Location, str]:
+def _in_this_file(
+    location: Location, file_path: Path, index: ProjectIndex
+) -> tuple[Location, str]:
     """Where a diagnostic about *location* sits in *file_path*, and words naming its real place.
 
     An action a template macro defines has its line in the template, which means nothing

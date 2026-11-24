@@ -53,7 +53,8 @@ def _check_repair_mode(key: str, mode: Any, *, allow_none: bool) -> None:
         return
     if mode not in allowed:
         raise ValueError(
-            f"{key} must be one of {', '.join(allowed)} or a {{prompt: ...}} mapping; got: {mode!r}"
+            f"{key} must be one of {', '.join(allowed)} or a {{prompt: ...}} mapping; "
+            f"got: {mode!r}"
         )
 
 
@@ -335,7 +336,9 @@ class ExpectationService:
         """Apply the on_exhausted policy to a loop that ended without a pass."""
         if self._on_exhausted == "raise":
             failed = (
-                [o.id for o in suite_result.failed if o.severity == "error"] if suite_result else []
+                [o.id for o in suite_result.failed if o.severity == "error"]
+                if suite_result
+                else []
             )
             raise ExpectationsExhaustedError(self.suite.name, failed, iterations)
         if self._on_exhausted == "fail":
@@ -373,7 +376,9 @@ class ExpectationService:
             )
         if mode != "auto":
             return original_prompt
-        return compose_repair_prompt(original_prompt, last_response, last_suite_result, self._hints)
+        return compose_repair_prompt(
+            original_prompt, last_response, last_suite_result, self._hints
+        )
 
     def mode_for(self, suite_result: SuiteResult) -> str | dict[str, Any]:
         """Which regeneration mode governs the failure that just happened.

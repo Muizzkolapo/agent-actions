@@ -69,7 +69,10 @@ class TestStorageErrorsWhileCorrelating:
         assert raised.value.__cause__ is error
 
     def test_file_not_found_for_single_file_skips_and_continues(self, loop_manager):
-        loop_manager.storage_backend.list_target_files.return_value = ["file_a.json", "file_b.json"]
+        loop_manager.storage_backend.list_target_files.return_value = [
+            "file_a.json",
+            "file_b.json",
+        ]
 
         def read_target(_version, relative_path):
             if relative_path == "file_a.json":

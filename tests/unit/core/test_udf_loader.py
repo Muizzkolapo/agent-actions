@@ -138,7 +138,8 @@ class TestDiscoverUDFs:
         """Test that import errors are wrapped in UDFLoadError."""
         bad_file = temp_user_code_dir / "bad.py"
         bad_file.write_text(
-            '\nfrom agent_actions import udf_tool\n\n@udf_tool()\ndef bad_func()  # Missing colon - syntax error\n    return "bad"\n'
+            "\nfrom agent_actions import udf_tool\n\n@udf_tool()\ndef bad_func()  # "
+            'Missing colon - syntax error\n    return "bad"\n'
         )
         with pytest.raises(UDFLoadError) as exc_info:
             discover_udfs(temp_user_code_dir)

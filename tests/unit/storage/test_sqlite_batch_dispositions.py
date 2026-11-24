@@ -109,7 +109,8 @@ class TestSetDispositionsBatch:
         assert "existing" in record_ids
 
     def test_batch_clears_prior_dispositions(self, backend: SQLiteBackend):
-        """Batch write should DELETE prior rows for each (action, record) — no phantom coexistence."""
+        """Batch write should DELETE prior rows for each (action, record) — no phantom
+        coexistence."""
         # Write FAILED first via single-record method.
         backend.set_disposition("action_A", "rec_1", DISPOSITION_FAILED, reason="error1")
 
@@ -153,7 +154,9 @@ class TestSetDispositionsBatch:
         ]
         backend.set_dispositions_batch(batch)
 
-        total = sum(len(backend.get_disposition(f"action_{d}")) for d in sorted(VALID_DISPOSITIONS))
+        total = sum(
+            len(backend.get_disposition(f"action_{d}")) for d in sorted(VALID_DISPOSITIONS)
+        )
         assert total == len(VALID_DISPOSITIONS)
 
 

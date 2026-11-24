@@ -13,7 +13,9 @@ from agent_actions.processing.strategies.file_tool import FileToolStrategy
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.utils.udf_management.registry import FileUDFResult
 
-UPSTREAM = [{"source_guid": "G0", "version_correlation_id": "corr_abc", "content": {"u": {"x": 1}}}]
+UPSTREAM = [
+    {"source_guid": "G0", "version_correlation_id": "corr_abc", "content": {"u": {"x": 1}}}
+]
 
 
 def invoke(agent_name, agent_config, count=2):

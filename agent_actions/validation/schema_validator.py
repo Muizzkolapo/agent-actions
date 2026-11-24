@@ -189,7 +189,8 @@ class SchemaValidator(BaseValidator):
             self._validate_against_meta_schema_static(schema_data)
         except jsonschema.exceptions.SchemaError as e:
             self.add_error(
-                f"{display_name} (file: {file_path.name}) has a malformed JSON Schema: {e.message}.",
+                f"{display_name} (file: {file_path.name}) has a malformed JSON Schema: "
+                f"{e.message}.",
                 field=schema_name,
             )
             return
@@ -414,7 +415,9 @@ class SchemaValidator(BaseValidator):
             # deduplication).  SchemaLoader handles name-collision warnings
             # at runtime; the validator checks structural correctness of
             # each file regardless.
-            files_to_process = sorted(p for ext in SCHEMA_FILE_GLOBS for p in schema_dir.rglob(ext))
+            files_to_process = sorted(
+                p for ext in SCHEMA_FILE_GLOBS for p in schema_dir.rglob(ext)
+            )
             if not files_to_process:
                 self.add_warning(
                     f"No schema files ({', '.join(SCHEMA_FILE_GLOBS)}) found in "

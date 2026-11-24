@@ -352,7 +352,8 @@ class TestAnExhaustedRecordKeepsTheRuleThatFailed:
         expectations = dropped.recovery_metadata.expectations
         assert expectations.attempts == 2
         assert expectations.failed == ["enough_options"], (
-            f"the rule it failed was lost ({expectations.failed}); the output and the halt message "
+            f"the rule it failed was lost ({expectations.failed}); the output and the "
+            "halt message "
             "both then claim nothing failed"
         )
 

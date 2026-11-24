@@ -20,8 +20,9 @@ _sentinel = object()
 if sys.modules.get("agent_actions.workflow.pipeline_file_mode", _sentinel) is _sentinel:
     sys.modules["agent_actions.workflow.pipeline_file_mode"] = MagicMock()
 
-from agent_actions.llm.batch.services.processing import BatchProcessingService
-from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+# Imported only once the module stub above is in place.
+from agent_actions.llm.batch.services.processing import BatchProcessingService  # noqa: E402
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend  # noqa: E402
 
 ACTION = "expand_action"
 RELATIVE = "data.json"

@@ -875,7 +875,9 @@ class TestTheIndexerReadsRealWorkflowText:
         )
         action = idx.file_actions[wf]["voter"]
 
-        assert action.version_variants == ["voter_1", "voter_2", "voter_3"], action.version_variants
+        assert action.version_variants == ["voter_1", "voter_2", "voter_3"], (
+            action.version_variants
+        )
         assert [d for d in collect_diagnostics(wf, idx) if "Guard condition" in d.message] == []
 
     def test_a_documented_operator_is_not_read_as_a_field(self, tmp_path: Path):
@@ -1513,7 +1515,8 @@ class TestTheIndexAgreesWithTheDocument:
                     if isinstance(want, str) and want.strip():
                         if meta.guard_condition != want:
                             mismatches.append(
-                                f"{file_path.name}::{name} guard {meta.guard_condition!r} != {want!r}"
+                                f"{file_path.name}::{name} guard {meta.guard_condition!r} "
+                                f"!= {want!r}"
                             )
                         if meta.guard_line is None:
                             mismatches.append(f"{file_path.name}::{name} guard has no anchor line")

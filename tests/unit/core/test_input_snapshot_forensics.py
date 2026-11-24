@@ -323,7 +323,9 @@ class TestNonTerminalNoSnapshot:
         "make_result",
         [
             pytest.param(
-                lambda: ProcessingResult.success(data=[{"content": {"v": 1}}], source_guid="sg-ok"),
+                lambda: ProcessingResult.success(
+                    data=[{"content": {"v": 1}}], source_guid="sg-ok"
+                ),
                 id="success",
             ),
             pytest.param(lambda: ProcessingResult.filtered(source_guid="sg-filt"), id="filtered"),

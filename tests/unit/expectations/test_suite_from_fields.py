@@ -66,7 +66,9 @@ def test_a_file_whose_only_rules_are_field_scoped_is_a_suite():
 
 def test_field_scoped_and_top_level_rules_both_load():
     data = dict(FIELD_SCOPED_SCHEMA)
-    data["expectations"] = [{"id": "reason_present", "type": "not_null", "field": "density_reason"}]
+    data["expectations"] = [
+        {"id": "reason_present", "type": "not_null", "field": "density_reason"}
+    ]
     suite = build_suite_from_schema_data("fb_page_summary", data)
     assert [e.resolved_id for e in suite.expectations] == [
         "summary_word_count",

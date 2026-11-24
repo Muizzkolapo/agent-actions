@@ -7,7 +7,9 @@ from agent_actions.prompt.render_workflow import new_load_render
 def test_new_load_render_uses_given_class_and_globals(tmp_path):
     class Sub(LoadRender): ...
 
-    load, folder_names = new_load_render("a: 1\n", tmp_path / "templates", tmp_path, load_class=Sub)
+    load, folder_names = new_load_render(
+        "a: 1\n", tmp_path / "templates", tmp_path, load_class=Sub
+    )
     assert type(load) is Sub
     assert "load_prompt" in load.env.globals
     assert "env" in load.env.globals

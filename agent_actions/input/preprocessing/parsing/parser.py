@@ -85,7 +85,8 @@ def _bounds_a_value(end: Any) -> str | None:
 
 
 def _is_not_a_range(operand: ASTNode) -> bool:
-    """Whether an operand can never be a range. A field may hold one, so it is left to the record."""
+    """Whether an operand can never be a range. A field may hold one, so it is left to the
+    record."""
     if isinstance(operand, FieldNode):
         return False
     if not (
@@ -173,7 +174,9 @@ class WhereClauseParser:
             | CaselessKeyword("BETWEEN")
             | CaselessKeyword("CONTAINS")
         )
-        field_name = ~reserved_words + Regex(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
+        field_name = ~reserved_words + Regex(
+            r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*"
+        )
         field_name.add_parse_action(lambda t: FieldNode(field_path=t[0]))
 
         array_element = Forward()
@@ -219,7 +222,9 @@ class WhereClauseParser:
             + Suppress(CaselessKeyword("AND"))
             + range_bound
         )
-        postfix_ops = Group(unary_postfix_ops) | range_suffix if unary_postfix_ops else range_suffix
+        postfix_ops = (
+            Group(unary_postfix_ops) | range_suffix if unary_postfix_ops else range_suffix
+        )
 
         # NOT sits below comparisons so `NOT x == 1` negates the comparison, not `x`.
         where_expr = infix_notation(
@@ -452,7 +457,8 @@ class WhereClauseParser:
 
         if not parsed:
             return ParseResult(
-                success=False, error=ParseError("Failed to parse WHERE clause", 1, 1, "ParseFailed")
+                success=False,
+                error=ParseError("Failed to parse WHERE clause", 1, 1, "ParseFailed"),
             )
 
         root_node = parsed[0]

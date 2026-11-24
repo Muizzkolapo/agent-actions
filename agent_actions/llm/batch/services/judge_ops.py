@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 
 
 def judges_in_batch(agent_config: dict[str, Any]) -> bool:
-    """Whether this batch action's judge calls go out as a batch; ``judge_mode: online`` opts out."""
+    """Whether this batch action's judge calls go out as a batch; ``judge_mode: online`` opts
+    out."""
     expect = agent_config.get("expect")
     return isinstance(expect, dict) and expect.get("judge_mode") != "online"
 
@@ -36,7 +37,9 @@ def judge_verdicts(state: RecoveryState | None) -> dict[str, Any]:
     return state.side_results.get(JUDGE_KIND, {}) if state else {}
 
 
-def with_judge_results(agent_config: dict[str, Any], state: RecoveryState | None) -> dict[str, Any]:
+def with_judge_results(
+    agent_config: dict[str, Any], state: RecoveryState | None
+) -> dict[str, Any]:
     """*agent_config* carrying what the judge batches left, for a result writer that validates."""
     verdicts = judge_verdicts(state)
     if not verdicts:

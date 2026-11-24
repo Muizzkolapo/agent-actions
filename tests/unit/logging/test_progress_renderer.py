@@ -318,7 +318,9 @@ class TestNothingIsSwallowed:
 
     def test_a_diagnostic_warning_is_still_kept_off_the_console(self, rendered):
         out = rendered(
-            BaseEvent(level=EventLevel.WARN, category="prompt", message="internal", diagnostic=True)
+            BaseEvent(
+                level=EventLevel.WARN, category="prompt", message="internal", diagnostic=True
+            )
         )
         assert out == ""
 
@@ -470,7 +472,9 @@ class TestAFanOutNamesItsActions:
     def test_a_resumed_step_counts_only_what_is_left(self, rendered):
         """Counting the level instead of its pending set overstates a resumed run."""
         out = rendered(
-            StepStartEvent(step_index=0, total_steps=3, actions=["a", "b", "c"], pending=["b", "c"])
+            StepStartEvent(
+                step_index=0, total_steps=3, actions=["a", "b", "c"], pending=["b", "c"]
+            )
         )
         assert "Step 1/3 2 actions: b, c" in out
         assert "3 actions" not in out
@@ -552,7 +556,9 @@ class TestABatchActionIsMarkedAsOne:
 class TestAFailedRunIsUnmistakable:
     def test_a_workflow_failure_is_reported(self, rendered):
         out = rendered(
-            WorkflowFailedEvent(workflow_name="quiz_gen", error_message="schema 'answer' not found")
+            WorkflowFailedEvent(
+                workflow_name="quiz_gen", error_message="schema 'answer' not found"
+            )
         )
         assert "schema 'answer' not found" in out
         assert "quiz_gen" in out, "the failure must name the workflow it belongs to"
@@ -599,14 +605,18 @@ class TestAFailedRunIsUnmistakable:
 
 class TestTheStreamSaysNothingItDoesNotNeedTo:
     def test_a_finished_step_emits_no_line(self, rendered):
-        before = rendered(StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"]))
+        before = rendered(
+            StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"])
+        )
         after = rendered(
             StepCompleteEvent(step_index=0, total_steps=1, elapsed_time=5.0, completed=1)
         )
         assert after == before, "the actions already reported; the step adds nothing"
 
     def test_a_starting_action_emits_no_line(self, rendered):
-        before = rendered(StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"]))
+        before = rendered(
+            StepStartEvent(step_index=0, total_steps=1, actions=["a"], pending=["a"])
+        )
         after = rendered(ActionStartEvent(action_name="a", action_index=0, total_actions=1))
         assert after == before
 
@@ -694,7 +704,9 @@ class TestFailedChecksAreNamed:
             self._workflow(records_failed_checks=7),
         )
 
-        assert "  ⚠ observed  4 records in 0.1s (agac-provider/mock) — 4 failed their checks" in out
+        assert (
+            "  ⚠ observed  4 records in 0.1s (agac-provider/mock) — 4 failed their checks" in out
+        )
         assert (
             "  ⚠ repaired  4 records in 0.1s (agac-provider/mock) — 1 skipped by guard, "
             "3 failed their checks"

@@ -294,7 +294,8 @@ def validate_prompt_fields_ast(
 
     for missing_ref in analysis_results["missing_references"]:
         errors.append(
-            f"Missing reference: '{missing_ref}' (Available: {', '.join(available_context.keys())})"
+            f"Missing reference: '{missing_ref}' (Available: "
+            f"{', '.join(available_context.keys())})"
         )
 
     for missing_field in analysis_results["missing_fields"]:

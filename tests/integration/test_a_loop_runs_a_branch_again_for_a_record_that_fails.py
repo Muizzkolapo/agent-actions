@@ -141,13 +141,17 @@ actions:
 """
 
 SCHEMAS = {
-    "spec_out": "fields:\n  - {id: topic, type: string, required: true}\n  - {id: passes_at, type: integer, required: true}\n",
+    "spec_out": "fields:\n  - {id: topic, type: string, required: true}\n  - {id: "
+    "passes_at, type: integer, required: true}\n",
     "draft": "fields:\n  - {id: question, type: string, required: true}\n",
     "verdict": (
-        "fields:\n  - {id: passed, type: boolean, required: true}\n  - {id: reasons, type: string, required: true}\n"
-        "  - {id: tries, type: integer, required: true}\n  - {id: question, type: string, required: true}\n"
+        "fields:\n  - {id: passed, type: boolean, required: true}\n  - {id: reasons, "
+        "type: string, required: true}\n"
+        "  - {id: tries, type: integer, required: true}\n  - {id: question, type: "
+        "string, required: true}\n"
     ),
-    "published": "fields:\n  - {id: tries, type: integer, required: true}\n  - {id: passed, type: boolean, required: true}\n",
+    "published": "fields:\n  - {id: tries, type: integer, required: true}\n  - {id: "
+    "passed, type: boolean, required: true}\n",
 }
 
 

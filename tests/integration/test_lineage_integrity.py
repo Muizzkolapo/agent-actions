@@ -334,7 +334,8 @@ class TestLineageNToMDedup:
     """FILE-mode dedup: N inputs -> M outputs with source_mapping."""
 
     def test_dedup_with_shared_source_guid_produces_distinct_lineage(self):
-        """5 inputs sharing source_guid, source_mapping={0:0, 1:1, 2:2}: each output gets distinct parent lineage."""
+        """5 inputs sharing source_guid, source_mapping={0:0, 1:1, 2:2}: each output gets distinct
+        parent lineage."""
         shared_guid = "shared-dedup-guid"
         source_items = [
             _make_source_item(
@@ -498,7 +499,8 @@ class TestLineageVersionParallel:
     """Version/parallel actions: same input processed by multiple agents."""
 
     def test_version_correlation_id_deterministic(self):
-        """Same session_id + version_base_name + source_guid -> same correlation_id across calls."""
+        """Same session_id + version_base_name + source_guid -> same correlation_id across
+        calls."""
         session_id = _uuid()
         base_name = "voter"
         guid = _uuid()

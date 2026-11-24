@@ -51,7 +51,9 @@ def _rebuild(value: Any, readonly: bool, root: Any = None) -> Any:
                 dict.update(
                     made,
                     {
-                        key: item if type(item) in _LEAVES else _child(item, memo, walked, readonly)
+                        key: item
+                        if type(item) in _LEAVES
+                        else _child(item, memo, walked, readonly)
                         for key, item in pairs
                     },
                 )

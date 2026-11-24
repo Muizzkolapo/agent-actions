@@ -9,7 +9,9 @@ from tests.integration.test_render_error_names_the_workflow import _project
 
 
 @pytest.mark.parametrize(
-    "route", [("inspect", "-a", "w"), ("expect", "list", "-a", "w")], ids=["inspect", "expect-list"]
+    "route",
+    [("inspect", "-a", "w"), ("expect", "list", "-a", "w")],
+    ids=["inspect", "expect-list"],
 )
 def test_a_name_mismatch_is_refused_under_the_requested_workflow(tmp_path, route):
     root = _project(tmp_path, "schema")

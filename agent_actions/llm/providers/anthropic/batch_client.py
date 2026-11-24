@@ -192,7 +192,8 @@ class AnthropicBatchClient(BaseBatchClient):
         return f"Unknown result type: {result_type}"
 
     def _extract_error_status(self, raw_response: Any) -> int | None:
-        """The HTTP status of an errored result's error type; None for an expired or canceled one."""
+        """The HTTP status of an errored result's error type; None for an expired or canceled
+        one."""
         result = self._get_attribute_or_key(raw_response, "result")
         error = self._get_attribute_or_key(result, "error")
         # An errored result holds the API's error response: {type: error, error: {type, message}}.

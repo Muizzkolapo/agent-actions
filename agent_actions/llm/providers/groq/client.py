@@ -224,7 +224,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 
-        ResponseBuilder.record_usage_and_event(response, "groq", model_name, latency_ms, request_id)
+        ResponseBuilder.record_usage_and_event(
+            response, "groq", model_name, latency_ms, request_id
+        )
 
         choice = response.choices[0] if getattr(response, "choices", None) else None
         ended = (

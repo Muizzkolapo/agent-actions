@@ -21,7 +21,8 @@ class PromptFormatter:
             Raw prompt string
 
         Raises:
-            ConfigValidationError: If prompt is empty/whitespace or null for non-tool/hitl/seed/source actions
+            ConfigValidationError: If prompt is empty/whitespace or null for
+                non-tool/hitl/seed/source actions
             PromptValidationError: If prompt retrieval or loading fails
         """
         raw_prompt = agent_config.get(PROMPT_KEY)

@@ -282,5 +282,7 @@ def test_dag_fit_and_the_refusal_read_a_tool_the_same_way(shape):
     """Both checks take one reading of a tool's output (1510)."""
     source, expected = _SHARED_READING[shape]
     assert unconditional_output_keys(source) == expected
-    risks = find_conditional_required_field_risks({"t": {"source": source, "required": ["a", "b"]}})
+    risks = find_conditional_required_field_risks(
+        {"t": {"source": source, "required": ["a", "b"]}}
+    )
     assert bool(risks) == ("b" not in expected), risks

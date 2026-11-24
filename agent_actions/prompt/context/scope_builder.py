@@ -259,9 +259,11 @@ class DependencyNamespaceBuilder:
         if agent_config and agent_config.get("dependencies") and not agent_indices:
             dependencies = agent_config.get("dependencies", [])
             raise ConfigurationError(
-                f"Action '{agent_name}' has dependencies {dependencies} but agent_indices was not provided. "
+                f"Action '{agent_name}' has dependencies {dependencies} but agent_indices "
+                "was not provided. "
                 f"agent_indices is required for dependency resolution.\n\n"
-                f"Ensure the workflow orchestrator passes agent_indices to build_field_context_with_history().",
+                "Ensure the workflow orchestrator passes agent_indices to "
+                "build_field_context_with_history().",
                 context={
                     "action": agent_name,
                     "dependencies": dependencies,
@@ -288,7 +290,9 @@ class VersionNamespaceBuilder:
         if not version_context:
             return set()
         reserved_promotions = {k for k in ("i", "idx") if k in version_context}
-        return reserved_promotions | (set(version_context) - VersionNamespaceBuilder._RESERVED_KEYS)
+        return reserved_promotions | (
+            set(version_context) - VersionNamespaceBuilder._RESERVED_KEYS
+        )
 
     @staticmethod
     def build(version_context: dict | None, agent_name: str) -> dict | None:

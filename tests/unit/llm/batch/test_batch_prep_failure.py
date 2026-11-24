@@ -168,7 +168,9 @@ class TestBatchPreparatorCatchBlock:
     @patch("agent_actions.llm.batch.processing.preparator.get_task_preparer")
     @patch("agent_actions.prompt.formatter.PromptFormatter.get_raw_prompt", return_value="prompt")
     @patch.object(BatchTaskPreparator, "_run_preflight_validation")
-    def test_disposition_written_on_failure(self, _mock_preflight, _mock_prompt, mock_get_preparer):
+    def test_disposition_written_on_failure(
+        self, _mock_preflight, _mock_prompt, mock_get_preparer
+    ):
         """When storage_backend is available, DISPOSITION_FAILED is written."""
         mock_preparer = MagicMock()
         mock_preparer.prepare.side_effect = ValueError("boom")

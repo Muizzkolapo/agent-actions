@@ -49,7 +49,8 @@ def _project_mapping(value: object, key: str) -> dict:
     if isinstance(value, dict):
         return value
     sys.stderr.write(
-        f"agent_actions: ignoring {key}: expected a mapping, got {type(value).__name__}: {value!r}\n"
+        f"agent_actions: ignoring {key}: expected a mapping, got {type(value).__name__}: "
+        f"{value!r}\n"
     )
     return {}
 
@@ -142,7 +143,8 @@ class LoggingConfig:
 
     @classmethod
     def from_project_config(cls, config: dict) -> LoggingConfig:
-        """Build from the ``logging:`` block of ``agent_actions.yml``; keys nothing reads are reported."""
+        """Build from the ``logging:`` block of ``agent_actions.yml``; keys nothing reads are
+        reported."""
         logging_config = _project_mapping(config.get("logging"), "logging")
         file_config = _project_mapping(logging_config.get("file"), "logging.file")
         _report_unread_keys(logging_config, PROJECT_LOGGING_KEYS, "logging")

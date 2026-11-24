@@ -258,7 +258,9 @@ class TestStatusCorruptedFileExitCode:
             mock_paths = MagicMock()
             mock_paths.io_dir = io_dir
 
-            with patch.object(ProjectPathsFactory, "create_project_paths", return_value=mock_paths):
+            with patch.object(
+                ProjectPathsFactory, "create_project_paths", return_value=mock_paths
+            ):
                 with pytest.raises(click.ClickException, match=match):
                     cmd.execute()
 

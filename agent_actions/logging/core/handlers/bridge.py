@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.diagnostics import DIAGNOSTIC_KEY
 
 if TYPE_CHECKING:
@@ -87,10 +89,6 @@ class LoggingBridgeHandler(logging.Handler):
 # =============================================================================
 # Log Event Type
 # =============================================================================
-
-from dataclasses import dataclass
-
-from agent_actions.logging.core.events import BaseEvent, EventLevel
 
 
 @dataclass

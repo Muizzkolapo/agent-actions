@@ -29,7 +29,9 @@ MODEL = "claude-test"
 
 def _call(prompt: int, completion: int) -> None:
     """One online model call that used *prompt* and *completion* tokens."""
-    response = SimpleNamespace(usage=SimpleNamespace(input_tokens=prompt, output_tokens=completion))
+    response = SimpleNamespace(
+        usage=SimpleNamespace(input_tokens=prompt, output_tokens=completion)
+    )
     ResponseBuilder.record_usage_and_event(response, "anthropic", MODEL, 1.0, "request")
 
 

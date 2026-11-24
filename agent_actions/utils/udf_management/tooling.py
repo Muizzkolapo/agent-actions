@@ -75,7 +75,9 @@ def output_schema_errors(
     """
     from agent_actions.utils.udf_management.registry import FileUDFResult
 
-    items = [out["data"] for out in result.outputs] if isinstance(result, FileUDFResult) else result
+    items = (
+        [out["data"] for out in result.outputs] if isinstance(result, FileUDFResult) else result
+    )
     positioned: list[tuple[int | None, Any]] = (
         list(enumerate(items)) if isinstance(items, list) else [(None, items)]
     )
@@ -117,7 +119,8 @@ def _validate_against_schema(
         type_info = f"{validation_type.capitalize()} schema"
 
         raise SchemaValidationError(
-            f"{type_info} validation failed for UDF '{func_name}'{item_info} at {error_path}: {e.message}",
+            f"{type_info} validation failed for UDF '{func_name}'{item_info} at "
+            f"{error_path}: {e.message}",
             context={
                 "function": func_name,
                 "validation_type": validation_type,

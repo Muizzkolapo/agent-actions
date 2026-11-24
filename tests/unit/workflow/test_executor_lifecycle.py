@@ -39,7 +39,8 @@ def mock_deps():
     deps.state_manager.get_status_details.return_value = {}
     deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
     deps.action_runner.execution_order = ["agent_a", "agent_b"]
-    # Default: no item-level failures (so actions complete as "completed", not "completed_with_failures")
+    # Default: no item-level failures (so actions complete as "completed", not
+    # "completed_with_failures")
     deps.action_runner.storage_backend.get_failed_items.return_value = []
     # Default: no guard-all-skipped disposition
     deps.action_runner.storage_backend.has_disposition.return_value = False
@@ -353,7 +354,8 @@ class TestHandleRunSuccess:
         assert result.metrics.model_name == "gpt-4"
 
     def test_guard_all_skipped_returns_skipped(self, executor, mock_deps):
-        """When all records are guard-skipped, status should be 'skipped' and ActionSkipEvent fired."""
+        """When all records are guard-skipped, status should be 'skipped' and ActionSkipEvent
+        fired."""
         mock_deps.action_runner.storage_backend.has_disposition.return_value = True
         mock_deps.action_runner.storage_backend.list_target_files.return_value = []
         mock_deps.action_runner.storage_backend.has_target_rows.return_value = False
@@ -375,7 +377,9 @@ class TestHandleRunSuccess:
             call for call in mock_fire.call_args_list if isinstance(call[0][0], ActionSkipEvent)
         ]
         assert len(skip_events) == 1
-        assert skip_events[0][0][0].skip_reason == "All records guard-filtered — no output produced"
+        assert (
+            skip_events[0][0][0].skip_reason == "All records guard-filtered — no output produced"
+        )
         assert skip_events[0][0][0].action_index == 0
         assert skip_events[0][0][0].total_actions == 2  # from execution_order fixture
 

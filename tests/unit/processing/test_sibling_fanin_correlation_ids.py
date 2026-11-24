@@ -13,7 +13,9 @@ from agent_actions.utils.udf_management.registry import FileUDFResult
 from agent_actions.workflow.merge import merge_records_by_key
 from agent_actions.workflow.pipeline_file_mode import reconcile_outputs
 
-UPSTREAM = [{"source_guid": "G0", "version_correlation_id": "corr_abc", "content": {"u": {"x": 1}}}]
+UPSTREAM = [
+    {"source_guid": "G0", "version_correlation_id": "corr_abc", "content": {"u": {"x": 1}}}
+]
 
 
 def expand(action_name, count, version_base_name=None, upstream=None):

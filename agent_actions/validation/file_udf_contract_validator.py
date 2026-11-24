@@ -108,7 +108,9 @@ def _source_constructs_new_dicts(source: str) -> bool:
     while True:
         before = len(list_dict_vars)
         for node in nodes:
-            if isinstance(node, ast.Assign) and _feeds_dicts(node.value, dict_vars, list_dict_vars):
+            if isinstance(node, ast.Assign) and _feeds_dicts(
+                node.value, dict_vars, list_dict_vars
+            ):
                 list_dict_vars |= {t.id for t in node.targets if isinstance(t, ast.Name)}
             elif (
                 isinstance(node, ast.AnnAssign)
@@ -172,7 +174,8 @@ def find_file_udf_contract_warnings(
             continue
         warnings.append(
             f"FILE-mode UDF '{meta['name']}' returns {annotation!r}, not FileUDFResult. "
-            f"If it constructs new dicts, wrap them in FileUDFResult(outputs=[{{source_index, data}}]); "
+            "If it constructs new dicts, wrap them in "
+            "FileUDFResult(outputs=[{source_index, data}]); "
             f"if it round-trips input items unchanged (filter mode), this is safe to ignore."
         )
     return warnings

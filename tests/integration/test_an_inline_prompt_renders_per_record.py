@@ -145,7 +145,7 @@ def test_a_custom_version_param_renders_the_versions_value(tmp_path, mode):
     prompt: "You are classifier {{ classifier_id }} (also {{ i }}, index {{ idx }}) of {{ version.length }}."
     schema: {answer: string}
     context_scope: { observe: [source.page_content] }
-""",
+""",  # noqa: E501
     )
 
     _run_to_the_end(project, ends_with=EXIT_SUCCESS)
@@ -237,7 +237,7 @@ def test_a_setting_that_branches_on_the_version_takes_each_versions_branch(tmp_p
     prompt: "Summarise: {{ source.page_content }}"
     schema: {answer: string}
     context_scope: { observe: [source.page_content] }
-""",
+""",  # noqa: E501
     )
 
     _run_to_the_end(project, ends_with=EXIT_SUCCESS)
@@ -255,13 +255,17 @@ def test_a_setting_that_branches_on_the_version_takes_each_versions_branch(tmp_p
 @pytest.mark.parametrize(
     "capture, kind",
     [
-        pytest.param("{% set kind %}{{ source.page_content }}{% endset %}", "kind", id="set-block"),
+        pytest.param(
+            "{% set kind %}{{ source.page_content }}{% endset %}", "kind", id="set-block"
+        ),
         pytest.param(
             "{% macro kind() %}{{ source.page_content }}{% endmacro %}", "kind()", id="macro"
         ),
     ],
 )
-def test_a_value_the_prompt_captures_per_record_is_tested_per_record(tmp_path, mode, capture, kind):
+def test_a_value_the_prompt_captures_per_record_is_tested_per_record(
+    tmp_path, mode, capture, kind
+):
     """The load decided the test against the tag's text, so every record took the else."""
     pages = [
         {"page_id": "p0", "page_content": "urgent"},
@@ -278,7 +282,7 @@ def test_a_value_the_prompt_captures_per_record_is_tested_per_record(tmp_path, m
       {{% if {kind} == "urgent" %}}ESCALATE NOW.{{% else %}}Handle normally.{{% endif %}} Kind={{{{ {kind} }}}} len={{{{ {kind} | length }}}}
     schema: {{answer: string}}
     context_scope: {{ observe: [source.page_content] }}
-""",
+""",  # noqa: E501
         pages,
     )
 
@@ -319,7 +323,10 @@ def test_an_inline_prompt_sends_each_record_what_its_store_twin_sends(tmp_path, 
         {"page_id": "p0", "page_content": "urgent"},
         {"page_id": "p1", "page_content": "routine"},
     ]
-    scope = "    schema: {answer: string}\n    context_scope: { observe: [facts.facts, source.page_content, source.page_id] }\n"
+    scope = (
+        "    schema: {answer: string}\n    context_scope: { observe: [facts.facts, "
+        "source.page_content, source.page_id] }\n"
+    )
     actions = """\
   - name: facts
     kind: tool

@@ -73,7 +73,10 @@ def _search_open_library(query: str, limit: int = 20) -> list[dict]:
             params={
                 "q": query,
                 "limit": limit,
-                "fields": "key,title,author_name,isbn,subject,first_publish_year,number_of_pages_median,publisher",
+                "fields": (
+                    "key,title,author_name,isbn,subject,first_publish_year,"
+                    "number_of_pages_median,publisher"
+                ),
             },
             timeout=15.0,
         )

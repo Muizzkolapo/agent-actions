@@ -10,6 +10,8 @@ from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.utils.template_escape import escape_jinja_in_inline_code
 
+_JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -159,8 +161,6 @@ def _template_action_names(template: str, names_items: tuple) -> frozenset[str]:
     from jinja2.exceptions import TemplateSyntaxError
 
     from agent_actions.prompt.aliases import prompt_aliases
-
-    _JINJA_KEYWORDS = frozenset({"loop", "range", "true", "false", "none", "self", "version"})
 
     try:
         env = Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # prompt text, not HTML

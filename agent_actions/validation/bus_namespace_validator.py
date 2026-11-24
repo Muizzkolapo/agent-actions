@@ -140,7 +140,9 @@ def promoted_version_names(config: Any) -> set[str]:
     return names
 
 
-def guard_valid_namespaces(action_names: set[str], loop_params: set[str] | None = None) -> set[str]:
+def guard_valid_namespaces(
+    action_names: set[str], loop_params: set[str] | None = None
+) -> set[str]:
     """What a guard UDF may read: the union over every shape its context can take.
 
     A guard receives the evaluation context rather than the action bus: a first-stage

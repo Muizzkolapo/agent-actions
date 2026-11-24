@@ -232,7 +232,9 @@ def test_a_poll_that_is_not_a_whole_number_of_seconds_from_one_up_is_refused(
     assert "--poll" in result.output
 
 
-def test_a_pause_with_no_open_batch_exits_4_and_says_wait_has_nothing_to_wait_for(tmp_path, capsys):
+def test_a_pause_with_no_open_batch_exits_4_and_says_wait_has_nothing_to_wait_for(
+    tmp_path, capsys
+):
     passes = Passes(tmp_path, (ActionStatus.COMPLETED, ActionStatus.PENDING))
 
     code = passes.run(wait=True, poll=5)

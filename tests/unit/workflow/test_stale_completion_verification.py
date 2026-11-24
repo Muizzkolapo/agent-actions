@@ -316,8 +316,10 @@ class TestCoordinatorSequentialVerification:
         from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 
         mock = self._make_coordinator_mock(storage_has_data=False)
-        mock.services.core.action_executor.execute_action_sync.return_value = ActionExecutionResult(
-            success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics()
+        mock.services.core.action_executor.execute_action_sync.return_value = (
+            ActionExecutionResult(
+                success=True, status=ActionStatus.COMPLETED, metrics=ExecutionMetrics()
+            )
         )
 
         result = AgentWorkflow._run_single_action(

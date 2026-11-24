@@ -271,7 +271,9 @@ class ChunkConfig(BaseModel):
     def _no_undeclared_keys(cls, data: Any) -> Any:
         return refuse_undeclared_keys(data, cls, "chunk_config")
 
-    chunk_size: int | None = Field(default=None, gt=0, description="Characters or tokens per chunk")
+    chunk_size: int | None = Field(
+        default=None, gt=0, description="Characters or tokens per chunk"
+    )
     chunk_overlap: int | None = Field(
         default=None, ge=0, description="Overlap between consecutive chunks"
     )
@@ -339,7 +341,8 @@ class RetryConfig(BaseModel):
         default=1.0,
         gt=0,
         le=300,
-        description="Backoff limit in seconds after the first failed attempt; doubles each attempt",
+        description="Backoff limit in seconds after the first failed attempt; doubles "
+        "each attempt",
     )
     max_delay: float = Field(
         default=60.0,
@@ -411,7 +414,8 @@ class ExpectConfig(BaseModel):
 
     suite: str | None = Field(
         default=None,
-        description="Schema-path file whose rules — on its fields, in its own expectations: block, or both — supply this action's; "
+        description="Schema-path file whose rules — on its fields, in its own "
+        "expectations: block, or both — supply this action's; "
         "omitted with no inline list, the action's own schema: file is read",
     )
     expectations: list[dict[str, Any]] | None = Field(
@@ -602,7 +606,8 @@ class ActionConfig(_RetryValidators):
     stop: str | list[str] | None = Field(default=None, description="Stop sequences")
     vendor_params: dict[str, Any] | None = Field(
         default=None,
-        description="Request parameters passed to the vendor SDK as written, over the defaults' key by key",
+        description="Request parameters passed to the vendor SDK as written, over the "
+        "defaults' key by key",
     )
 
     # --- Runtime-consumed keys (from AgentConfig) ---
@@ -1038,31 +1043,32 @@ class WorkflowConfig(BaseModel):
                     )
             hint = f". {'. '.join(hints)}." if hints else ""
             raise ValueError(
-                f"Dangling dependency references (not defined as actions): {sorted(dangling)}{hint}"
+                "Dangling dependency references (not defined as actions): "
+                f"{sorted(dangling)}{hint}"
             )
 
         # Iterative DFS cycle detection (avoids RecursionError on deep chains)
         dep_graph = self.get_dependency_graph()
-        WHITE, GRAY, BLACK = 0, 1, 2
-        color = {name: WHITE for name in dep_graph}
+        white, gray, black = 0, 1, 2
+        color = {name: white for name in dep_graph}
 
         for start_node in dep_graph:
-            if color[start_node] != WHITE:
+            if color[start_node] != white:
                 continue
             # stack entries: (node, iterator over its deps)
             stack = [(start_node, iter(dep_graph.get(start_node, [])))]
-            color[start_node] = GRAY
+            color[start_node] = gray
             while stack:
                 node, dep_iter = stack[-1]
                 dep = next(dep_iter, None)
                 if dep is None:
-                    color[node] = BLACK
+                    color[node] = black
                     stack.pop()
                 elif dep not in color:
                     # Versioned base name (e.g. "score_quality") — already
                     # validated by the dangling-dep check above; skip in DFS.
                     continue
-                elif color[dep] == GRAY:
+                elif color[dep] == gray:
                     # Reconstruct cycle path from stack
                     cycle = [n for n, _ in stack]
                     idx = cycle.index(dep)
@@ -1072,8 +1078,8 @@ class WorkflowConfig(BaseModel):
                         f"Circular dependency detected: {' -> '.join(cycle)}"
                         f"{self._branch_origins(cycle[:-1])}"
                     )
-                elif color[dep] == WHITE:
-                    color[dep] = GRAY
+                elif color[dep] == white:
+                    color[dep] = gray
                     stack.append((dep, iter(dep_graph.get(dep, []))))
 
         return self

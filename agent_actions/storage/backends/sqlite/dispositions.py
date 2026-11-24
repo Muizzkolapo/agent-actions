@@ -69,7 +69,8 @@ class SQLiteDispositionMixin(SQLitePayloadCodecMixin):
         with self._lock:
             cursor = self.connection.cursor()
             try:
-                # UNIQUE is on (action_name, record_id, disposition), so DELETE first to prevent coexistence.
+                # UNIQUE is on (action_name, record_id, disposition), so DELETE first to prevent
+                # coexistence.
                 cursor.execute(
                     "DELETE FROM record_disposition WHERE action_name = ? AND record_id = ?",
                     (action_name, record_id),

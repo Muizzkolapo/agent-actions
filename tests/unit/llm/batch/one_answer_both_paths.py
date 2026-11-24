@@ -330,7 +330,9 @@ class CollectPass:
     def _submit_repair(
         self, *, failed_results: list[BatchResult], strategy: Any, **_kw: Any
     ) -> None:
-        self.repaired.extend((result, strategy.build_feedback(result)) for result in failed_results)
+        self.repaired.extend(
+            (result, strategy.build_feedback(result)) for result in failed_results
+        )
 
     def _write(self, batch_results: list[BatchResult], **kw: Any) -> tuple[list, Any, None]:
         self.written = batch_results

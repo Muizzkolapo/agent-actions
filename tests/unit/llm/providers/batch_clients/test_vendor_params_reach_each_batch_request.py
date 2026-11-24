@@ -79,7 +79,11 @@ class TestAnthropicBatch:
             {
                 "name": "QuizSchema",
                 "description": "A quiz",
-                "input_schema": {"type": "object", "properties": {}, "additionalProperties": False},
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
             }
         ]
 

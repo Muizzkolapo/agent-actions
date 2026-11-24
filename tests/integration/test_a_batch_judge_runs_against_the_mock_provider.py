@@ -135,7 +135,9 @@ def test_the_main_batch_and_one_judge_batch_go_out_and_no_judge_call_online(fini
         for e in events
         if (m := re.fullmatch(r"Mock batch \S+ submitted: (\d+) tasks", e.get("message", "")))
     ]
-    assert sorted(submitted) == [2, 2 * 3], "expected the main batch and one judge request per vote"
+    assert sorted(submitted) == [2, 2 * 3], (
+        "expected the main batch and one judge request per vote"
+    )
     assert any("submitted as pages.json_judge_1" in e.get("message", "") for e in events)
     online = [e for e in events if e.get("event_type") == "LLMRequestEvent"]
     assert online == [], f"{len(online)} judge call(s) went online"

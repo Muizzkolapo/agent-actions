@@ -423,7 +423,9 @@ class TestInspectExpectBlockEndToEnd:
         result = CliRunner().invoke(cli, ["inspect", "-a", wf])
         assert result.exit_code == 0, result.output
 
-    def test_expect_block_naming_a_nonexistent_field_refuses_preflight(self, tmp_path, monkeypatch):
+    def test_expect_block_naming_a_nonexistent_field_refuses_preflight(
+        self, tmp_path, monkeypatch
+    ):
         wf = _build_expect_block_project(tmp_path, field_name="nonexistent_field")
         monkeypatch.chdir(tmp_path)
         monkeypatch.setenv("OPENAI_API_KEY", "not-used")

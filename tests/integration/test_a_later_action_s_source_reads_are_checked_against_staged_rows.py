@@ -331,7 +331,8 @@ def test_a_first_action_guard_on_a_field_no_row_holds_warns_and_runs(tmp_path, c
         "{{ source.page_content if source.page_content is defined else source.content }}",
         "{% if source.page_content is defined and source.page_content %}x{% endif %}"
         "{{ source.content }}",
-        "{% if 'page_content' in source and source.page_content %}x{% endif %}{{ source.content }}",
+        "{% if 'page_content' in source and source.page_content %}x{% endif %}{{ "
+        "source.content }}",
         "{{ source.content or source.page_content }}",
         "{% set t = source.page_content %}{{ t | default(source.content) }}",
         "{% with t = source.page_content %}{{ t | default(source.content) }}{% endwith %}",

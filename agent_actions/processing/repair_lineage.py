@@ -83,7 +83,9 @@ def note_rewritten_by_repair(
         return
     with _NOTING:
         for action in below:
-            _WRITTEN_ABOVE.setdefault(storage_backend, {}).setdefault(action, set()).update(written)
+            _WRITTEN_ABOVE.setdefault(storage_backend, {}).setdefault(action, set()).update(
+                written
+            )
             _GONE_ABOVE.setdefault(storage_backend, {}).setdefault(action, set()).update(gone)
         _write_kept(storage_backend)
 

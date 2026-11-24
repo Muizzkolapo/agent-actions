@@ -131,7 +131,9 @@ class RecoveryMetadata:
     def from_dict(cls, data: dict[str, Any]) -> "RecoveryMetadata":
         return cls(
             retry=RetryMetadata(**data["retry"]) if data.get("retry") else None,
-            evaluation=EvaluationMetadata(**data["evaluation"]) if data.get("evaluation") else None,
+            evaluation=EvaluationMetadata(**data["evaluation"])
+            if data.get("evaluation")
+            else None,
             expectations=(
                 ExpectationsMetadata(**data["expectations"]) if data.get("expectations") else None
             ),

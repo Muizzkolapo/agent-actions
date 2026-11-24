@@ -1,4 +1,5 @@
-"""`prompt_debug` prints each record's prompt when a batch is prepared, as an online call prints it."""
+"""`prompt_debug` prints each record's prompt when a batch is prepared, as an online call prints
+it."""
 
 from __future__ import annotations
 
@@ -34,7 +35,9 @@ def _config(**extra: Any) -> dict[str, Any]:
     }
 
 
-def _prepare(tmp_path: Any, config: dict[str, Any], feedback: dict[str, str] | None = None) -> None:
+def _prepare(
+    tmp_path: Any, config: dict[str, Any], feedback: dict[str, str] | None = None
+) -> None:
     BatchTaskPreparator(storage_backend=MagicMock()).prepare_tasks(
         agent_config=config,
         data=[

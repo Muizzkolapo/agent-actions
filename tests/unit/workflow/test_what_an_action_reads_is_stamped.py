@@ -1,4 +1,5 @@
-"""What an action reads — its context_scope and dependencies — is stamped beside config_hash (1332).
+"""What an action reads — its context_scope and dependencies — is stamped beside config_hash
+(1332).
 
 Each has a digest of its own, so an edit names which part changed. Every stamp writer records
 each digest, so one a stamp lacks reads as an edit of that part.

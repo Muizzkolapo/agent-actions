@@ -1,4 +1,5 @@
-"""A guard reads the seed file its own record selects, and the prompt renders from that same load."""
+"""A guard reads the seed file its own record selects, and the prompt renders from that same
+load."""
 
 import json
 
@@ -36,7 +37,9 @@ def _record(exam):
 
 
 class TestTheGuardContextLoadsTheRecordsSeed:
-    @pytest.mark.parametrize(("exam", "label"), [("dbt", "DBT-LABEL"), ("snowflake", "SNOW-LABEL")])
+    @pytest.mark.parametrize(
+        ("exam", "label"), [("dbt", "DBT-LABEL"), ("snowflake", "SNOW-LABEL")]
+    )
     def test_each_record_gets_its_own_file_in_the_guard_context(self, tmp_path, exam, label):
         config = _config(tmp_path, guard='seed.syllabus.label != ""')
         context = build_guard_context(

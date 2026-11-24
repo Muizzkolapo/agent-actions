@@ -88,4 +88,6 @@ def test_a_text_call_gets_no_schema_text_or_json_mime_type():
 
 
 def test_json_mode_without_a_schema_still_asks_for_json():
-    assert _request(json_mode=True)["generation_config"]["response_mime_type"] == "application/json"
+    assert (
+        _request(json_mode=True)["generation_config"]["response_mime_type"] == "application/json"
+    )

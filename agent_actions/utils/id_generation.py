@@ -23,7 +23,8 @@ class IDGenerator:
 
     @staticmethod
     def generate_source_guid() -> str:
-        """Generate a random UUID4 identity for a genuinely new entity (expansion child, synthetic)."""
+        """Generate a random UUID4 identity for a genuinely new entity (expansion child,
+        synthetic)."""
         return str(uuid.uuid4())
 
     @staticmethod
@@ -105,7 +106,8 @@ class IDGenerator:
 
     @staticmethod
     def generate_content_hash(content: Any) -> str:
-        """Generate a deterministic UUID5 hash of content (dedup / the basis of derive_source_guid).
+        """Generate a deterministic UUID5 hash of content (dedup / the basis of
+        derive_source_guid).
 
         ``default=str`` renders non-JSON-native values (e.g. a spreadsheet date cell) rather
         than raising; it never fires for JSON-native payloads, so existing identities do not

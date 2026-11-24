@@ -119,7 +119,8 @@ class WrittenAnswer(NamedTuple):
 def written_answer(
     content: Any, *, json_mode: bool, output_field: str, dispatch: dict[str, Any] | None = None
 ) -> WrittenAnswer:
-    """Read one answered result's *content* as the writer does; *dispatch* is its ``dispatch_results``."""
+    """Read one answered result's *content* as the writer does; *dispatch* is its
+    ``dispatch_results``."""
     unparsed = isinstance(content, str) and json_mode
     if isinstance(content, str):
         content = unparsed_json_record(content) if json_mode else {output_field: content}
@@ -831,7 +832,8 @@ class BatchResultStrategy:
     def _build_expectations_exhausted(
         self, ctx: BatchProcessingContext, custom_id: str, batch_result: BatchResult
     ) -> ProcessingResult:
-        """An EXHAUSTED result for a record the expectation loop gave up on, as online builds it."""
+        """An EXHAUSTED result for a record the expectation loop gave up on, as online builds
+        it."""
         recovery_metadata = batch_result.recovery_metadata
         if recovery_metadata is None or recovery_metadata.expectations is None:
             raise RuntimeError(

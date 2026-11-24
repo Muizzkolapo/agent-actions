@@ -224,7 +224,9 @@ class TestAFailureDoesNotDeleteTheAnswersItCouldNotReplace:
     fail have to outlive it — a run the provider refused must not empty the file.
     """
 
-    def test_a_provider_error_leaves_the_answers_of_the_records_it_was_not_sent_for(self, tmp_path):
+    def test_a_provider_error_leaves_the_answers_of_the_records_it_was_not_sent_for(
+        self, tmp_path
+    ):
         stored = [_row("m1", producers=["i1"]), _row("m2", producers=["i1"])]
         produced = [_failed("i2")]
 

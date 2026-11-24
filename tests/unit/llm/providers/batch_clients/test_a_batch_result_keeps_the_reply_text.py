@@ -30,7 +30,10 @@ def _anthropic_line(content):
 
 
 def test_an_openai_shaped_reply_keeps_its_text():
-    line = {"custom_id": "r1", "response": {"body": {"choices": [{"message": {"content": PROSE}}]}}}
+    line = {
+        "custom_id": "r1",
+        "response": {"body": {"choices": [{"message": {"content": PROSE}}]}},
+    }
     result = AgacBatchClient().parse_provider_response(line)
     assert result.text == PROSE
     assert isinstance(result.content, dict), "the content is still parsed for the record"

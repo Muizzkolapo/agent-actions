@@ -1,4 +1,5 @@
-"""A prompt reading an upstream namespace the record cannot supply names the cause the record shows.
+"""A prompt reading an upstream namespace the record cannot supply names the cause the record
+shows.
 
 The render error said "Namespace 'X' is null (likely guard-filtered or guard-skipped)"
 whenever a namespace the prompt read was missing, with or without a guard anywhere in
@@ -142,7 +143,9 @@ def _flat(text: str) -> str:
 
 
 @pytest.mark.parametrize("run_mode", ["online", "batch"])
-def test_an_upstream_output_without_the_observed_field_is_not_blamed_on_a_guard(tmp_path, run_mode):
+def test_an_upstream_output_without_the_observed_field_is_not_blamed_on_a_guard(
+    tmp_path, run_mode
+):
     """No guard exists; record `two`'s tool output has `note` but not `summary`."""
     root = _project(tmp_path, run_mode, guard="")
 

@@ -394,7 +394,8 @@ class TestALimitOnAnActionBelowTheFirst:
         backend.initialize()
         try:
             return sum(
-                len(backend.read_target(action, path)) for path in backend.list_target_files(action)
+                len(backend.read_target(action, path))
+                for path in backend.list_target_files(action)
             )
         finally:
             backend.close()

@@ -126,7 +126,8 @@ class PreviewCommand:
 
         self.console.print(table)
         self.console.print(
-            "\n[dim]Use [bold]agac preview -w WORKFLOW -A ACTION[/bold] to view records for a specific action.[/dim]"
+            "\n[dim]Use [bold]agac preview -w WORKFLOW -A ACTION[/bold] to view records "
+            "for a specific action.[/dim]"
         )
 
     def _preview_action(self, backend) -> None:
@@ -148,7 +149,9 @@ class PreviewCommand:
             Panel(
                 f"[bold]Action:[/bold] {result['action_name']}\n"
                 f"[bold]Total Records:[/bold] {result['total_count']}\n"
-                f"[bold]Showing:[/bold] {self.offset + 1}-{min(self.offset + self.limit, result['total_count'])} of {result['total_count']}\n"
+                "[bold]Showing:[/bold] "
+                f"{self.offset + 1}-{min(self.offset + self.limit, result['total_count'])} "
+                f"of {result['total_count']}\n"
                 f"[bold]Files:[/bold] {len(result['files'])}",
                 title=f"Preview: {self.action}",
             )
@@ -166,7 +169,8 @@ class PreviewCommand:
         if result["total_count"] > self.offset + self.limit:
             remaining = result["total_count"] - (self.offset + self.limit)
             self.console.print(
-                f"\n[dim]{remaining} more records. Use [bold]--offset {self.offset + self.limit}[/bold] to see more.[/dim]"
+                f"\n[dim]{remaining} more records. Use [bold]--offset "
+                f"{self.offset + self.limit}[/bold] to see more.[/dim]"
             )
 
     def _unwrap_records(self, records: list) -> list:

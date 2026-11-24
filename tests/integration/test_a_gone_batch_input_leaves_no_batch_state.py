@@ -50,7 +50,9 @@ def test_a_gone_input_leaves_no_batch_state_and_the_other_file_keeps_its_own(tmp
     root = _project(tmp_path)
     for name, prefix in ((PAGES, "p"), (OTHER, "o")):
         _staging(root).joinpath(name).write_text(
-            json.dumps([{"page_id": f"{prefix}{i}", "page_content": f"{name} {i}"} for i in (0, 1)])
+            json.dumps(
+                [{"page_id": f"{prefix}{i}", "page_content": f"{name} {i}"} for i in (0, 1)]
+            )
         )
     _cycle(root, "run", "-a", WORKFLOW, "--fresh", ends_with=EXIT_SUCCESS)
     held, registry = _batch_state(root)
@@ -61,7 +63,9 @@ def test_a_gone_input_leaves_no_batch_state_and_the_other_file_keeps_its_own(tmp
     _staging(root).joinpath(OTHER).unlink()
     transcript = _cycle(root, "run", "-a", WORKFLOW, ends_with=EXIT_SUCCESS)
 
-    assert f"'{ACTION}' has no input for {OTHER} any more" in " ".join(" ".join(transcript).split())
+    assert f"'{ACTION}' has no input for {OTHER} any more" in " ".join(
+        " ".join(transcript).split()
+    )
     held, registry = _batch_state(root)
     assert held == {PAGES: kept, OTHER: []}
     assert registry == [PAGES]

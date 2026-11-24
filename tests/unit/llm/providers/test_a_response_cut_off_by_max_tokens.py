@@ -93,7 +93,9 @@ CUT_OFF = {
         "length",
     ),
     "groq": (
-        lambda: _openai_style("agent_actions.llm.providers.groq.client.Groq", GroqClient, "length"),
+        lambda: _openai_style(
+            "agent_actions.llm.providers.groq.client.Groq", GroqClient, "length"
+        ),
         "length",
     ),
     "gemini": (_gemini_max_tokens, "MAX_TOKENS"),

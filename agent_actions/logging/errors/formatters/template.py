@@ -179,7 +179,8 @@ class TemplateErrorFormatter(ErrorFormatter):
             if ns not in namespace_context:
                 return (
                     f"Namespace '{ns}' is not declared in context_scope.observe. "
-                    f"Add '{ns}.*' or specific fields to context_scope.observe in your workflow config."
+                    f"Add '{ns}.*' or specific fields to context_scope.observe in your "
+                    "workflow config."
                 )
             return f"Check that '{ns}' produces the referenced field."
         return "Check that the variable is defined in context_scope."

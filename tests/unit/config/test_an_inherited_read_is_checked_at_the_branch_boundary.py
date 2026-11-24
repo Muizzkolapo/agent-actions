@@ -204,8 +204,10 @@ class TestAnInheritedReadOfARemovedAction:
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
             "'b2' (from 'context_scope' under 'defaults:' of include 'pair') still reads it. "
-            "Remove the readers too, override them so that they do not read it, or remove the read "
-            "from the defaults named above. In an override, null takes away an inherited directive, "
+            "Remove the readers too, override them so that they do not read it, or "
+            "remove the read "
+            "from the defaults named above. In an override, null takes away an inherited "
+            "directive, "
             "and a list is added to it."
         )
         rendered = _render(tmp_path / "good", [A, _include(remove=["b1"], override=self.REROUTED)])
@@ -222,7 +224,9 @@ class TestAnInheritedReadOfARemovedAction:
             remove=["b1"], override=self.REROUTED, defaults={"expect": _judged("b1.text")}
         )
 
-        message = _refusal_of(tmp_path, [A, include], {"pair": _pair([B1, B2, b3], outputs=["b3"])})
+        message = _refusal_of(
+            tmp_path, [A, include], {"pair": _pair([B1, B2, b3], outputs=["b3"])}
+        )
 
         assert message == (
             f"Include 'pair' in {WF}: remove names 'b1' of branch 'pair' (branches/pair.yml), but "
@@ -272,9 +276,11 @@ class TestTheIncludeDefaultsAreRefusedInFull:
             f"Include 'pair' in {WF}: defaults: Value error, unknown defaults key 'record_limt' "
             "— did you mean 'record_limit'?; valid defaults keys are api_key, base_url, "
             "batch_max_workers, chunk_config, chunk_overlap, chunk_size, context_block, "
-            "context_scope, context_window, data_source, enable_prompt_caching, expect, file_limit, "
+            "context_scope, context_window, data_source, enable_prompt_caching, expect, "
+            "file_limit, "
             "frequency_penalty, "
-            "granularity, guard_timeout, hitl_timeout, is_operational, json_mode, kind, max_tokens, model_name, "
+            "granularity, guard_timeout, hitl_timeout, is_operational, json_mode, kind, "
+            "max_tokens, model_name, "
             "model_vendor, on_empty, output_field, presence_penalty, prompt_debug, "
             "record_concurrency, record_limit, request_timeout, retry, run_mode, split_method, "
             "stop, temperature, tokenizer_model, top_p, vendor_params"

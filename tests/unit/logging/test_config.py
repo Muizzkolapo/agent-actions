@@ -96,7 +96,8 @@ class TestLoggingConfigFromProjectConfig:
         assert f"using {default}" in err
 
     def test_a_file_key_nothing_reads_is_reported(self, capsys):
-        """``file.path`` and friends configure nothing: the run log always goes to agent_io/logs."""
+        """``file.path`` and friends configure nothing: the run log always goes to
+        agent_io/logs."""
         project_config = {
             "logging": {
                 "file": {

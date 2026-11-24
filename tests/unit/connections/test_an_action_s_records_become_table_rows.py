@@ -210,7 +210,9 @@ def test_a_merge_keyed_on_an_answered_field_with_nothing_answered_writes_nothing
 def test_a_carried_field_no_record_s_source_holds_is_refused():
     records = [_record("g1", {"score": 4}, source={"ticket_id": 7})]
 
-    with pytest.raises(ConfigurationError, match=r"'carry' names ticket, which no record's source"):
+    with pytest.raises(
+        ConfigurationError, match=r"'carry' names ticket, which no record's source"
+    ):
         output_table(records, "grade", ["ticket"])
 
 
@@ -226,7 +228,9 @@ def test_a_carried_field_only_some_sources_hold_is_null_for_the_rest():
 def test_writing_one_action_s_output_when_none_writes_it_is_refused(tmp_path):
     declared = [{"action": "grade", "connection": "warehouse", "table": "grades"}]
 
-    with pytest.raises(ConfigurationError, match="No output writes grad; the actions with outputs"):
+    with pytest.raises(
+        ConfigurationError, match="No output writes grad; the actions with outputs"
+    ):
         write_outputs(_Stored([]), declared, tmp_path, actions=["grade"], only_action="grad")
 
 

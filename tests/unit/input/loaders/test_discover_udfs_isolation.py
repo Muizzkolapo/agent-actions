@@ -229,7 +229,10 @@ def test_undecodable_file_declaring_a_udf_still_raises_attributed(tmp_path):
     keeps the file on the import path so the user sees this file named, rather
     than a missing-function error much later with no mention of encoding.
     """
-    bad = "# -*- coding: not-a-real-codec -*-\nfrom agent_actions import udf_tool\n\n@udf_tool()\ndef ghost(data):\n    return data\n"
+    bad = (
+        "# -*- coding: not-a-real-codec -*-\nfrom agent_actions import "
+        "udf_tool\n\n@udf_tool()\ndef ghost(data):\n    return data\n"
+    )
     (tmp_path / "ghost_udf.py").write_bytes(bad.encode("ascii"))
     with pytest.raises(UDFLoadError) as exc_info:
         discover_udfs(tmp_path)

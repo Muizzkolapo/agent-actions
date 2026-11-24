@@ -156,7 +156,9 @@ class TestTheClosureReadsEveryChannel:
         message = _refusal(tmp_path / "bad", [A, ZV, INCLUDE], {"pair": _pair([B1, reader])})
 
         assert message == _branch_reads_z("b2")
-        rendered = _render(tmp_path / "good", [A, ZV, WITH_Z], {"pair": _declaring_z([B1, reader])})
+        rendered = _render(
+            tmp_path / "good", [A, ZV, WITH_Z], {"pair": _declaring_z([B1, reader])}
+        )
         assert _names(rendered) == ["a", "z_1", "z_2", "b1", "b2"]
 
     def test_a_branch_reads_a_version_of_an_input_it_declares(self, tmp_path):
@@ -176,7 +178,8 @@ class TestTheClosureReadsEveryChannel:
             {"pair": _pair([B1, _with(B2, dependencies=["b1", "z_1"])])},
         )
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b2': reads 'z_1', which is not a "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b2': reads "
+            "'z_1', which is not a "
             "branch action or a declared input. Declare it under 'inputs:'."
         )
 
@@ -188,7 +191,8 @@ class TestAVersionedBranchActionIsOneAction:
         )
 
         assert message == (
-            f"Action 'tally' in {WF} reads 'vote', which branch 'pair' (branches/pair.yml) does not list under "
+            f"Action 'tally' in {WF} reads 'vote', which branch 'pair' "
+            "(branches/pair.yml) does not list under "
             "outputs. Outputs of 'pair': b2."
         )
         rendered = _render(
@@ -273,7 +277,8 @@ class TestAWrittenOriginIsRefused:
         message = _refusal(tmp_path, [A, INCLUDE], {"pair": written})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': '_include' is set by the load on "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': "
+            "'_include' is set by the load on "
             "an included action and cannot be written in a branch file."
         )
 
@@ -303,7 +308,8 @@ class TestJinjaIsRefusedAtAnyDepth:
         message = _refusal(tmp_path / "bad", [A, INCLUDE], {"pair": _pair([guarded, B2])})
 
         assert message == (
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': 'guard' holds Jinja. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': 'guard' "
+            "holds Jinja. "
             "A branch file is plain YAML and is not rendered."
         )
         plain = _with(B1, guard={"condition": "a.text == 1", "on_false": "filter"})
@@ -331,48 +337,56 @@ TWIN_INCLUDE = {"include": "twin", "inputs": {"a": "a"}}
         (
             ([A, INCLUDE, TWIN_INCLUDE], {"pair": _pair(), "twin": TWIN}),
             ([A, INCLUDE, TWIN_INCLUDE], {"pair": _pair(), "twin": TWIN_OK}),
-            f"Action name 'b1' is defined twice in {WF}: by branch 'pair' (branches/pair.yml) and by "
+            f"Action name 'b1' is defined twice in {WF}: by branch 'pair' "
+            "(branches/pair.yml) and by "
             "branch 'twin' (branches/twin.yml). Rename one of them.",
         ),
         (
             ([A, INCLUDE], {"pair": _pair(branch="pear")}),
             ([A, INCLUDE], {"pair": _pair(branch="pair")}),
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: the file has 'branch: pear'. The name must equal the file "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: the file has 'branch: "
+            "pear'. The name must equal the file "
             "name 'pair'.",
         ),
         (
             ([A, INCLUDE], {"pair": _pair([B1, B2, {"include": "other"}])}),
             ([A, INCLUDE], {"pair": _pair([B1, B2])}),
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: the branch contains an include. A branch cannot include "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: the branch contains an "
+            "include. A branch cannot include "
             "another branch.",
         ),
         (
             ([A, INCLUDE], {"pair": _pair(defaults={"run_mode": "batch"})}),
             ([A, INCLUDE], {"pair": _pair()}),
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: key 'defaults' is not a branch key. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: key 'defaults' is not "
+            "a branch key. "
             "Branch keys: branch, description, inputs, outputs, actions.",
         ),
         (
             ([A, INCLUDE], {"pair": _pair([_with(B1, promt="x"), B2])}),
             ([A, INCLUDE], {"pair": _pair([B1, B2])}),
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': promt: Extra inputs are not permitted",
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': promt: "
+            "Extra inputs are not permitted",
         ),
         (
             ([A, INCLUDE], {"pair": _pair([_with(B1, intent="first {{ x }}"), B2])}),
             ([A, INCLUDE], {"pair": _pair([_with(B1, intent="first x"), B2])}),
-            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': 'intent' holds Jinja. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}, action 'b1': 'intent' "
+            "holds Jinja. "
             "A branch file is plain YAML and is not rendered.",
         ),
         (
             ([A, INCLUDE], {"pair": _pair(outputs=["b3"])}),
             ([A, INCLUDE], {"pair": _pair(outputs=["b2"])}),
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: output 'b3' is not an action of the branch. "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: output 'b3' is not an "
+            "action of the branch. "
             "Branch actions: b1, b2.",
         ),
         (
             ([A, INCLUDE], {"pair": _pair(inputs={"a": "Holds", "b1": "Holds"})}),
             ([A, INCLUDE], {"pair": _pair(inputs={"a": "Holds"})}),
-            f"Branch 'pair' (branches/pair.yml), included in {WF}: 'b1' is declared as an input and defined as "
+            f"Branch 'pair' (branches/pair.yml), included in {WF}: 'b1' is declared as an "
+            "input and defined as "
             "an action.",
         ),
     ],
@@ -394,7 +408,11 @@ def test_a_refused_input_loads_once_its_fault_is_removed(tmp_path, bad, good, ex
 
 
 def test_a_missing_branch_loads_once_its_file_exists():
-    host = {"name": "wf", "description": "d", "actions": [copy.deepcopy(A), copy.deepcopy(INCLUDE)]}
+    host = {
+        "name": "wf",
+        "description": "d",
+        "actions": [copy.deepcopy(A), copy.deepcopy(INCLUDE)],
+    }
 
     with pytest.raises(ConfigurationError) as caught:
         expand_workflow_includes(host, WF, {}, [])
@@ -765,7 +783,8 @@ class TestAMalformedActionGetsTheRefusalItGetsWithoutAnInclude:
         assert str(included.value) == "Workflow configuration is invalid"
         assert str(included.value) == str(inline.value)
         assert (
-            included.value.context["validation_errors"] == inline.value.context["validation_errors"]
+            included.value.context["validation_errors"]
+            == inline.value.context["validation_errors"]
         )
 
 

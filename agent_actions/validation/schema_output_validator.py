@@ -69,16 +69,20 @@ class SchemaValidationReport:
 
         if self.missing_required:
             lines.append(
-                f"MISSING REQUIRED ({len(self.missing_required)}): {', '.join(self.missing_required)}"
+                f"MISSING REQUIRED ({len(self.missing_required)}): "
+                f"{', '.join(self.missing_required)}"
             )
 
         if self.missing_optional:
             lines.append(
-                f"Missing optional ({len(self.missing_optional)}): {', '.join(self.missing_optional)}"
+                f"Missing optional ({len(self.missing_optional)}): "
+                f"{', '.join(self.missing_optional)}"
             )
 
         if self.extra_fields:
-            lines.append(f"Extra fields ({len(self.extra_fields)}): {', '.join(self.extra_fields)}")
+            lines.append(
+                f"Extra fields ({len(self.extra_fields)}): {', '.join(self.extra_fields)}"
+            )
 
         if self.type_errors:
             lines.append("")
@@ -366,7 +370,8 @@ def _deep_validation_errors(
     schema: dict[str, Any],
     extra_fields: list[str],
 ) -> list[str]:
-    """Constraint checks the flat pass skips: per-element items, additionalProperties, bounds, enum."""
+    """Constraint checks the flat pass skips: per-element items, additionalProperties, bounds,
+    enum."""
     errors: list[str] = []
 
     if schema.get("additionalProperties") is False and extra_fields:

@@ -24,7 +24,9 @@ from agent_actions.processing.disposition_gate import (
 GATE_LOGGER = "agent_actions.processing.disposition_gate"
 
 
-def _row(guid: str, producers: list[str] | None = None, state: str = "processed") -> dict[str, Any]:
+def _row(
+    guid: str, producers: list[str] | None = None, state: str = "processed"
+) -> dict[str, Any]:
     row: dict[str, Any] = {"source_guid": guid, "_state": state}
     if producers is not None:
         row["producer_source_guids"] = producers

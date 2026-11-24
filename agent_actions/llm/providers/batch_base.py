@@ -139,7 +139,8 @@ class BatchResult:
 
 
 def raise_unsent(rows: list[dict[str, Any]]) -> None:
-    """Raise the first error ``prepare_tasks`` left on *rows*, for a caller that cannot fail one row."""
+    """Raise the first error ``prepare_tasks`` left on *rows*, for a caller that cannot fail one
+    row."""
     for row in rows:
         if UNSENT_ERROR_KEY in row:
             raise row[UNSENT_ERROR_KEY]
@@ -265,7 +266,8 @@ class BaseBatchClient(ABC):
         stop_as_list: bool = False,
         penalties: bool = False,
     ) -> dict[str, Any]:
-        """The task's top_p and stop (and penalties) under the names the vendor's online client sends.
+        """The task's top_p and stop (and penalties) under the names the vendor's online client
+        sends.
 
         Takes that client's ``extract_generation_params`` arguments; unset settings are left out.
         """
@@ -458,11 +460,13 @@ class BaseBatchClient(ABC):
         )
 
     def _no_answer(self, _raw_response: Any) -> NoAnswer | None:
-        """How online ends a line the provider answered with no answer in it; None when it has one."""
+        """How online ends a line the provider answered with no answer in it; None when it has
+        one."""
         return None
 
     def _cut_off_parse_error(self, stop_reason: Any, _text: str) -> str:
-        """The parse error online's JSON-mode call stores for an answer cut off at *stop_reason*."""
+        """The parse error online's JSON-mode call stores for an answer cut off at
+        *stop_reason*."""
         return unfinished_parse_error(stop_reason) or cut_off_parse_error(stop_reason)
 
     def _answer_text(self, raw_response: Any) -> str | None:
@@ -551,7 +555,10 @@ class BaseBatchClient(ABC):
             raise VendorAPIError(
                 vendor=self.__class__.__name__,
                 endpoint="retrieve_results",
-                context={"message": "Batch output file not found", "expected_path": str(file_path)},
+                context={
+                    "message": "Batch output file not found",
+                    "expected_path": str(file_path),
+                },
             )
         batch_results = []
         with open(file_path, encoding="utf-8") as f:

@@ -34,7 +34,9 @@ def test_each_contract_report_names_its_contract_and_clauses(tmp_path):
     workflow = root / "agent_workflow" / "contract_reviewer"
     config = workflow / "agent_config" / "contract_reviewer.yml"
     config.write_text(
-        re.sub(r"(?m)^(\s*)model_vendor: \S+", r"\1model_vendor: agac-provider", config.read_text())
+        re.sub(
+            r"(?m)^(\s*)model_vendor: \S+", r"\1model_vendor: agac-provider", config.read_text()
+        )
     )
     contracts = json.loads((workflow / "agent_io" / "staging" / "contracts.json").read_text())
 
@@ -263,7 +265,10 @@ def test_user_views_are_built_from_what_format_entry_produced():
     # One key per observed action: filter_quality.* and format_entry.*
     result = module.select_for_users(
         {
-            "filter_quality": {"passes_filter": True, "filter_reason": "Passed all quality checks"},
+            "filter_quality": {
+                "passes_filter": True,
+                "filter_reason": "Passed all quality checks",
+            },
             "format_entry": {
                 "isbn": "9781234567890",
                 "title": "The Great Book",

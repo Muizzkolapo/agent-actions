@@ -1,4 +1,5 @@
-"""A run holds its workflow's lock for the whole run, and a refused run leaves the store as it was."""
+"""A run holds its workflow's lock for the whole run, and a refused run leaves the store as it
+was."""
 
 from __future__ import annotations
 

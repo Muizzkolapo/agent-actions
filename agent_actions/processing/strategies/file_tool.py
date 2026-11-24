@@ -335,7 +335,8 @@ class FileToolStrategy:
                             "(produced %d outputs). "
                             "If this is a many-to-one tool (N inputs -> M outputs), "
                             "use a list for source_index to map all inputs:\n"
-                            '  FileUDFResult(outputs=[{"source_index": [0, 1, 2, ...], "data": ...}])\n'
+                            '  FileUDFResult(outputs=[{"source_index": [0, 1, 2, ...], '
+                            '"data": ...}])\n'
                             "Unmapped records will be passed through as tombstones.",
                             context.agent_name,
                             n_missing,

@@ -423,7 +423,10 @@ def test_llm_judge_context_ref_to_unknown_field_is_a_defect():
                         "id": "r",
                         "type": "llm_judge",
                         "field": "options",
-                        "params": {"rule": "x", "context": ["extract_quote_context.missing_field"]},
+                        "params": {
+                            "rule": "x",
+                            "context": ["extract_quote_context.missing_field"],
+                        },
                     }
                 ]
             }
@@ -443,7 +446,9 @@ def _expr_defects(entry, fields=EXPR_FIELDS):
 
 def test_valid_expression_entry_has_no_defects():
     assert (
-        _expr_defects({"id": "floor", "type": "expression", "params": {"condition": "score >= 80"}})
+        _expr_defects(
+            {"id": "floor", "type": "expression", "params": {"condition": "score >= 80"}}
+        )
         == []
     )
 
@@ -537,13 +542,16 @@ def test_expression_entry_in_a_suite_file_gets_the_same_checks(tmp_path):
         "scenario",
         [{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}],
     )
-    defects = find_expectation_defects(suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path)
+    defects = find_expectation_defects(
+        suite_config("scenario"), EXPR_FIELDS, project_root=tmp_path
+    )
     assert any("does not produce field 'points'" in d for d in defects["write_q"])
 
 
 def test_expression_schema_cross_check_skips_when_the_action_has_no_known_fields():
     defects = find_expectation_defects(
-        config([{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}]), {}
+        config([{"id": "floor", "type": "expression", "params": {"condition": "points >= 80"}}]),
+        {},
     ).get("write_q", [])
     assert defects == []
 

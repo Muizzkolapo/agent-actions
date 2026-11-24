@@ -1,4 +1,5 @@
-"""Tests for version_correlation_id propagation in BatchResultStrategy._process_successful_result().
+"""Tests for version_correlation_id propagation in
+BatchResultStrategy._process_successful_result().
 
 Verifies that structured_items built from the original_row carry version_correlation_id
 before being passed to the enrichment pipeline.

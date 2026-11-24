@@ -99,7 +99,10 @@ class TestTheRowsSurviveBeingStored:
             {"G0"}, "split_tool", "f.json", backend, produced_by={"G0"}
         )
 
-        assert [r["source_guid"] for r in found] == [rows[0]["source_guid"], rows[1]["source_guid"]]
+        assert [r["source_guid"] for r in found] == [
+            rows[0]["source_guid"],
+            rows[1]["source_guid"],
+        ]
         assert missing == set()
 
     def test_the_split_rows_name_the_input_that_produced_them(self):

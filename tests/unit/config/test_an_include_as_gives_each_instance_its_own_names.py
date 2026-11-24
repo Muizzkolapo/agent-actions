@@ -185,7 +185,9 @@ class TestOneBranchServesSeveralInstances:
         reader = _with(WRITE, context_scope={"observe": ["spec.text?", "spec?", "source.id?"]})
         actions = _expanded([A, _use("c2")], _round([reader], outputs=["write"]))
 
-        assert actions["c2__write"]["context_scope"] == {"observe": ["a.text?", "a?", "source.id?"]}
+        assert actions["c2__write"]["context_scope"] == {
+            "observe": ["a.text?", "a?", "source.id?"]
+        }
 
     def test_the_include_defaults_name_the_actions_of_the_instance(self):
         include = {**_use("c2"), "defaults": {"context_scope": {"observe": ["spec.text"]}}}

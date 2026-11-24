@@ -187,7 +187,9 @@ def test_each_error_kind_fails_its_record_until_the_attempt_it_heals_at(tmp_path
 def test_each_error_kind_that_never_heals_fails_every_record_through_retry_and_repair(
     tmp_path, kind
 ):
-    root = _project(tmp_path, f"actions:\n  extract:\n    errors: {{rate: 1.0, kinds: [{kind}]}}\n")
+    root = _project(
+        tmp_path, f"actions:\n  extract:\n    errors: {{rate: 1.0, kinds: [{kind}]}}\n"
+    )
 
     result = _run(root)
 
@@ -399,7 +401,8 @@ def test_a_matched_record_takes_its_own_pin(tmp_path):
     root = _project(
         tmp_path,
         "actions:\n  classify:\n    pin: {label: routine}\n"
-        "records:\n  - match: {source.page_id: p2}\n    actions: {classify: {pin: {label: urgent}}}\n",
+        "records:\n  - match: {source.page_id: p2}\n"
+        "    actions: {classify: {pin: {label: urgent}}}\n",
     )
 
     _ok(_run(root))
@@ -485,7 +488,8 @@ def _split_project(base: Path) -> Path:
     (root / "prompt_store").mkdir()
     (root / "tools" / "split_pages").mkdir(parents=True)
     (root / "agent_actions.yml").write_text(
-        "default_agent_config: {model_name: gpt-4o-mini}\nschema_path: schema\ntool_path: [tools]\n"
+        "default_agent_config: {model_name: gpt-4o-mini}\n"
+        "schema_path: schema\ntool_path: [tools]\n"
     )
     (workflow_dir / "agent_config" / "split_pages.yml").write_text(SPLIT_CONFIG)
     (workflow_dir / "agent_io" / "staging" / "pages.json").write_text(json.dumps(ROWS))
@@ -581,7 +585,8 @@ def test_a_batch_result_dropped_comes_back_in_the_retry_batch(tmp_path):
 def test_a_batch_error_entry_is_retried_until_it_heals(tmp_path):
     root = _project(
         tmp_path,
-        "actions:\n  extract:\n    errors: {rate: 1.0, kinds: [server_error], heal_on_attempt: 2}\n",
+        "actions:\n  extract:\n"
+        "    errors: {rate: 1.0, kinds: [server_error], heal_on_attempt: 2}\n",
         run_mode="batch",
     )
 

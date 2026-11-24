@@ -1,7 +1,8 @@
 """Edges of the repair's duplication warning that the first tests left open.
 
 The rule: a row the repair cannot place is reported when it lists a named record among
-its producers, or lists none. One listing named records alone is placed, not reported. These pin the places a plausible wrong version differs.
+its producers, or lists none. One listing named records alone is placed, not reported. These pin
+the places a plausible wrong version differs.
 """
 
 from __future__ import annotations

@@ -147,7 +147,9 @@ class TestItStaysSilentWhereTheNameResolves:
         ],
     )
     def test_a_namespaced_field_is_silent(self, clause):
-        assert _errors({"a1": {}, "b": {"dependencies": ["a1"], "guard": {"clause": clause}}}) == []
+        assert (
+            _errors({"a1": {}, "b": {"dependencies": ["a1"], "guard": {"clause": clause}}}) == []
+        )
 
     def test_a_dependency_output_field_is_promoted(self):
         """guard_context promotes the output_field's value to the top level."""
