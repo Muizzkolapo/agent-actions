@@ -3,7 +3,8 @@
 The workflow names a real vendor and no key is set. The sandbox run completes, its tool
 action runs its own code, its HITL review approves, and what it writes goes to the sandbox
 store and folder. The store, target folder, logs and status file of a real run are left
-as they were, and a real run never sees a sandbox run's work as its own.
+as they were, and a real run never sees a sandbox run's work as its own. A retry and
+each read command given ``--sandbox`` read the sandbox store.
 """
 
 from __future__ import annotations
@@ -243,3 +244,88 @@ def test_inspect_shows_the_mock_in_place_of_the_vendor(openai_project):
 
     assert "SANDBOX" in result.stdout + result.stderr
     assert "answered by the sandbox mock" in result.stdout
+
+
+FLAKY_TOOLS = """from pathlib import Path
+from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def shout_text(data: Any, *args) -> list[dict]:
+    text = str(((data or {}).get("source") or {}).get("text", ""))
+    if Path("wind.fails").exists() and "wind" in text:
+        raise ValueError("no wind today")
+    return [{"loud": text.upper()}]
+"""
+
+
+def _counts(root: Path, action: str) -> dict[str, int]:
+    report = json.loads(_agac(root, "dispositions", "-w", WORKFLOW, "--sandbox", "--json").stdout)
+    return next(entry for entry in report["actions"] if entry["name"] == action)["counts"]
+
+
+def test_retry_repairs_the_failed_records_of_a_sandbox_run(openai_project):
+    (openai_project / "tools" / WORKFLOW / "sandbox_shout.py").write_text(FLAKY_TOOLS)
+    marker = openai_project / "wind.fails"
+    marker.touch()
+    failed = run_agac(
+        openai_project, "run", "-w", WORKFLOW, "--sandbox", env={"OPENAI_API_KEY": ""}
+    )
+    assert failed.returncode != 0
+    assert _counts(openai_project, "shout")["failed"] == 1
+    marker.unlink()
+
+    _agac(openai_project, "retry", "-w", WORKFLOW, "--sandbox")
+
+    assert _counts(openai_project, "shout")["failed"] == 0
+    shouted = _records(openai_project, "shout", "--sandbox")
+    assert sorted(r["content"]["shout"]["loud"] for r in shouted) == ["CALM SEA", "HIGH WIND"]
+    io = _io(openai_project)
+    assert (io / "store" / f"{WORKFLOW}.sandbox").is_dir(), "the retry manifest left the sandbox"
+    for real in (
+        f"store/{WORKFLOW}.db",
+        f"store/{WORKFLOW}",
+        "target",
+        "logs",
+        ".agent_status.json",
+    ):
+        assert not (io / real).exists(), f"a sandbox retry wrote {real}"
+
+
+@pytest.fixture(scope="module")
+def sandbox_only(tmp_path_factory):
+    """A project that only a sandbox run has run."""
+    root = _project(tmp_path_factory.mktemp("read"), "openai", review=False)
+    _agac(root, "run", "-w", WORKFLOW, "--sandbox")
+    return root
+
+
+def test_traces_reads_the_sandbox_store(sandbox_only):
+    shown = _agac(sandbox_only, "traces", "-w", WORKFLOW, "-A", "summarize", "--sandbox")
+    assert shown.stdout.count("=== summarize record") == len(ROWS)
+    assert "(agac-provider gpt-4o-mini)" in shown.stdout
+
+
+def test_usage_reads_the_sandbox_store(sandbox_only):
+    shown = _agac(sandbox_only, "usage", "-w", WORKFLOW, "--sandbox")
+    row = next(line for line in shown.stdout.splitlines() if "summarize" in line)
+    assert "agac-mock" in row
+    assert f" {len(ROWS)} " in row
+
+
+def test_preview_reads_the_sandbox_store(sandbox_only):
+    shown = _agac(sandbox_only, "preview", "-w", WORKFLOW, "--sandbox")
+    actions = {line.split("│")[2].strip() for line in shown.stdout.splitlines() if "│" in line}
+    assert actions == {"shout", "summarize"}
+
+
+def test_dispositions_reads_the_sandbox_store(sandbox_only):
+    assert _counts(sandbox_only, "summarize")["success"] == len(ROWS)
+
+
+def test_expect_report_reads_the_sandbox_store(sandbox_only):
+    shown = _agac(sandbox_only, "expect", "report", "-w", WORKFLOW, "--sandbox")
+    assert f"summarize  {len(ROWS)}/{len(ROWS)} records passed" in shown.stdout
+    assert "tone_is_known" in shown.stdout
