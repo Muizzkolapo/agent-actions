@@ -18,6 +18,7 @@ from rich.text import Text
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
 from agent_actions.cli.renderers.whole_table import print_whole
@@ -324,6 +325,7 @@ class DispositionsCommand:
 
 @click.command()
 @workflow_option()
+@sandbox_option()
 @click.option(
     "-A",
     "--action",

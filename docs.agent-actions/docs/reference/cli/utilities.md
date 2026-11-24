@@ -140,15 +140,17 @@ If you do not give `--target` or `--all`, the command removes nothing. It prints
 ```text
 Error: Give --target or --all to say what to clean:
   --target     Remove agent_io/target/, the generated output.
-  --all        Remove all agent_io directories, the store included,
-               and reclaim the local records of the workflow's batches.
+  --all        Remove all agent_io directories, the store and the
+               sandbox output included, and reclaim the local records
+               of the workflow's batches.
   -f, --force  Do not ask for confirmation.
 ```
 
 The command removes these items:
 - `agent_io/target/`: Your generated output (with `--target` or `--all`).
 - `agent_io/staging/` and the durable store: Your input data and run history (only with `--all`).
-- The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data.
+- The output of [sandbox runs](../../guides/sandbox.md): `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db` (only with `--all`). `--target` does not remove `agent_io/sandbox/target/`.
+- The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data. The real store and the sandbox store each name the batches of their own runs, and the command reclaims the data of each.
 
 **Options:**
 | Option | Description |
@@ -156,7 +158,7 @@ The command removes these items:
 | `-w, --workflow TEXT` | The workflow name (required). `-a` names the same option. |
 | `-f, --force` | Skip the interactive confirmation |
 | `--target` | Remove `agent_io/target/`, your generated output |
-| `--all` | Remove all directories, which include target, staging and the durable store. Also remove the data that a provider recorded locally about the batches of this workflow. You cannot recover the removed data |
+| `--all` | Remove all directories, which include target, staging, the durable store and the sandbox output. Also remove the data that a provider recorded locally about the batches of this workflow. You cannot recover the removed data |
 
 **Examples:**
 ```bash
@@ -237,6 +239,7 @@ agac status -w <workflow-name> [options]
 | Option | Description |
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name (required). `-a` names the same option. |
+| `--sandbox` | Show the status of the last sandbox run (`agent_io/sandbox/.agent_status.json`). See [Sandbox Runs](../../guides/sandbox.md) |
 | `--json` | Print the status of each action and the status of the run as one JSON document |
 
 **Example:**

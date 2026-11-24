@@ -25,6 +25,7 @@ You can run inspect commands from any subdirectory in your project.
 | Option | Description |
 |--------|-------------|
 | `-w`, `--workflow` | The workflow name. Required. `-a` names the same option. Without it, `agac inspect` exits 2 with `Missing required option '-w' / '--workflow'. Run 'agac inspect --help' for usage.` |
+| `--sandbox` | Show the workflow as `agac run --sandbox` runs it. Each LLM action is sent to the mock provider, and `inspect action` marks it `answered by the sandbox mock` after its model. Give the option before the subcommand: `agac inspect -w my_workflow --sandbox action summarize`. See [Sandbox Runs](../../guides/sandbox.md) |
 | `-u`, `--user-code` | The path to the user code directory. `inspect action` and `inspect context` also accept this option |
 
 ## Default Behavior {/* #default-behavior */}

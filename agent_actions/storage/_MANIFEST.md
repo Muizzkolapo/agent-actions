@@ -20,7 +20,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Factory function and backend registry for creating storage instances. | `workflow`, `config` |
-| `get_storage_backend` | Function | Factory that creates storage backend instances by type (default: sqlite). | `workflow` |
+| `get_storage_backend` | Function | Factory that creates storage backend instances by type (default: sqlite). The database file is `config.sandbox.store_file`: `agent_io/store/{workflow_name}.db`, or `{workflow_name}.sandbox.db` in sandbox mode. | `workflow` |
 | `run_lock.py` | Module | `hold_run_lock(io_dir, workflow_name)`: one run per workflow. An advisory, non-blocking, exclusive `portalocker` lock on `store/<workflow>.db.lock`, beside the database, held for the block; the holder's pid is written into the file. While another process holds it, raises `RunInProgressError` at once, naming the pid when the file holds one. The OS releases the lock when the holder exits or is killed, so no stale lock exists. `run_lock_path` names the file. | `errors`, `portalocker` |
 | `BACKENDS` | Dict | Registry mapping backend type names to their implementation classes. | `config` |
 | `backend.py` | Module | Abstract `StorageBackend` interface defining the contract for all backends. `clear_dispositions_batch` defaults to one `clear_disposition` per record id. | `abc`, `typing` |
@@ -43,6 +43,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `get_storage_backend()` | `agent_io/store/{workflow_name}.db` | Writes | `storage_backend` |
+| `get_storage_backend()` | `agent_io/store/{workflow_name}.sandbox.db` | Writes (in sandbox mode) | `--sandbox` |
 | `hold_run_lock()` | `agent_io/store/{workflow_name}.db.lock` | Writes | — |
 | `StorageBackend.write_target()` | `agent_io/target/{action}/` | Writes | — |
 | `StorageBackend.read_target()` | `agent_io/target/{action}/` | Reads | — |

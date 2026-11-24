@@ -20,7 +20,6 @@ defaults:
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   is_operational: true
-  record_limit: 2
   expect:
     repair: auto
     structural: auto
@@ -43,6 +42,9 @@ actions:
     intent: "Summarise a field-guide entry and judge how much identification detail it carries"
     schema: entry_summary
     prompt: $species_id.Summarize_Entry
+    # Here, not in defaults: a default caps every action, so the reduce and the
+    # vote would see only the first few marks.
+    record_limit: 3
     retry: { enabled: true, max_attempts: 3 }
     context_scope:
       observe: [source.entry_text, source.guide]

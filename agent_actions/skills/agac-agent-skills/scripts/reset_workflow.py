@@ -6,8 +6,9 @@ workflow, while keeping source data and the SQLite store intact. Records already
 completed in the store are carried forward, not regenerated — use --full for a
 true from-scratch rebuild.
 
---full: wipes target/, everything in store/ but the run lock file, and
-.agent_status.json, then recreates target/, and reclaims what a provider recorded locally under .agac/ about this
+--full: wipes target/, everything in store/ but the run lock file,
+.agent_status.json and sandbox/ (the output of `agac run --sandbox`), then
+recreates target/, and reclaims what a provider recorded locally under .agac/ about this
 workflow's batches, since the store being removed is what names them. It holds the
 run lock `agac run` takes, so it exits while a run is in progress (without
 the framework and without fcntl, as on Windows, it can only warn).
@@ -120,6 +121,7 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
     released = True
     try:
         from agent_actions.config.paths import PathManager
+        from agent_actions.config.sandbox import sandbox_mode, store_file
         from agent_actions.errors.configuration import StoreFormatError
         from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
         from agent_actions.llm.providers.local_batch_records import (
@@ -150,34 +152,49 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
     try:
         set_path_manager(PathManager(project_root=root))
         discard_partial_batch_records()
-        backend = get_storage_backend(workflow_path=str(base.parent), workflow_name=workflow)
-        try:
-            backend.initialize()
-            for action_name in BatchRegistryManager.list_action_names(backend):
-                for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
-                    released = release_local_batch_record(batch_id) and released
-        finally:
-            backend.close()
-    except StoreFormatError:
-        # This version cannot read the store, so nothing can name its batches.
-        print(
-            f"warning: the store for {workflow} uses another storage format, so the "
-            f"batches it names cannot be reclaimed. Removing it.",
-            file=sys.stderr,
-        )
-        return True
     except Exception as e:  # noqa: BLE001 - reported, and the store then stays
         print(
             f"warning: could not reclaim what a provider recorded locally ({e}).",
             file=sys.stderr,
         )
         return False
+    # The real store and the sandbox store each name their own batches.
+    for in_sandbox in (False, True):
+        with sandbox_mode(in_sandbox):
+            db_path = store_file(base, workflow)
+            # Opening a store that is not there would create it.
+            if not db_path.exists():
+                continue
+            try:
+                backend = get_storage_backend(
+                    workflow_path=str(base.parent), workflow_name=workflow
+                )
+                try:
+                    backend.initialize()
+                    for action_name in BatchRegistryManager.list_action_names(backend):
+                        for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
+                            released = release_local_batch_record(batch_id) and released
+                finally:
+                    backend.close()
+            except StoreFormatError:
+                # This version cannot read the store, so nothing can name its batches.
+                print(
+                    f"warning: the store {db_path.name} for {workflow} uses another storage "
+                    f"format, so the batches it names cannot be reclaimed. Removing it.",
+                    file=sys.stderr,
+                )
+            except Exception as e:  # noqa: BLE001 - reported, and the store then stays
+                print(
+                    f"warning: could not reclaim what a provider recorded locally ({e}).",
+                    file=sys.stderr,
+                )
+                return False
     return released
 
 
 def _full_reset(root: Path, base: Path, workflow: str, status: Path, had_store: bool) -> None:
     print(
-        f"Full reset: wiping store, target, and status under {base}, "
+        f"Full reset: wiping store, target, sandbox output and status under {base}, "
         "and reclaiming this workflow's local batch records"
     )
     # The store is what names these batches. Removing it over a record that
@@ -192,6 +209,7 @@ def _full_reset(root: Path, base: Path, workflow: str, status: Path, had_store: 
     if reclaimed and had_store:
         clear_store(base / "store", lock_file(base, workflow))
     remove(status)
+    remove(base / "sandbox")
     (base / "target").mkdir(parents=True, exist_ok=True)
     print("Done.")
 

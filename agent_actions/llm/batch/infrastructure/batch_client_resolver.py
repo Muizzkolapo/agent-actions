@@ -9,6 +9,7 @@ from pydantic import SecretStr
 logger = logging.getLogger(__name__)
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.llm.config.vendor import NON_LLM_VENDORS
 from agent_actions.llm.providers.batch_base import BaseBatchClient
 from agent_actions.llm.providers.batch_client_factory import BatchClientFactory
 from agent_actions.llm.providers.client_base import BaseClient
@@ -105,7 +106,8 @@ class BatchClientResolver:
 
         try:
             client_config = _client_settings(agent_config)
-            if agent_config.get(API_KEY_KEY):
+            # The mock reads no key, so one named in the defaults is not looked up.
+            if agent_config.get(API_KEY_KEY) and client_type not in NON_LLM_VENDORS:
                 client_config["api_key"] = BaseClient.get_api_key(agent_config)
 
             client = BatchClientFactory.create_client(client_type, client_config)
