@@ -356,6 +356,7 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
 
         assert _batch_state(backend) == (["gone.json"], ["gone.json"])
         assert "batch batch-gone.json sent for it is not collected" in caplog.text
+        assert _held(backend) == ["pages.json"]
 
     @pytest.mark.parametrize("collected", [False, True], ids=["uncollected", "collected"])
     @pytest.mark.parametrize("status", STATUSES)
@@ -375,6 +376,7 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
         else:
             assert _metadata(backend) == ([], [])
             assert released == ["batch-gone.json"]
+        assert _held(backend) == ["pages.json"]
 
     @pytest.mark.parametrize("collected", [False, True], ids=["uncollected", "collected"])
     @pytest.mark.parametrize("status", STATUSES)
@@ -402,6 +404,7 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
         else:
             assert _metadata(backend) == ([], [])
             assert sorted(released) == ["batch-gone.json", "batch-gone.json_retry_1"]
+        assert _held(backend) == ["pages.json"]
 
     def test_its_recovery_state_and_no_input_mark_go(self, backend, tmp_path, released):
         from agent_actions.llm.batch.infrastructure.context import BatchContextManager
@@ -463,33 +466,47 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
         assert _metadata(backend) == ([], [])
         assert _held(backend) == ["pages.json"]
 
-    def test_a_release_that_fails_keeps_the_entry_and_the_rows_for_the_next_run(
+    def test_a_file_whose_name_differs_only_in_case_keeps_its_own(
+        self, backend, tmp_path, released
+    ):
+        """An input renamed from item.json to Item.json: the gone item.json takes nothing of
+        Item.json's batch state, which the next run reads to collect its batch."""
+        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+
+        _store(backend, "item.json", "Item.json")
+        for name in ("item.json", "Item.json"):
+            _sent(backend, name)
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "Item.json")]))
+
+        assert _held(backend) == ["Item.json"]
+        assert _batch_state(backend) == (["Item.json"], ["Item.json"])
+        assert BatchContextManager.load_batch_context_map(backend, ACTION, "Item.json") == {
+            "c1": {}
+        }
+
+    def test_a_release_that_fails_keeps_the_entry_and_deletes_the_rows(
         self, backend, tmp_path, monkeypatch, caplog
     ):
+        """The walk does not come back to a file it deleted, so the warning says what does."""
         from agent_actions.llm.providers import local_batch_records
 
         _store(backend, "gone.json", "pages.json")
         _sent(backend, "gone.json")
         monkeypatch.setattr(local_batch_records, "release_local_batch_record", lambda _id: False)
-        staging = _staged(tmp_path, "pages.json")
 
         with caplog.at_level(logging.WARNING, logger=runner_file_processing.__name__):
-            process_files(_runner(backend), _params([staging]))
+            process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
 
         assert _batch_state(backend) == (["gone.json"], ["gone.json"])
-        assert _held(backend) == ["gone.json", "pages.json"]
-        assert "the local record of batch batch-gone.json is not released" in caplog.text
-
-        monkeypatch.setattr(local_batch_records, "release_local_batch_record", lambda _id: True)
-        process_files(_runner(backend), _params([staging]))
-
-        assert _metadata(backend) == ([], [])
         assert _held(backend) == ["pages.json"]
+        assert "the local record of batch batch-gone.json is not released" in caplog.text
+        assert "agac clean --all" in caplog.text
 
-    def test_a_cleanup_that_fails_keeps_that_file_listed_and_the_next_run_cleans_it(
+    def test_a_cleanup_that_fails_keeps_that_file_s_batch_state_and_deletes_the_rows(
         self, backend, tmp_path, monkeypatch, caplog, released
     ):
-        """The other files are cleaned, and the warning names the batch state, not the rows."""
+        """The other files' batch state goes, and the warning names the batch state left."""
         from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryStateManager
 
         _store(backend, "a.json", "b.json", "c.json", "pages.json")
@@ -503,22 +520,39 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
             return delete(store, action_name, file_name)
 
         monkeypatch.setattr(RecoveryStateManager, "delete", staticmethod(refuse_b))
-        staging = _staged(tmp_path, "pages.json")
 
         with caplog.at_level(logging.WARNING, logger=runner_file_processing.__name__):
-            process_files(_runner(backend), _params([staging]))
-
-        assert _held(backend) == ["b.json", "pages.json"]
-        assert _batch_state(backend)[1] == ["b.json"]
-        assert f"Could not delete the batch state '{ACTION}' holds for b.json" in caplog.text
-        assert "database is locked" in caplog.text
-        assert "Could not delete what" not in caplog.text
-
-        monkeypatch.setattr(RecoveryStateManager, "delete", staticmethod(delete))
-        process_files(_runner(backend), _params([staging]))
+            process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
 
         assert _held(backend) == ["pages.json"]
-        assert _metadata(backend) == ([], [])
+        assert _batch_state(backend)[1] == ["b.json"]
+        assert sorted(released) == ["batch-a.json", "batch-b.json", "batch-c.json"]
+        assert f"Could not delete the batch state '{ACTION}' holds for b.json" in caplog.text
+        assert "database is locked" in caplog.text
+        assert "agac clean --all" in caplog.text
+        assert "Could not delete what" not in caplog.text
+
+    def test_batch_state_it_could_not_read_stays_and_the_rows_go(
+        self, backend, tmp_path, monkeypatch, caplog
+    ):
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+        _store(backend, "gone.json", "pages.json")
+        _sent(backend, "gone.json")
+
+        def unreadable(self):
+            raise sqlite3.OperationalError("database is locked")
+
+        monkeypatch.setattr(BatchRegistryManager, "get_all_jobs", unreadable)
+
+        with caplog.at_level(logging.WARNING, logger=runner_file_processing.__name__):
+            process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+        monkeypatch.undo()
+
+        assert _held(backend) == ["pages.json"]
+        assert _batch_state(backend) == (["gone.json"], ["gone.json"])
+        assert f"Could not read the batch state of '{ACTION}'" in caplog.text
+        assert "agac clean --all" in caplog.text
 
 
 class TestAStorageWalk:

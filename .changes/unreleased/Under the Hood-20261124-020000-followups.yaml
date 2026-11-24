@@ -7,10 +7,16 @@ body: >-
   options digest, so options added to it are named as an edit.
   When a run deletes what an action stores for an input that is gone, it first deletes that
   file's batch state: its context map (every part), recorded inputs, recovery state and,
-  once the provider's local record of the batch is released, its registry entries. A file
-  whose batch state cannot be deleted keeps its rows, so the next run tries again; the
-  other files are cleaned. A file whose batch is still owed (a completed batch not
-  collected too) keeps that state, with a warning, for a collect pass to read.
+  once the provider's local record of the batch is released, its registry entries. The rows
+  of the file always go. Batch state that cannot be deleted (or whose batch record is not
+  released) stays, with a warning that names it and says that `agac clean --all` or
+  `--fresh` removes it; the other files are cleaned. A file whose batch is still owed (a
+  completed batch not collected too) keeps that state, with a warning, for a collect pass
+  to read.
+  `delete_metadata_prefix` and `list_metadata_prefix` match a prefix exactly and with case.
+  They used SQLite `LIKE`, which ignores ASCII case: `clear_batch_state` of action `Act`
+  also cleared the batch state of action `act`, and the cleanup of a gone `item.json` would
+  delete the context map of `Item.json`.
   `agac dispositions` and `agac retry` (also with `--dry-run`, `--all` or `--filter`) refuse
   a workflow that has no store with "No store for workflow ...", exit 1 and create no store
   file. With `--sandbox` the store is `<workflow>.sandbox.db`. `agac dispositions` reads the

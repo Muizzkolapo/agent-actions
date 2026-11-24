@@ -315,9 +315,13 @@ read: it cannot say which inputs are gone), or under a repair. A deleted file's 
 state goes before its rows, each file on its own (`_forget_batch_state_of_files_gone`):
 its context map by its key's `#` prefix, recorded inputs, no-input mark and recovery
 state, then each registry entry once the provider's local record of its batch is
-released. A file whose batch state a failure keeps also keeps its rows, so the next run
-finds it gone and tries again; a file whose batch is still owed keeps its batch state
-for a collect pass. A version merge's walk is
+released. The rows always go: a walk does not come back to a file it deleted, and rows
+left behind would feed the actions below while the action reads as complete. Batch state
+that a failure (or a release that fails) keeps stays, with a warning that names it and
+says that `agac clean --all` or `--fresh` removes it; a file whose batch is still owed
+keeps its batch state for a collect pass. The prefix match (`list_metadata_prefix`,
+`delete_metadata_prefix`) is exact and case-sensitive, so `item.json`'s cleanup takes
+nothing of `Item.json`. A version merge's walk is
 the merged input the correlator hands it (`FileProcessParams.correlated_input`), one entry
 per file a version source lists, a file every version holds empty among them as an empty
 one, so the merge writes that file empty as any reader would. The merge's other
