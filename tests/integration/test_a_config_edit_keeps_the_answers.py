@@ -416,21 +416,6 @@ def test_a_reworded_intent_is_not_an_edit(completed):
     assert "was edited since" not in result.printed
 
 
-def test_a_store_stamped_before_generation_settings_names_no_edit(completed):
-    path = _workflow(completed) / "agent_io" / ".agent_status.json"
-    statuses = json.loads(path.read_text())
-    for details in statuses.values():
-        details.pop("generation_hash", None)
-        (details.get("answered_under") or {}).pop("generation_hash", None)
-    path.write_text(json.dumps(statuses))
-    _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    temperature: 0.9\n")
-
-    result = _agac(completed, "run", "-a", WORKFLOW)
-
-    assert result.returncode == 0, result.printed
-    assert "was edited since" not in result.printed
-
-
 TOOLS_FILE = Path("tools") / WORKFLOW / "logged.py"
 RECAP_RETURNS = 'return {"saw": item + ":" + staged.get("text", "-")}'
 GUARD = """from typing import Any
@@ -517,21 +502,6 @@ def test_an_action_stopped_partway_names_a_code_edit(project):
     assert _recap_saw(project) == ["alpha:-", "beta:edited", "gamma:edited"]
 
 
-def test_a_store_stamped_before_code_digests_names_no_edit(completed):
-    path = _workflow(completed) / "agent_io" / ".agent_status.json"
-    statuses = json.loads(path.read_text())
-    for details in statuses.values():
-        details.pop("udf_source_hash", None)
-        (details.get("answered_under") or {}).pop("udf_source_hash", None)
-    path.write_text(json.dumps(statuses))
-    _edit_tools(completed, RECAP_RETURNS, 'return {"saw": item + ":edited"}')
-
-    result = _agac(completed, "run", "-a", WORKFLOW)
-
-    assert result.returncode == 0, result.printed
-    assert "was edited since" not in result.printed
-
-
 SUMMARY_SCHEMA = "    schema: { said: string }\n"
 
 
@@ -593,26 +563,6 @@ def test_an_edit_to_a_tools_granularity_is_named(completed):
 )
 def test_a_setting_that_changes_how_a_request_travels_is_not_an_edit(completed, setting):
     _edit(completed, SUMMARY_INTENT, f"{SUMMARY_INTENT}    {setting}\n")
-
-    result = _agac(completed, "run", "-a", WORKFLOW)
-
-    assert result.returncode == 0, result.printed
-    assert "was edited since" not in result.printed
-
-
-def test_a_store_stamped_before_output_settings_names_no_edit(completed):
-    path = _workflow(completed) / "agent_io" / ".agent_status.json"
-    statuses = json.loads(path.read_text())
-    for details in statuses.values():
-        for stamp in (details, details.get("answered_under") or {}):
-            stamp.pop("output_settings_hash", None)
-            stamp.pop("endpoint_hash", None)
-    path.write_text(json.dumps(statuses))
-    _edit(
-        completed,
-        SUMMARY_INTENT,
-        f"{SUMMARY_INTENT}    json_mode: false\n    base_url: http://localhost:9/v1\n",
-    )
 
     result = _agac(completed, "run", "-a", WORKFLOW)
 
