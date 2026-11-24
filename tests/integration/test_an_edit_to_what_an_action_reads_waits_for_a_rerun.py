@@ -3,8 +3,9 @@
 An edit to an action's `context_scope` or `dependencies` is recorded with its answers. A run
 after one keeps those answers and those of its readers and warns which action was edited;
 ``--rerun <action>`` answers it and its readers again under the edit. This module pins what
-counts as such an edit, a retry after one, a batch action under one, and an action stopped
-partway then rerun; `test_a_config_edit_keeps_the_answers.py` pins the plain keep.
+counts as such an edit, a retry after one, a batch action under one, an action stopped
+partway then rerun, and a retry of an action that never completed;
+`test_a_config_edit_keeps_the_answers.py` pins the plain keep.
 `bystander` reads nothing the edits touch; each tool logs a line per record to `calls.log`.
 """
 
@@ -136,7 +137,7 @@ def logged_recap(data: dict[str, Any]) -> dict[str, Any]:
     fault = Path({FAULT!r})
     if fault.exists():
         told = json.loads(fault.read_text())
-        if told["item"] == item:
+        if told["item"] in (item, "*"):
             if told["raise"] == "interrupt":
                 raise KeyboardInterrupt()
             raise ValueError("no recap for " + item)
@@ -321,6 +322,28 @@ def test_a_stamp_without_a_digest_names_that_part_as_edited(completed):
     assert "bystander was edited since" not in _output(result)
     assert "resetting to pending" not in _output(result)
     assert _ran(completed) == {}
+
+
+def test_a_retry_of_an_action_that_never_completed_names_no_edit(project):
+    """It holds no completion stamp to compare, so no part of its config reads as edited."""
+    (project / FAULT).write_text(json.dumps({"item": "*", "raise": "error"}))
+    result = _agac(project, "run", "-a", WORKFLOW, "--fresh")
+    assert _status(project, "recap") == "failed", _output(result)
+    (project / FAULT).unlink()
+    _ran(project)
+
+    result = _agac(project, "retry", "-a", WORKFLOW)
+
+    assert result.returncode == 0, _output(result)
+    assert _status(project, "recap") == "completed", _output(result)
+    assert "was edited since" not in _output(result)
+    assert _ran(project).get("recap") == ITEMS
+
+    result = _agac(project, "run", "-a", WORKFLOW)
+
+    assert result.returncode == 0, _output(result)
+    assert "was edited since" not in _output(result)
+    assert _ran(project) == {}
 
 
 def test_rerun_of_an_action_stopped_partway_after_a_scope_edit_answers_every_record(project):

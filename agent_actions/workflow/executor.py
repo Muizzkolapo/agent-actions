@@ -294,8 +294,9 @@ CONFIG_EDIT = "action config (prompt/schema/guard/routing)"
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list[str]:
     """What differs from the config *stamp* recorded, by label; empty when nothing does.
 
-    Every stamp writer records each part, so a part the stamp lacks reads as edited. A
-    digest that was not or cannot now be computed (None: a tool not loaded) is not compared.
+    Every stamp writer records each part, so a part the stamp lacks reads as edited. Of the
+    ``_READS_STAMPS`` digests, one that was not or cannot now be computed (None: a tool not
+    loaded) is not compared. The model and ``config_hash`` are compared as they are, None too.
     """
     edits: list[str] = []
     if any(

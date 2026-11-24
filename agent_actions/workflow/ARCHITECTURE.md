@@ -871,7 +871,11 @@ Stamped beside it, each compared on its own (_edits_since):
 
 Add a new part to _READS_STAMPS, not to _compute_action_config_hash, so that
 an edit names the part. Every stamp writer records each part, so a stamp
-without one names that part as edited.
+without one names that part as edited. Adding a part therefore also needs a
+bump of StorageBackend._STORAGE_FORMAT_VERSION: no stamp written before
+holds the new part, so without the bump every completed action of every
+existing store reads as edited. The bump makes such a store refused until
+`agac clean --all` removes it.
 
 The model is not in the hash: _edits_since compares model_name and
 model_vendor on their own, so a model change is named as a model edit.

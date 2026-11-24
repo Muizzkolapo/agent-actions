@@ -101,6 +101,18 @@ class TestEditsSince:
 
         assert _edits_since(stamp, CONFIG) == [MODEL_EDIT, "context scope"]
 
+    def test_a_stamp_without_the_config_digest_names_the_action_config_as_edited(self):
+        stamp = _stamp(CONFIG)
+        del stamp["config_hash"]
+
+        assert _edits_since(stamp, CONFIG) == [CONFIG_EDIT]
+
+    def test_a_digest_of_what_it_reads_recorded_as_none_is_not_compared(self):
+        """None: a tool not loaded when the stamp was written; its code cannot be compared."""
+        stamp = {**_stamp(CONFIG), "context_scope_hash": None}
+
+        assert _edits_since(stamp, _with_scope(observe=["a.x"])) == []
+
     def test_a_model_recorded_as_none_and_now_set_is_an_edit(self):
         stamp = {**_stamp(CONFIG), "model_name": None}
 
