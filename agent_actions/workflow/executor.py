@@ -97,7 +97,7 @@ def _compute_action_config_hash(
     """Compute a deterministic hash of semantically-meaningful action config.
 
     Covers: prompt reference, schema reference, guard clause + behavior, and the
-    routing keys (``ROUTING_KEYS``) when set.
+    routing keys (``ROUTING_KEYS``) the action sets (an empty map when it sets none).
     Cosmetic fields (description, tags) are excluded.
 
     NOT the model: ``_edits_since`` compares ``model_name``/``model_vendor`` against
@@ -135,7 +135,7 @@ def _digest(value: Any) -> str:
 def _compute_context_scope_hash(action_config: ActionConfigDict) -> str:
     """A digest of what ``context_scope`` lets the action read.
 
-    Apart from ``config_hash`` so that recording it changed no digest already stored.
+    Apart from ``config_hash`` so that an edit names which part changed.
     """
     scope: Any = action_config.get("context_scope") or {}
     if not isinstance(scope, dict):

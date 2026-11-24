@@ -104,6 +104,20 @@ class TestComputeActionConfigHash:
         serialized = json.dumps(hash_input, sort_keys=True).encode("utf-8")
         assert _compute_action_config_hash(config) == hashlib.sha256(serialized).hexdigest()[:16]
 
+    def test_an_action_without_routing_keys_hashes_an_empty_routing_map(self):
+        hash_input = {
+            "prompt": "p",
+            "schema": "s",
+            "guard_clause": "",
+            "guard_behavior": "",
+            "routing": {},
+        }
+        serialized = json.dumps(hash_input, sort_keys=True).encode("utf-8")
+        assert (
+            _compute_action_config_hash({"prompt": "p", "schema": "s"})
+            == hashlib.sha256(serialized).hexdigest()[:16]
+        )
+
     def test_guard_string_normalized_to_dict(self):
         """Guard as string should produce same hash as equivalent dict."""
         string_guard = {"prompt": "X", "guard": "a > 1"}

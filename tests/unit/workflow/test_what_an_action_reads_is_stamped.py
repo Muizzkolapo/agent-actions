@@ -1,7 +1,7 @@
 """What an action reads — its context_scope and dependencies — is stamped beside config_hash (1332).
 
-Each has a digest of its own so that recording it changed no digest already stored: a
-store stamped before holds neither, and an absent digest never reads as an edit.
+Each has a digest of its own, so an edit names which part changed. An absent digest never
+reads as an edit.
 """
 
 from agent_actions.workflow.executor import (
