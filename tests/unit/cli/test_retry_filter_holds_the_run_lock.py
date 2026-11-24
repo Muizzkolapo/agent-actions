@@ -13,6 +13,8 @@ from agent_actions.cli.retry_filter import RetryFilterCommand
 from agent_actions.errors import RunInProgressError
 from agent_actions.storage.run_lock import hold_run_lock
 
+pytestmark = pytest.mark.usefixtures("a_store_exists")
+
 
 def _lock_is_held(io_dir: Path) -> bool:
     try:

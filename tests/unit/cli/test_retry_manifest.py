@@ -17,6 +17,8 @@ from agent_actions.cli.retry import (
 from agent_actions.workflow.managers.state import REPAIRED_BY, ActionStatus
 from tests.unit.cli.conftest import make_mock_backend
 
+pytestmark = pytest.mark.usefixtures("a_store_exists")
+
 
 class TestManifestHelpers:
     """Unit tests for _manifest_path, _write_manifest, _read_manifest, _delete_manifest."""
