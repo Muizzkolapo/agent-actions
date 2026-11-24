@@ -4,9 +4,6 @@ import sqlite3
 from collections.abc import Iterable
 from typing import Any
 
-from agent_actions.storage.backend import (
-    batch_file_names_key,
-)
 from agent_actions.storage.backends.sqlite.codec import SQLitePayloadCodecMixin
 from agent_actions.storage.backends.sqlite.common import logger
 from agent_actions.utils import deep_json
@@ -257,10 +254,6 @@ class SQLiteTargetDataMixin(SQLitePayloadCodecMixin):
                 )
                 deleted = cursor.rowcount
                 self._forget_dictionary(cursor, action_name, self._TARGET_DATA)
-                cursor.execute(
-                    "DELETE FROM workflow_metadata WHERE key = ?",
-                    (batch_file_names_key(action_name),),
-                )
                 self.connection.commit()
                 logger.debug(
                     "Deleted %d target records for %s",

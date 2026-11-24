@@ -115,12 +115,10 @@ def test_a_nested_file_of_a_top_level_name_is_its_own_batch_and_answered(project
             name: sorted(row.get("_state") for row in backend._read_target_raw(MERGE, name))
             for name in backend.list_target_files(MERGE)
         }
-        names = json.loads(backend.load_metadata(f"batch_file_names:{MERGE}") or "{}")
     finally:
         backend.close()
 
     assert registry == ["items.json", "sub/items.json"]
-    assert names == {"sub/items.json": "sub/items.json"}
     assert states == {
         "items.json": ["processed", "processed"],
         "sub/items.json": ["processed", "processed"],

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors.classification import mark_action_fatal
-from agent_actions.llm.batch.core.batch_constants import BatchStatus, RetiredRecoveryState
+from agent_actions.llm.batch.core.batch_constants import BatchStatus, UnknownRecoveryState
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events.cache_events import (
@@ -57,8 +57,8 @@ class BatchRegistryManager:
         answers None for an entry the load could not read — which would let the
         record of a batch nothing names any more sit there for good.
 
-        "Could not read" here is the entry a field or an enum value made
-        unusable, which `_load_registry` keeps. A retired recovery type is not
+        "Could not read" here is the entry a field made unusable, which
+        `_load_registry` keeps. An unknown recovery type is not
         one of those: that refuses the whole registry, so this raises with it.
         """
         with self._lock:
@@ -76,7 +76,7 @@ class BatchRegistryManager:
     def batch_ids(cls, storage_backend: "StorageBackend", action_name: str) -> list[str]:
         """Every batch id this action's registry names, read as stored.
 
-        Not through ``BatchJobEntry``: a retired recovery type refuses the whole
+        Not through ``BatchJobEntry``: an unknown recovery type refuses the whole
         registry and a spoiled entry is skipped, so a caller about to delete the
         registry would never learn the ids it was holding. Anything unreadable
         reads as no ids rather than an error — a registry nothing can read names
@@ -367,10 +367,10 @@ class BatchRegistryManager:
         for file_name, entry_dict in raw_data.items():
             try:
                 registry[file_name] = BatchJobEntry.from_dict(entry_dict)
-            except RetiredRecoveryState as e:
+            except UnknownRecoveryState as e:
                 # `agac batch` resolves an action by sweeping every registry, so a
                 # refusal has to say which one to re-run.
-                raise RetiredRecoveryState(
+                raise UnknownRecoveryState(
                     f"Batch registry entry '{file_name}' for action "
                     f"'{self._action_name}' cannot be read. {e}"
                 ) from e

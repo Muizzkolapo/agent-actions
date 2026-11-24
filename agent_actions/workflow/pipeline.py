@@ -11,9 +11,7 @@ from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
-    batch_file_identity,
     batch_output_name,
-    held_by_a_dependency,
 )
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.service import create_registry_manager_factory
@@ -451,17 +449,7 @@ class ProcessingPipeline:
         run_inputs = params.run_inputs if params.data is not None else data
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
-        batch_name = batch_file_identity(
-            relative_path.as_posix(),
-            params.pipeline_action_name,
-            params.storage_backend,
-            base_owner=held_by_a_dependency(
-                params.storage_backend,
-                params.pipeline_action_config.get("dependencies") or [],
-                params.dependency_configs,
-            ),
-            registry=registry_manager_factory,
-        )
+        batch_name = relative_path.as_posix()
         if disposition_gate is not None and disposition_gate.repairing:
             drop_rows_built_on_rows_gone_above(
                 params.storage_backend,
