@@ -45,7 +45,7 @@ class FileErrorFormatter(ErrorFormatter):
                     fix=(
                         f"1. Create {config_path}\n"
                         "     2. Or use an existing agent: "
-                        "agac run --agent <existing-agent>"
+                        "agac run --workflow <existing-workflow>"
                     ),
                     context=context,
                     docs_url=WORKFLOW_CONFIGURATION,

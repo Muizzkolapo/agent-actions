@@ -23,12 +23,7 @@ class SQLitePayloadCodecMixin(SQLiteHost):
     _SNAPSHOT = "record_disposition.input_snapshot"
     _SOURCE_SCOPE = ""
     _DICTIONARY_SIZE = 32768
-    # A trace dictionary: keyed prompt_trace.<column>, or by the bare column name in a
-    # store written before the keys were qualified.
-    _TRACE_DICTIONARY_SQL = (
-        "(column_name LIKE 'prompt_trace.%'"
-        " OR column_name IN ('compiled_prompt', 'llm_context', 'response_text'))"
-    )
+    _TRACE_DICTIONARY_SQL = "column_name LIKE 'prompt_trace.%'"
 
     def _compress(self, cursor: sqlite3.Cursor, scope: str, key: str, text: str) -> bytes:
         """Compress against the dictionary for (*scope*, *key*), made from its first value.
@@ -94,28 +89,30 @@ class SQLitePayloadCodecMixin(SQLiteHost):
                 self._dictionaries[dictionary_id] = row[0]
             return self._dictionaries[dictionary_id]
 
-    def _inflate(self, value: bytes) -> str:
+    def _inflate(self, value: Any) -> str:
+        if not isinstance(value, bytes):
+            raise ValueError(f"the value is {type(value).__name__}, not a compressed value")
         dictionary = self._dictionary(int.from_bytes(value[:4], "big"))
         decompressor = zlib.decompressobj(zdict=dictionary) if dictionary else zlib.decompressobj()
         return (decompressor.decompress(value[4:]) + decompressor.flush()).decode("utf-8")
 
-    def decompress_trace_text(self, value: Any) -> Any:
-        """Return trace text as written; a TEXT value is a row stored before compression."""
-        if not isinstance(value, bytes):
-            return value
+    def decompress_trace_text(self, value: Any) -> str | None:
+        """Return trace text as written; None for a column left empty."""
+        if value is None:
+            return None
         try:
             return self._inflate(value)
         except (zlib.error, ValueError) as e:
             raise ValueError(f"Unreadable compressed trace text: {e}") from e
 
-    def payload_text(self, value: Any, *, table: str, where: str) -> Any:
-        """The text a payload column holds, whether stored compressed or as text.
+    def payload_text(self, value: Any, *, table: str, where: str) -> str | None:
+        """The text a compressed payload column holds; None for a column left empty.
 
         These columns feed resume and retry, where empty data would pass for an
         answer, so a value that cannot be read is an error naming its row.
         """
-        if not isinstance(value, bytes):
-            return value
+        if value is None:
+            return None
         try:
             return self._inflate(value)
         except (zlib.error, ValueError) as e:
@@ -128,6 +125,8 @@ class SQLitePayloadCodecMixin(SQLiteHost):
         """The JSON a payload column holds; see :meth:`payload_text` for what fails."""
         text = self.payload_text(value, table=table, where=where)
         try:
+            if text is None:
+                raise ValueError("the column holds no value")
             return deep_json.loads(text)
         except ValueError as e:
             raise SerializationError(

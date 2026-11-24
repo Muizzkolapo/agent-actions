@@ -16,6 +16,12 @@ def trace_rows(project: Path, sql: str, *params: Any) -> list[tuple[Any, ...]]:
     backend = SQLiteBackend.create_readonly(store_path(project))
     try:
         rows = backend.connection.execute(sql, params).fetchall()
-        return [tuple(backend.decompress_trace_text(value) for value in row) for row in rows]
+        return [
+            tuple(
+                backend.decompress_trace_text(value) if isinstance(value, bytes) else value
+                for value in row
+            )
+            for row in rows
+        ]
     finally:
         backend.close()

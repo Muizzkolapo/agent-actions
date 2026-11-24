@@ -1,8 +1,7 @@
-"""`-w` is the workflow and `-A` the action in every command; `-a` is never both.
+"""`-w` and `-a` are the workflow and `-A` the action in every command.
 
 `traces`, `records` and `preview` read `-a` as the action while every other
-command read it as the workflow. They still take it as the action, with a
-warning on stderr that says what to type.
+command read it as the workflow. Now `-a` names the workflow there too.
 """
 
 import json
@@ -16,8 +15,6 @@ from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 WORKFLOW = "wf"
 ACTION = "summarize"
-# Until `-a` stops naming the action in these, it cannot name the workflow.
-ACTION_WAS_A = {"traces", "records", "preview"}
 WORKFLOW_PARAMS = {"agent", "agent_opt", "agent_name", "workflow"}
 
 
@@ -53,6 +50,7 @@ def test_the_commands_that_take_a_workflow_are_the_ones_known():
         "dispositions",
         "expect list",
         "expect report",
+        "export",
         "inspect",
         "inspect action",
         "inspect context",
@@ -69,12 +67,12 @@ def test_the_commands_that_take_a_workflow_are_the_ones_known():
 
 
 @pytest.mark.parametrize("path", sorted(WITH_A_WORKFLOW))
-def test_every_command_that_takes_a_workflow_takes_it_as_w_workflow_and_agent(path):
+def test_every_command_that_takes_a_workflow_takes_it_as_w_workflow_and_a(path):
     option = _option(WITH_A_WORKFLOW[path], *WORKFLOW_PARAMS)
 
     assert option is not None
-    assert {"-w", "--workflow", "--agent"} <= set(option.opts)
-    assert ("-a" in option.opts) == (path not in ACTION_WAS_A)
+    assert {"-w", "--workflow", "-a"} <= set(option.opts)
+    assert "--agent" not in option.opts
 
 
 @pytest.mark.parametrize("path", sorted(WITH_AN_ACTION))
@@ -95,8 +93,8 @@ def test_no_command_gives_a_w_or_capital_a_another_meaning():
                 assert param.name in WORKFLOW_PARAMS, path
             if "-A" in param.opts:
                 assert param.name in {"action", "action_name"}, path
-            if "-a" in param.opts and param.name not in WORKFLOW_PARAMS:
-                assert path in ACTION_WAS_A and param.hidden, path
+            if "-a" in param.opts:
+                assert param.name in WORKFLOW_PARAMS, path
 
 
 @pytest.fixture
@@ -139,14 +137,22 @@ def test_traces_w_workflow_action_prints_the_traces_and_no_warning(project, flag
 
     assert result.exit_code == 0, result.output
     assert "Page alpha prompt." in result.stdout
-    assert "deprecated" not in result.stderr
+    assert result.stderr == ""
 
 
-def test_traces_takes_agent_for_the_workflow(project):
-    result = _run("traces", "--agent", WORKFLOW, "-A", ACTION)
+def test_traces_takes_workflow_for_the_workflow(project):
+    result = _run("traces", "--workflow", WORKFLOW, "-A", ACTION)
 
     assert result.exit_code == 0, result.output
     assert "Page alpha prompt." in result.stdout
+
+
+@pytest.mark.parametrize("path", sorted(WITH_A_WORKFLOW))
+def test_agent_is_no_such_option(path):
+    result = _run(*path.split(), "--agent", WORKFLOW)
+
+    assert result.exit_code == 2
+    assert "No such option: --agent" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -158,61 +164,40 @@ def test_traces_takes_agent_for_the_workflow(project):
     ],
     ids=["traces", "records", "preview"],
 )
-def test_a_for_the_action_still_works_and_says_on_stderr_what_to_type(project, command, shown):
+def test_a_names_the_workflow_and_capital_a_the_action(project, command, shown):
     name, *rest = command
-    result = _run(name, "-w", WORKFLOW, "-a", ACTION, *rest)
+    result = _run(name, "-a", WORKFLOW, "-A", ACTION, *rest)
 
     assert result.exit_code == 0, result.output
     assert shown in result.stdout
-    assert "deprecated" not in result.stdout
-    assert f"-a is deprecated in 'agac {name}'" in result.stderr
-    assert "-A" in result.stderr and "--action" in result.stderr and "-w" in result.stderr
+    assert "deprecated" not in result.output
 
 
-def test_records_a_workflow_prints_a_deprecation_warning(project):
-    """`agac records -a <wf>`: the workflow typed where this command reads the action."""
-    result = _run("records", "-a", WORKFLOW)
-
-    assert result.exit_code != 0
-    assert "-a is deprecated" in result.stderr
-    assert "-w" in result.stderr
-    assert "Missing option '-w'" in result.stderr
-
-
-def test_records_a_workflow_w_workflow_does_not_end_in_a_bare_empty_result(project):
-    result = _run("records", "-a", WORKFLOW, "-w", WORKFLOW, "--snapshots")
+@pytest.mark.parametrize("name", ["records", "preview"])
+def test_a_alone_names_the_workflow(project, name):
+    result = _run(name, "-a", WORKFLOW)
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout) == []
-    assert "-a is deprecated" in result.stderr
-    assert "-w" in result.stderr
+    assert "deprecated" not in result.output
+
+
+def test_records_a_workflow_snapshots_prints_the_failed_record(project):
+    result = _run("records", "-a", WORKFLOW, "--snapshots")
+
+    assert result.exit_code == 0, result.output
+    assert [r["record_id"] for r in json.loads(result.stdout)] == ["guid-9"]
 
 
 def test_traces_without_an_action_names_the_option_it_lacks(project):
-    result = _run("traces", "-w", WORKFLOW)
+    result = _run("traces", "-a", WORKFLOW)
 
     assert result.exit_code == 2
     assert "Missing option '-A' / '--action'" in result.stderr
 
 
-def test_an_action_given_both_ways_is_refused(project):
-    result = _run("traces", "-w", WORKFLOW, "-a", ACTION, "-A", "classify")
-
-    assert result.exit_code == 2
-    assert "-a" in result.stderr and "-A" in result.stderr
-
-
-def test_the_warning_is_printed_before_an_error_in_an_option_typed_earlier(project):
-    """Only an eager -a is processed before the bad -n that comes first on the line."""
-    result = _run("preview", "-w", WORKFLOW, "-n", "abc", "-a", ACTION)
-
-    assert result.exit_code == 2
-    assert "-a is deprecated" in result.stderr
-    assert result.stderr.index("-a is deprecated") < result.stderr.index("Invalid value")
-
-
-def test_the_warning_is_printed_with_help(project):
-    result = _run("traces", "-a", ACTION, "--help")
+def test_help_prints_no_warning(project):
+    result = _run("traces", "--help")
 
     assert result.exit_code == 0
-    assert "-a is deprecated" in result.stderr
+    assert result.stderr == ""
+    assert "-A, --action" in result.stdout

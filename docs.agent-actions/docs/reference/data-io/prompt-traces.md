@@ -44,16 +44,14 @@ that you ask.
   `parent_target_id`. The reason is that its own id did not exist yet when the
   prompt ran.
 
-Both identifiers apply to online and batch alike. Rows written before `source_guid`
-and `run_id` existed have `NULL` in these columns.
+Both identifiers apply to online and batch alike.
 
 A [config edit](../cli/run#when-you-edit-the-workflow) re-runs nothing. Thus one action can
 hold answers from more than one config. `answered_under` tells which config answered each
 record. It holds the same keys as the `answered_under` stamp of the action in
 `agent_io/.agent_status.json`. Thus you can compare the two directly.
 
-Rows written before this column existed have `NULL` in it. A row is written when its prompt
-is built, before the model is called. Thus a row with no `response_text` was prompted under
+A row is written when its prompt is built, before the model is called. Thus a row with no `response_text` was prompted under
 that config but not answered. The run stopped before the answer came back.
 
 An action that stopped partway keeps its traces when it resumes, including the rows of

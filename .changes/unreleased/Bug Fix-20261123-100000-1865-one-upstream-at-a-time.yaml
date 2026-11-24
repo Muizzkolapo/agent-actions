@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Reading a stored file now decodes the files of the actions above it one at a time. A delta row keeps its whole envelope, its state history among it, and only its own namespace. To rebuild a file, the store decoded every upstream file at once and kept them all until the join ended, though it takes only each row''s content. Deep in a long workflow that was several times the file it returned. A write measured the upstream files the same way. On a synthetic run with 30 earlier actions, reading a file of 925 records held at most 222 MB above its start, down from 695 MB, and the batch step''s peak memory fell from 1.6 GB to 1.0 GB.'
+time: 2026-11-23T10:00:00Z

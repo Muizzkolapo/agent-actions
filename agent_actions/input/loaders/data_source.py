@@ -15,6 +15,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.input.loaders.database_source import (
+    DEFAULT_SNAPSHOT_FILES,
+    REMOTE_CACHE_DIR,
+    refuse_a_statement_that_writes,
+    snapshot_directory,
+    snapshot_fingerprint,
+    snapshot_needs_reading,
+    snapshot_query,
+)
 from agent_actions.utils import deep_json
 from agent_actions.utils.atomic_write import atomic_json_write
 from agent_actions.utils.project_root import find_project_root
@@ -26,6 +35,7 @@ class DataSourceType(str, Enum):
     STAGING = "staging"
     LOCAL = "local"
     API = "api"
+    DATABASE = "database"
 
 
 class DataSourceConfig(BaseModel):
@@ -43,6 +53,16 @@ class DataSourceConfig(BaseModel):
     query: dict[str, str] | None = Field(
         default=None, description="Query parameters for API requests"
     )
+    sql: str | None = Field(default=None, description="The query to read (for type=database)")
+    connection: str | None = Field(
+        default=None, description="Name of a project connection (for type=database)"
+    )
+    files: int = Field(
+        default=DEFAULT_SNAPSHOT_FILES,
+        ge=1,
+        le=256,
+        description="Files the rows are spread over (for type=database)",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -52,7 +72,7 @@ logger = logging.getLogger(__name__)
 # Safety limits for API fetches
 _MAX_RESPONSE_BYTES = ApiDefaults.MAX_RESPONSE_BYTES
 _REQUEST_TIMEOUT_SECONDS = ApiDefaults.REQUEST_TIMEOUT_SECONDS
-_REMOTE_CACHE_DIR = "_remote_cache"
+_REMOTE_CACHE_DIR = REMOTE_CACHE_DIR
 
 # Type names that require dict config — used to catch bare-string typos early
 _KNOWN_TYPES = {t.value for t in DataSourceType}
@@ -196,12 +216,10 @@ def _resolve_api(
 
     cache_file = cache_dir / f"{agent_name}.json"
 
-    if not cache_file.exists():
-        _fetch_api_data(config, cache_file)
-    else:
+    if _holds_a_staging_document(cache_file):
         logger.info("Using cached API data: %s (from %s)", cache_file, config.url)
-
-    _bring_cache_to_the_document_rule(cache_dir)
+    else:
+        _fetch_api_data(config, cache_file)
 
     return DataSourceResolutionResult(directories=[cache_dir])
 
@@ -216,63 +234,31 @@ def _as_staging_document(payload: Any) -> list[Any]:
     return payload if isinstance(payload, list) else [payload]
 
 
-def _would_be_staged(item: Path, cache_dir: Path) -> bool:
-    """Whether a cache entry is one the walk would stage, so rewriting it is worth it.
-
-    Deliberately NOT the runner's `should_skip_item`, which this once claimed to mirror and
-    has diverged from since #1026. That one answers every exclusion before touching the
-    filesystem and lets `is_file()` raise, because a stat failure there is a lost record the
-    run must report. Here it is a cache file: one that cannot be stat-ed is simply not worth
-    rewriting, and raising would fail a run over an entry that was never going to be staged.
-    `processed_paths` and `file_type_filter` are the runner's too, and do not apply to a
-    cache directory.
-    """
-    return (
-        item.is_file()
-        and not item.name.startswith(".")
-        and "batch" not in item.relative_to(cache_dir).parts
-    )
-
-
-def _bring_cache_to_the_document_rule(cache_dir: Path) -> None:
-    """Rewrite cache entries written before a response was stored as a document.
-
-    The walk stages more than the entry this action fetched — a renamed action or
-    a sibling start node leaves others beside it — and it stages less than every
-    file here. Reading one it skips would fail a run over something that was never
-    going to be staged.
-    """
-    for cache_file in sorted(cache_dir.rglob("*.json")):
-        if not _would_be_staged(cache_file, cache_dir):
-            continue
-        try:
-            cached = deep_json.loads(cache_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as e:
-            raise ConfigurationError(
-                f"Cached API data at {cache_file} cannot be read: {e}. "
-                "Delete the _remote_cache/api/ directory to fetch it again.",
-                context={"cache_file": str(cache_file), "operation": "read_api_cache"},
-                cause=e,
-            ) from e
-
-        if isinstance(cached, list):
-            continue
-
-        logger.info(
-            "Rewriting cached API data as a staging document: %s (held %s)",
+def _holds_a_staging_document(cache_file: Path) -> bool:
+    """Whether *cache_file* holds what a fetch writes; a file that does not is fetched again."""
+    if cache_file.is_dir():
+        # A fetch could not replace it, so refuse before spending a request.
+        raise ConfigurationError(
+            f"The API cache path {cache_file} is a directory. Remove it to fetch the data again.",
+            context={"cache_file": str(cache_file), "operation": "resolve_api_cache"},
+        )
+    if not cache_file.is_file():
+        return False
+    try:
+        cached = deep_json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        logger.warning(
+            "Cached API data at %s cannot be read, fetching it again: %s", cache_file, e
+        )
+        return False
+    if not isinstance(cached, list):
+        logger.warning(
+            "Cached API data at %s holds a %s, not a list, fetching it again",
             cache_file,
             type(cached).__name__,
         )
-        try:
-            atomic_json_write(cache_file, _as_staging_document(cached), fsync=False)
-        except OSError as e:
-            raise ConfigurationError(
-                f"Cached API data at {cache_file} predates the staging document rule "
-                f"and cannot be rewritten: {e}. "
-                "Delete the _remote_cache/api/ directory to fetch it again.",
-                context={"cache_file": str(cache_file), "operation": "rewrite_api_cache"},
-                cause=e,
-            ) from e
+        return False
+    return True
 
 
 def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
@@ -319,6 +305,41 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
         ) from e
 
 
+def _resolve_database(
+    config: DataSourceConfig, agent_folder: Path, agent_name: str, project_root: Path | None
+) -> DataSourceResolutionResult:
+    """Resolve a database data source -- read the query once and keep its rows on disk.
+
+    A snapshot is kept per action, query, file count and connection settings (a
+    ``${NAME}`` setting by its value, a credential by its name), so changing any
+    of them reads again. ``agac run --refresh-input`` reads it again too.
+    """
+    if not config.connection or not config.sql or not config.sql.strip():
+        raise ConfigurationError(
+            "Database data source requires a 'connection' and an 'sql' query",
+            context={
+                "data_source": config.model_dump(exclude={"headers"}),
+                "operation": "resolve_database_data_source",
+            },
+        )
+    refuse_a_statement_that_writes(config.sql)
+
+    from agent_actions.connections import connection_settings, open_connection
+    from agent_actions.connections.settings import settings_as_resolved
+
+    root = project_root or find_project_root(str(agent_folder)) or agent_folder.resolve().parent
+    settings = settings_as_resolved(connection_settings(config.connection, root))
+    fingerprint = snapshot_fingerprint(config.connection, config.sql, settings, config.files)
+    snapshot_dir = snapshot_directory(agent_folder, agent_name, fingerprint)
+    if not snapshot_needs_reading(snapshot_dir):
+        logger.info("Using the stored snapshot of '%s': %s", config.connection, snapshot_dir)
+        return DataSourceResolutionResult(directories=[snapshot_dir])
+
+    with open_connection(config.connection, root, read_only=True) as connector:
+        snapshot_query(connector, config.sql, snapshot_dir, config.files)
+    return DataSourceResolutionResult(directories=[snapshot_dir])
+
+
 def is_api_data_source(data_source: Any) -> bool:
     """Whether *data_source* names an API, whose resolution may fetch over the network."""
     return bool(data_source) and _parse_data_source(data_source).type == DataSourceType.API
@@ -328,6 +349,7 @@ def resolve_start_node_data_source(
     agent_folder: Path,
     data_source: Any,
     agent_name: str,
+    project_root: Path | None = None,
 ) -> DataSourceResolutionResult:
     """Resolve the data source for a start node.
 
@@ -347,6 +369,9 @@ def resolve_start_node_data_source(
 
     if config.type == DataSourceType.API:
         return _resolve_api(config, agent_folder, agent_name)
+
+    if config.type == DataSourceType.DATABASE:
+        return _resolve_database(config, agent_folder, agent_name, project_root)
 
     raise ConfigurationError(
         f"Unsupported data source type: {config.type}",

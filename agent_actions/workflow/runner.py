@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
     from agent_actions.workflow.managers.manifest import ManifestManager
+from agent_actions.config import sandbox
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
@@ -49,7 +50,7 @@ class FileProcessParams:
     idx: int
     file_type_filter: set[str] | None = None
     # A version merge's input by file path, walked in place of a stored upstream.
-    correlated_input: dict[str, list[dict[str, Any]]] | None = None
+    correlated_input: Mapping[str, list[dict[str, Any]]] | None = None
 
 
 @dataclass
@@ -87,7 +88,7 @@ class ProcessGenerateParams:
     strategy: ActionStrategy
     previous_action_type: str | None
     idx: int
-    correlated_input: dict[str, list[dict[str, Any]]] | None = None
+    correlated_input: Mapping[str, list[dict[str, Any]]] | None = None
 
 
 class ActionRunner:
@@ -148,7 +149,9 @@ class ActionRunner:
 
     def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> list[Path]:
         """Resolve upstream directories for a start node (no dependencies)."""
-        result = resolve_start_node_data_source(agent_folder, self.data_source_config, agent_name)
+        result = resolve_start_node_data_source(
+            agent_folder, self.data_source_config, agent_name, self.project_root
+        )
         return result.directories
 
     def _resolve_dependency_directories(
@@ -164,7 +167,7 @@ class ActionRunner:
         """
         from agent_actions.errors import DependencyError
 
-        target_dir = agent_folder / "target"
+        target_dir = sandbox.run_dir(agent_folder) / "target"
 
         # Resolve all input source directories
         resolved_dirs = []
@@ -276,7 +279,7 @@ class ActionRunner:
     def _resolve_linear_directory(self, agent_folder: Path, previous_action_type: str) -> Path:
         """Resolve upstream directory for linear workflow (default behavior)."""
         # Use simple name without index prefix
-        return agent_folder / "target" / previous_action_type
+        return sandbox.run_dir(agent_folder) / "target" / previous_action_type
 
     def staged_input_fingerprint(
         self, action_name: str, action_config: ActionConfigDict
@@ -284,12 +287,16 @@ class ActionRunner:
         """The input files a first stage reads, or None for an action reading another.
 
         None for an API source too: resolving one can fetch, and this is asked on every
-        skip check.
+        skip check. A database source is resolved here: its snapshot is the input, and
+        one that is missing or asked to refresh is read before the check compares it.
         """
         if action_config.get("dependencies") or is_api_data_source(self.data_source_config):
             return None
         result = resolve_start_node_data_source(
-            Path(self.get_action_folder(action_name)), self.data_source_config, action_name
+            Path(self.get_action_folder(action_name)),
+            self.data_source_config,
+            action_name,
+            self.project_root,
         )
         return staged_input_fingerprint(result.directories, result.file_type_filter)
 
@@ -318,7 +325,7 @@ class ActionRunner:
         else:
             upstream_data_dirs = [agent_folder_path / "staging"]
 
-        output_directory = agent_folder_path / "target" / agent_type
+        output_directory = sandbox.run_dir(agent_folder_path) / "target" / agent_type
         if self.storage_backend is None:
             output_directory.mkdir(parents=True, exist_ok=True)
         return ([str(d) for d in upstream_data_dirs], str(output_directory))
@@ -366,7 +373,7 @@ class ActionRunner:
 
         if params.correlated_input is not None:
             agent_type = params.action_config["agent_type"]
-            output_directory = str(Path(agent_folder) / "target" / agent_type)
+            output_directory = str(sandbox.run_dir(Path(agent_folder)) / "target" / agent_type)
             input_directories = [output_directory] + [
                 str(d)
                 for d in self._resolve_dependencies_besides_versions(
@@ -383,7 +390,7 @@ class ActionRunner:
         if not params.action_config.get("dependencies") and not params.previous_action_type:
             agent_folder_path = Path(agent_folder)
             result = resolve_start_node_data_source(
-                agent_folder_path, self.data_source_config, params.action_name
+                agent_folder_path, self.data_source_config, params.action_name, self.project_root
             )
             file_type_filter = result.file_type_filter
 
@@ -409,7 +416,7 @@ class ActionRunner:
         previous_action_type: str | None,
         idx: int,
         *,
-        correlated_input: dict[str, list[dict[str, Any]]] | None = None,
+        correlated_input: Mapping[str, list[dict[str, Any]]] | None = None,
     ) -> str:
         """Run an action with the appropriate strategy based on its position in the workflow."""
         dependencies = action_config.get("dependencies", [])

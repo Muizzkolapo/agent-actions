@@ -1,0 +1,11 @@
+kind: Bug Fix
+body: >-
+  The `context:` references of an `llm_judge` rule now go only into the `context_scope` of the
+  action that has the rule. Before, when the action had no `context_scope` of its own, the load
+  added the references to the `context_scope` under `defaults:`, which other actions share. Thus
+  an action that did not read the source action ran after it, or the load failed with "Cyclic
+  dependency detected". Also, when the `expect:` block under `defaults:` has an `expectations:`
+  list and the action has a `suite:`, the load now observes the references of the suite, because
+  the run judges with the suite. A reference in `context:` that is not a string no longer stops
+  the load with a `TypeError`; preflight reports the rule.
+time: 2026-11-23T12:02:00.000000+00:00

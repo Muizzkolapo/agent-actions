@@ -8,10 +8,12 @@ import logging
 from collections.abc import Container, Iterable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from rich.console import Console
 
+from agent_actions.config import sandbox
 from agent_actions.config.defaults import StorageDefaults
 from agent_actions.errors import ConfigurationError, enrich_exception_context
 from agent_actions.llm.config.vendor import effective_run_mode
@@ -168,7 +170,7 @@ class AgentWorkflow:
     def _clear_for_fresh_run(self) -> None:
         """Clear stored results, dispositions, status, and event logs for a fresh run."""
         io_dir = Path(self.services.core.action_runner.get_action_folder(self.agent_name))
-        target_dir = io_dir / "target"
+        target_dir = sandbox.run_dir(io_dir) / "target"
         for action_name in self.execution_order:
             for op_name, op_call in [
                 ("target", lambda a=action_name: self.storage_backend.delete_target(a)),
@@ -236,7 +238,7 @@ class AgentWorkflow:
 
         # JSONFileHandler opens lazily, so deleting between handler init
         # and first event write is safe.
-        logs_dir = io_dir / "logs"
+        logs_dir = sandbox.run_dir(io_dir) / "logs"
         stale_logs = [path for name in RUN_LOG_NAMES for path in logs_dir.glob(f"{name}.*json")]
         for log_file in stale_logs:
             try:
@@ -506,6 +508,9 @@ class AgentWorkflow:
                             action_executor=self.services.core.action_executor,
                             concurrency_limit=concurrency_limit,
                             total_steps=len(levels),
+                            batch_preparation_concurrency=self._workflow_setting(
+                                "batch_preparation_concurrency"
+                            ),
                         )
                     )
 
@@ -675,6 +680,12 @@ class AgentWorkflow:
                     e, elapsed_time=duration, failed_action=running
                 )
                 raise
+
+    def _workflow_setting(self, key: str) -> Any:
+        """A top-level key of the workflow file as written; the config load has checked it."""
+        config_mgr = getattr(self.config, "manager", None)
+        user_cfg = getattr(config_mgr, "user_config", None)
+        return user_cfg.get(key) if isinstance(user_cfg, dict) else None
 
     def _run_storage_maintenance(self) -> None:
         """Run post-workflow storage maintenance (WAL checkpoint, cleanup)."""

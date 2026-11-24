@@ -64,7 +64,7 @@ logging:
 
 | Field | Description |
 |-------|-------------|
-| `default_agent_config` | The default settings that all actions inherit, including `chunk_config`. See [Chunking](../data-io/chunking). Only the keys nested here reach an action. Nothing reads a `chunk_config:` at the top level of the file |
+| `default_agent_config` | The default settings that all actions inherit, including `chunk_config`. See [Chunking](../data-io/chunking). Only the keys nested here reach an action. Nothing reads a `chunk_config:` at the top level of the file. This block takes the keys that a workflow `defaults:` block takes (see [Defaults](./defaults)). The load refuses any other key. The error names the key, the valid key that it resembles, and all of the valid keys |
 | `schema_path` | The directory that contains the output schemas. Required: if it is not set, the load of a schema fails. `agac init` writes `schema_path: schema` |
 | `tool_path` | The directories to scan for custom tools |
 | `seed_data_path` | The directory for static reference data (default: `seed_data`) |
@@ -110,9 +110,29 @@ The top level accepts only these keys, and refuses all other keys. Without this 
 | `defaults` | The settings that each action inherits |
 | `actions` | The actions (required) |
 | `tool_path` | The location of the tools of this workflow. It has priority over the default config and over `tool_path` in `agent_actions.yml` |
+| `batch_preparation_concurrency` | Optional. The maximum number of batch actions of one step that prepare at the same time (1-50). If you omit it, only `--concurrency-limit` applies. See [Batch preparation concurrency](#batch-preparation-concurrency) |
 | `storage` | Maintenance settings: `prompt_trace_retention_runs` and `source_data_ttl_days`. The unit of the first setting is **calendar days**, not runs, although its name says runs. `0` means never prune. If you omit a key, the framework default applies. For traces, the framework default is 10 days, and it does prune |
 
 Model settings, for example `model_vendor`, go under `defaults:`, not at the top level.
+
+### Batch preparation concurrency
+
+`batch_preparation_concurrency` sets the maximum number of batch actions of one step that prepare their requests at the same time. Each batch action holds the records of one input file while it prepares. Thus two batch actions of one step hold two files. Use this key when the records of a step are large and the memory of the machine is small:
+
+```yaml
+name: my_workflow
+description: "Extract and validate facts"
+batch_preparation_concurrency: 1   # one batch action of a step prepares at a time
+```
+
+- The value is a whole number from 1 to 50. The load refuses other values, for example `0` or `"1"`.
+- It limits only the batch actions that prepare and send their requests. An online, tool or hitl action of the step continues to run beside them. A batch action that collects its results is not limited.
+- A batch action gives its place back when it has sent its batch. It does not keep the place while the provider runs the batch: a later run, or `--wait`, collects the results.
+- `--concurrency-limit` continues to limit all of the actions of the run. A batch action that waits for its turn does not use one of those places.
+- `--concurrency-limit 1` and `--execution-mode sequential` also run one batch action at a time. But they also make an online action wait, or make the batch actions wait for the online action.
+- It does not change any answer.
+
+See [Memory while a batch step prepares](../execution/run-modes.md#batch-preparation-memory).
 
 See [Defaults](./defaults.md) for the complete inheritance system.
 
@@ -370,7 +390,7 @@ The vendor name for Gemini is `gemini`. The name `google` is an alias for it.
 | Ollama (local) | `ollama_local` | ✅ | llama3, mistral |
 | Ollama (cloud) | `ollama_cloud` | ✅ | gpt-oss:120b-cloud |
 | llamafile | `llamafile` | ❌ | any GGUF model that the server loads |
-| Mock (no network, no key) | `agac-provider` | ✅ | any name. The answers come from the schema |
+| Mock (no network, no key) | `agac-provider` | ✅ | any name. The answers come from the schema and the expectation rules of the action. See [Testing rules with the mock provider](../validation/expectations.md#testing-rules-with-the-mock-provider) |
 
 ### Named local runtimes
 
@@ -477,7 +497,7 @@ api_key: OPENAI_API_KEY  # Uses $OPENAI_API_KEY from environment
 | `AGENT_ACTIONS_LOG_MAX_BYTES` | 52428800 | The limit for the DEBUG rows written to each run log file. Past this limit, the DEBUG rows stop. `0` means no cap. Overrides `logging.file.max_bytes`. |
 | `AGENT_ACTIONS_LOG_RETAIN_RUNS` | 5 | The number of earlier run logs that are kept. Overrides `logging.file.backup_count`. |
 | `AGENT_ACTIONS_BATCH_MAX_REQUESTS` | the limit of the provider | The maximum number of requests in one [judge batch](../validation/expectations.md#judging-in-batch). It replaces the limit of each provider: 100,000 for Anthropic, 50,000 for OpenAI, Groq and each provider that states no limit. Only judge batches read it. A main batch does not. A value below 1, or a value that is not an integer, stops the run. This occurs when Agent Actions assembles the workflow, before it sends a batch. |
-| `AGAC_RECORD_LIMIT` | unset | Limits each action to this number of records for each input file. It overrides a larger `record_limit`, and it applies to actions that set none. If both are set, [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) has priority, and it can raise this value as well as lower it. It is for a cheap run of a project from outside the project, for example a smoke check or a quick sanity pass. On a workflow that you already ran, it is not read-only. A limit smaller than the number of records that a completed action already processed differs from the limit that the action stored. So the action runs again under this limit, and its output is rewritten to the smaller set. A value at or above the number that an untruncated run processed cannot cut anything, and does not change the action. That needs a run that can say what it processed. A run that completed before these counts existed, or a run that lost an input file to an error, keeps the coarse rule. Such a run runs again on any change. When the stored output matters, unset the variable or use a scratch project. An action that actually drops records logs a warning that names this variable, because a truncated run otherwise looks complete. An action that had nothing to drop logs no warning. A value below 1, or a value that is not an integer, fails. It is not ignored. The check occurs while the workflow is assembled. Thus it stops any command that loads the workflow, including read-only commands such as [`agac inspect`](../cli/inspect). An empty or blank value reads as unset, because that is what a shell means by `AGAC_RECORD_LIMIT=`. It never excludes a record that [`agac retry`](../cli/retry) runs again, because retry selects by id. |
+| `AGAC_RECORD_LIMIT` | unset | Limits each action to this number of records for each input file. It overrides a larger `record_limit`, and it applies to actions that set none. If both are set, [`--record-limit`](../cli/run#running-a-project-smaller-than-it-is) has priority, and it can raise this value as well as lower it. It is for a cheap run of a project from outside the project, for example a smoke check or a quick sanity pass. On a workflow that you already ran, it is not read-only. A limit smaller than the number of records that a completed action already processed differs from the limit that the action stored. So the action runs again under this limit, and its output is rewritten to the smaller set. A value at or above the number that an untruncated run processed cannot cut anything, and does not change the action. That needs a run that can say what it processed. A run that lost an input file to an error keeps the coarse rule. Such a run runs again on any change. When the stored output matters, unset the variable or use a scratch project. An action that actually drops records logs a warning that names this variable, because a truncated run otherwise looks complete. An action that had nothing to drop logs no warning. A value below 1, or a value that is not an integer, fails. It is not ignored. The check occurs while the workflow is assembled. Thus it stops any command that loads the workflow, including read-only commands such as [`agac inspect`](../cli/inspect). An empty or blank value reads as unset, because that is what a shell means by `AGAC_RECORD_LIMIT=`. It never excludes a record that [`agac retry`](../cli/retry) runs again, because retry selects by id. |
 | `AGAC_FILE_LIMIT` | unset | Stops each action after this number of input files. It overrides a larger `file_limit`, and it applies to actions that set none. It counts the files that the action processed. Thus a file that fails does not use the budget. If both are set, [`--file-limit`](../cli/run#running-a-project-smaller-than-it-is) has priority, and it can raise this value as well as lower it. It is the other axis of the same job. `AGAC_RECORD_LIMIT` makes each file smaller, and this variable reduces the number of files that are read. A run is proportional to both. On a workflow that you already ran, it is not read-only, for the same reason. The limit that it applies differs from the limit that the completed actions stored, so they run again under it. The files that the shorter walk does not reach keep the output that the earlier run wrote there. Thus the result is the old output with the walked files replaced, not a smaller fresh copy. An action whose walk actually stops early logs a warning that names this variable. An action that reached each file logs no warning. A value below 1, or a value that is not an integer, fails. It is not ignored, and it fails before any action starts. The walk does not read a file limit until a file is processed. So the check occurs while the workflow is assembled, and it also stops read-only commands such as [`agac inspect`](../cli/inspect). An empty or blank value reads as unset. It never restricts [`agac retry`](../cli/retry), which walks each file that holds a record that it named. |
 
 ## Directory Structure

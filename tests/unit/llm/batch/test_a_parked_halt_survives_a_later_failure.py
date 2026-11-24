@@ -13,17 +13,17 @@ from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.expectations.service import ExpectationConfigurationError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
-from .test_pass_finishes_before_halt import _halt, _service
+from .test_pass_finishes_before_halt import _halt, _service, _unresolvable_expect_block
 
 
 class TestAParkedHaltWinsOverALaterHardFailure:
     @pytest.mark.parametrize(
         "later",
         [
-            RuntimeError("provider lost the batch"),
+            mark_action_fatal(RuntimeError("the registry could not be loaded")),
             mark_action_fatal(OSError("the store could not write the file")),
         ],
-        ids=["runtime_error", "action_fatal_store_error"],
+        ids=["action_fatal_runtime_error", "action_fatal_store_error"],
     )
     def test_the_halt_is_raised_with_the_later_failure_as_its_cause(self, later):
         service, visited = _service(
@@ -49,17 +49,17 @@ class TestAParkedHaltWinsOverALaterHardFailure:
         assert "on_empty: error" in caplog.text
 
     def test_an_unresolvable_expect_block_still_wins(self):
-        later = ExpectationConfigurationError("bad expect")
+        later = _unresolvable_expect_block()
         service, _ = _service(["a.json", "b.json"], {"a.json": _halt("alpha"), "b.json": later})
 
         with pytest.raises(ExpectationConfigurationError):
             service.process_all_batch_results("/out", {}, "act")
 
     def test_a_later_failure_with_no_halt_parked_is_raised_unchanged(self):
-        later = RuntimeError("provider lost the batch")
+        later = mark_action_fatal(RuntimeError("the registry could not be loaded"))
         service, _ = _service(["a.json", "b.json"], {"a.json": "/out/a.json", "b.json": later})
 
-        with pytest.raises(RuntimeError, match="provider lost the batch") as raised:
+        with pytest.raises(RuntimeError, match="the registry could not be loaded") as raised:
             service.process_all_batch_results("/out", {}, "act")
 
         assert raised.value is later

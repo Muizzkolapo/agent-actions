@@ -197,32 +197,6 @@ def _stored(root, action):
         backend.close()
 
 
-def _as_an_earlier_version_left_it(root):
-    """That version saved a record's rows one at a time under the identity they share, so
-    the last of them was the one kept, as the record itself rather than a list."""
-    backend = _store(root)
-    try:
-        stored = backend.connection.execute(
-            "SELECT id, record_data FROM checkpoint_output"
-        ).fetchall()
-        assert stored, "the interrupted run checkpointed nothing"
-        for row_id, answer in stored:
-            backend.connection.execute(
-                "UPDATE checkpoint_output SET record_data = ? WHERE id = ?",
-                (
-                    json.dumps(
-                        backend.decode_payload(
-                            answer, table="checkpoint_output", where=f"row {row_id}"
-                        )[-1]
-                    ),
-                    row_id,
-                ),
-            )
-        backend.connection.commit()
-    finally:
-        backend.close()
-
-
 def _tags(rows):
     return sorted(((row.get("content") or {}).get(ACTION) or {}).get("tag") for row in rows)
 
@@ -275,21 +249,3 @@ def test_a_record_answered_with_several_rows_is_asked_again_and_one_with_a_row_i
     assert result.exit_code == 0, result.output
     assert _tags(_stored(project, ACTION)) == ["alpha-a", "alpha-b", "beta", "gamma-a", "gamma-b"]
     assert _asked(project) == ["alpha", "gamma"]
-
-
-def test_a_run_an_earlier_version_stopped_asks_again_for_the_records_it_checkpointed(
-    project, monkeypatch
-):
-    """That version's checkpoint row is one row of its record, which cannot say whether
-    the record had others: carried, it would be stored alone in place of all of them."""
-    _interrupted_at_gamma(project, monkeypatch)
-    _as_an_earlier_version_left_it(project)
-
-    result = _run()
-
-    assert result.exit_code == 0, result.output
-    assert _status(project) == "completed"
-    rows = _stored(project, ACTION)
-    assert _tags(rows) == ["alpha-a", "alpha-b", "beta-a", "beta-b", "gamma-a", "gamma-b"]
-    assert len({row["source_guid"] for row in rows}) == len(rows), "rows share an identity"
-    assert _asked(project) == ["alpha", "beta", "gamma"]

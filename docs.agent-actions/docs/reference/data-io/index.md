@@ -6,7 +6,7 @@ sidebar_position: 1
 # Data I/O
 
 :::note[Storage backend]
-SQLite. All source and target records are in a single SQLite database for each workflow, at `agent_io/store/<workflow>.db`. `agent_io/staging/` holds your input as on-disk files. The framework does not write `agent_io/source/`.
+SQLite. All source and target records are in a single SQLite database for each workflow, at `agent_io/store/<workflow>.db`. `agent_io/staging/` holds your input as on-disk files.
 :::
 
 Every workflow needs data to flow in, through and out. Agent Actions uses a standardized layout that makes this flow predictable and traceable.
@@ -71,8 +71,8 @@ CREATE TABLE target_data (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     action_name   TEXT NOT NULL,
     relative_path TEXT NOT NULL,
-    data          TEXT NOT NULL,         -- JSON array of records
-    record_count  INTEGER,
+    data          TEXT NOT NULL,         -- compressed JSON array of records
+    record_count  INTEGER NOT NULL,
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path)
 )
@@ -105,7 +105,17 @@ The `source_guid` field gives lineage tracking. You can trace any output record 
 
 ## Storage Backend
 
-All workflow data is in `agent_io/store/<workflow>.db`. The framework manages this file. The file is created on the first `agac run`. It is migrated in place when columns are added. `--fresh` truncates the file (it does not delete it).
+All workflow data is in `agent_io/store/<workflow>.db`. The framework manages this file. The file is created on the first `agac run`. `--fresh` truncates the file (it does not delete it).
+
+### Storage Format
+
+The store records the storage format that wrote it. Each command that opens the store refuses a store that records a different format, older or newer, or no format. The error names the store file. `--fresh` does not repair this store, because `--fresh` clears rows and keeps the file. To use the workflow again, remove the store:
+
+```bash
+agac clean -a <workflow> --all
+```
+
+`agac clean --all` also removes `staging/` and `target/`. Stage your input again before the next run.
 
 ### SQLite Database Schema
 

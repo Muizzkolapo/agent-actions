@@ -1,0 +1,11 @@
+kind: Breaking Change
+body: >-
+  The store `agent_io/store/<workflow>.db` records storage format 4 when it is created.
+  Every command that opens a store refuses a store that records a different format, or no
+  format, before it reads or writes the store. The error names the store file and tells
+  you to run `agac clean -a <workflow> --all`, which removes the store. `agac run --fresh`
+  does not repair such a store. The store adds no column to an existing table when it
+  opens. `target_data.record_count` and `source_data.repeat_of_source_guid` are never
+  NULL. A source record whose `repeat_of_source_guid` is present but is not a non-empty
+  string is refused.
+time: 2026-11-23T20:00:00.000000+00:00

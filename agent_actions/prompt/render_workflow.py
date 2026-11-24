@@ -21,7 +21,7 @@ from agent_actions.config.includes import (
 from agent_actions.config.loops import expand_loops, finish_loops
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.routes import expand_routes, finish_routes
-from agent_actions.config.schema import validate_version_block
+from agent_actions.config.schema import refuse_agents_format, validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.errors.base import enrich_exception_context
 from agent_actions.output.response.dispatch_injection import schema_dispatch_function
@@ -650,6 +650,7 @@ def render_pipeline_with_templates(
     compile_schemas: bool = True,
     strict: bool = False,
     project_root: Path | None = None,
+    workflow: bool = True,
 ) -> str:
     """
     Render and compile a YAML pipeline configuration.
@@ -726,9 +727,12 @@ def render_pipeline_with_templates(
             cause=e,
         ) from e
 
+    workflow_file = workflow_label(yaml_path, project_root)
+    if workflow:
+        refuse_agents_format(data, workflow_file)
+
     # Step 2a: Put the actions of each included branch file in place of its include entry
     data, inclusions = expand_includes(data, yaml_path, project_root=project_root)
-    workflow_file = workflow_label(yaml_path, project_root)
     data = expand_loops(data)
     data = _with_file(workflow_file, expand_routes, data, workflow_file, inclusions)
 

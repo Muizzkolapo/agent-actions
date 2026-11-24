@@ -230,11 +230,11 @@ class TestRecoveryStateCorruptionHandling:
         assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
     def test_invalid_enum_value_logs_error(self, backend, caplog):
-        """Valid JSON with bad enum value triggers ValueError in __post_init__."""
+        """Valid JSON with a bad on_exhausted value triggers ValueError in __post_init__."""
         key = RecoveryStateManager._metadata_key("test_action", "test_file")
         backend.save_metadata(
             key,
-            json.dumps({"phase": "not_a_real_phase", "retry_attempt": 0}),
+            json.dumps({"on_exhausted": "not_a_real_policy", "retry_attempt": 0}),
         )
 
         with caplog.at_level(logging.ERROR, logger=self._LOGGER):

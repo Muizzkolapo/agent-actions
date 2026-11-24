@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 
+from agent_actions.config.sandbox import SANDBOX_DIR, sandbox_mode, store_file
 from agent_actions.errors import (
     AgentNotFoundError,
     RunInProgressError,
@@ -12,6 +13,7 @@ from agent_actions.errors import (
 from agent_actions.errors import (
     FileSystemError as AgentFileSystemError,
 )
+from agent_actions.errors.configuration import StoreFormatError
 from agent_actions.llm.realtime.handlers import AgentManager
 
 logger = logging.getLogger(__name__)
@@ -47,19 +49,36 @@ class Cleaner:
 
         The store about to be wiped holds the registry, and the registry is what
         names a batch: afterwards nothing could find these records to reclaim,
-        and each holds the payload its batch was submitted with.
+        and each holds the payload its batch was submitted with. The real store and
+        the sandbox store each name their own batches, so each is read on its own.
 
         Reported and not raised if it fails; False says the store has to stay,
         since removing it would put the payload out of reach of every command.
         """
-        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
         from agent_actions.llm.providers.local_batch_records import (
             discard_partial_batch_records,
-            release_local_batch_record,
         )
-        from agent_actions.storage import get_storage_backend
 
         discard_partial_batch_records()
+        released = True
+        for in_sandbox in (False, True):
+            with sandbox_mode(in_sandbox):
+                # Opening a store that is not there would create it.
+                if not store_file(io_dir, self.agent).exists():
+                    continue
+                reclaimed = self._release_records_of_store(io_dir)
+            if reclaimed is None:
+                return False
+            released = reclaimed and released
+        return released
+
+    def _release_records_of_store(self, io_dir: Path) -> bool | None:
+        """Reclaim the batches the store of the current mode names; None if it failed."""
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+        from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+        from agent_actions.storage import get_storage_backend
+
+        db_path = store_file(io_dir, self.agent)
         released = True
         try:
             backend = get_storage_backend(
@@ -72,6 +91,17 @@ class Cleaner:
                         released = release_local_batch_record(batch_id) and released
             finally:
                 backend.close()
+        except StoreFormatError as e:
+            # This version cannot read the store, so nothing can name its batches.
+            logger.debug("Removing a store of another storage format: %s", e)
+            click.echo(
+                click.style(
+                    f"⚠️  The store {db_path.name} for '{self.agent}' uses another storage "
+                    f"format, so the batches it names cannot be reclaimed. Removing it.",
+                    fg="yellow",
+                )
+            )
+            return True
         except Exception as e:
             logger.warning("Could not reclaim local batch records before cleaning: %s", e)
             click.echo(
@@ -82,7 +112,7 @@ class Cleaner:
                     fg="yellow",
                 )
             )
-            return False
+            return None
         return released
 
     def _run(self) -> None:
@@ -91,16 +121,14 @@ class Cleaner:
             self.agent, project_root=self.project_root
         )
         io_dir = Path(io_dir_str)
-        include_target = self.remove_target or self.remove_all
         directories: list[Path] = []
-        for sub in ("source", "target") if include_target else ("source",):
-            sub_path = io_dir / sub
-            if sub_path.exists():
-                directories.append(sub_path)
+        target_path = io_dir / "target"
+        if (self.remove_target or self.remove_all) and target_path.exists():
+            directories.append(target_path)
         if self.remove_all:
-            staging_path = io_dir / "staging"
-            if staging_path.exists():
-                directories.append(staging_path)
+            for path in (io_dir / "staging", io_dir / SANDBOX_DIR):
+                if path.exists():
+                    directories.append(path)
             from agent_actions.storage import BACKENDS
 
             seen = set(directories)

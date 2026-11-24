@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'The code that read stores and recovery state from earlier versions is removed. A batch context map is read only from its parts, and a recovery round no longer wraps text answers that an earlier version saved unwrapped. A batch submitted before the context map was stored in parts no longer collects: run `agac run --fresh` to rebuild the store. The VS Code extension no longer reads a `plan:` workflow, which agac does not load.'
+time: 2026-11-23T15:00:00Z

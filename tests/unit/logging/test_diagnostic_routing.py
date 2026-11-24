@@ -382,10 +382,13 @@ class TestRemainingMechanicsInTheEditedModules:
             def read_target(self, version_agent, relative_path):
                 raise FileNotFoundError(relative_path)
 
+            def forget_reconstructed(self, version_agent, relative_path):
+                pass
+
         def run():
             VersionOutputCorrelator(
                 agent_folder=tmp_path, storage_backend=_RacingBackend()
-            )._load_from_storage_backend("v1")
+            )._read_version_file("v1", "gone.json", [])
 
         _assert_kept_off_the_console(_warns_from(run, tmp_path), "TOCTOU")
 

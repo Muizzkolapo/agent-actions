@@ -54,6 +54,7 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │  │  a workflow text already rendered by the caller is      │     │
 │  │  parsed as given, not rendered again                    │     │
 │  │  yaml.safe_load() → raw dicts                           │     │
+│  │  Refuse a file in the `agents:` format                  │     │
 │  │  Expand each `- include:` entry into the actions of     │     │
 │  │  branches/<name>.yml, with the entry's override and     │     │
 │  │  remove applied (before prompts, versions, schemas);    │     │
@@ -63,7 +64,7 @@ This is the full path from a YAML file on disk to a running workflow. `ConfigMan
 │                             │                                    │
 │  Step 2: validate_agent_name()                                  │
 │  ┌────────────────────────────────────────────────────────┐     │
-│  │  Extract top-level name from config                     │     │
+│  │  Read the workflow's `name:` key                        │     │
 │  │  ENFORCE: name == config filename stem                  │     │
 │  └──────────────────────────┬─────────────────────────────┘     │
 │                             │                                    │
@@ -322,9 +323,9 @@ Left to right, it is what keeps the refusal from refusing a key the framework it
 
 Right to left is the side no schema check can cover, because a declared key passes validation by definition: declare a key nothing reads and a workflow setting it loads clean and gets nothing. `drops` and `observe` were that shape until they were removed — the live spelling is `context_scope: {drop: [...], observe: [...]}`, which is declared, inherited and read. `tests/unit/config/test_defaults_keys_declared_are_read.py` walks the package AST and pins this direction; add to both `DefaultsConfig` and `SIMPLE_CONFIG_FIELDS` when you add an inheritable field.
 
-The same shape reached three surfaces beyond this one, and all four are closed by one function, `refuse_context_scope_siblings`. `ActionConfig` declared the pair too. The other two carry agent settings and are validated by models with `extra="allow"`, where removing a field refuses nothing on its own, so `manager.py` calls the function directly on each: a legacy top-level `agents:` entry, and the project file's `default_agent_config:` block, which is merged into every agent and is read twice — once for the expander's defaults and once at merge.
+The same shape reached two surfaces beyond this one, and all three are closed by one function, `refuse_context_scope_siblings`. `ActionConfig` declared the pair too. The project file's `default_agent_config:` block carries agent settings and is validated by a model with `extra="allow"`, where removing a field refuses nothing on its own, so `manager.py` calls the function directly on it: the block is merged into every agent and is read twice — once for the expander's defaults and once at merge.
 
-Every one of those calls passes all four spellings. Refusing a subset on one surface is this bug again, one spelling over, which is how the second and third of them were found. The boundary is `extra="allow"` itself: those two models accept any undeclared key, so `seed`, the one `context_scope` directive that takes a mapping rather than a list, is refused on the strict surfaces and not on them.
+Every one of those calls passes all four spellings. Refusing a subset on one surface is this bug again, one spelling over. The boundary is `extra="allow"` itself: that model accepts any undeclared key, so `seed`, the one `context_scope` directive that takes a mapping rather than a list, is refused on the strict surfaces and not on it.
 
 ### 3. WorkflowConfig uses `extra="forbid"`
 
@@ -365,12 +366,6 @@ One block is modelled without modelling the file: `endpoints:` is refused by
 `default_agent_config` checks. The loader itself stays a dict read, so the helpers that
 take one key each (`get_tool_dirs`, `get_required_by_default`) keep reading theirs beside
 a bad `endpoints:` block, and a command that never reads the project is not told about it.
-
-A key already *known* to have no reader does not wait for that decision.
-`warn_unread_project_keys` names such a key at load, once per workflow, from the same
-place the project defaults are checked. It reports a fixed list of keys rather than
-anything undeclared, so a typo is still dropped in silence — which of the two a stray
-key is cannot be answered without the decision above.
 
 ### 5. AgentConfig uses `extra="allow"`
 

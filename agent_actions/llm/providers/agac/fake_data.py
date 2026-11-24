@@ -10,9 +10,15 @@ import json
 import logging
 import math
 import random
+import re
 import threading
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from agent_actions.llm.providers.agac import regex_gen
+
+if TYPE_CHECKING:
+    from agent_actions.llm.providers.agac.contract import Contract
 
 logger = logging.getLogger(__name__)
 
@@ -503,8 +509,13 @@ class FakeDataGenerator:
     ) -> str:
         """Generate a contextually appropriate string, sized to any declared length bound."""
         schema = schema or {}
-        text = cls._generate_unsized_string(attempt, schema, field_name)
         bounds = cls._length_bounds(schema)
+        pattern = schema.get("pattern")
+        if isinstance(pattern, str):
+            matched = cls.from_pattern(pattern, bounds)
+            if matched is not None:
+                return matched
+        text = cls._generate_unsized_string(attempt, schema, field_name)
         # A formatted value padded with prose or cut short is no longer that format.
         if (
             bounds is None
@@ -517,6 +528,25 @@ class FakeDataGenerator:
         while len(text) < low:
             text = f"{text} {cls._generate_sentence(attempt, rng)}"
         return cls._cut_at_word(text, max(low, 1), high)
+
+    @classmethod
+    def from_pattern(
+        cls, pattern: str, bounds: tuple[int, int] | None = None, tries: int = 20
+    ) -> str | None:
+        """A string that *pattern* matches (``re.search``) inside *bounds*; None if none is found.
+
+        None too when the pattern is outside the subset ``regex_gen`` reads.
+        """
+        rng = cls._get_rng()
+        for _ in range(tries):
+            try:
+                text = regex_gen.generate(pattern, rng)
+                matched = re.search(pattern, text) is not None
+            except (regex_gen.UnsupportedPattern, re.error, RecursionError):
+                return None
+            if matched and (bounds is None or bounds[0] <= len(text) <= bounds[1]):
+                return text
+        return None
 
     @staticmethod
     def _cut_at_word(text: str, shortest: int, longest: int) -> str:
@@ -643,8 +673,13 @@ class FakeDataGenerator:
     @classmethod
     def _generate_sentence(cls, attempt: int, rng: random.Random) -> str:
         """Generate a varied sentence based on attempt number."""
-        word_count = cls.WORD_COUNTS.get(attempt, cls.WORD_COUNTS[3])
+        return cls.sentence_of(cls.WORD_COUNTS.get(attempt, cls.WORD_COUNTS[3]), rng)
 
+    @classmethod
+    def sentence_of(cls, word_count: int, rng: random.Random) -> str:
+        """A sentence of exactly *word_count* words; empty for none."""
+        if word_count <= 0:
+            return ""
         words = []
         for i in range(word_count):
             if i % 4 == 0:
@@ -993,8 +1028,9 @@ class FakeDataGenerator:
         schema: dict[str, Any] | None,
         prompt: str | None = None,
         attempt: int = 1,
+        contract: "Contract | None" = None,
     ) -> dict[str, Any]:
-        """An OpenAI-shaped response carrying data generated from *schema*.
+        """An OpenAI-shaped response carrying data generated from *schema* and *contract*.
 
         Takes the schema and prompt rather than a request to read them out of:
         the only caller is the fake batch provider answering a task it wrote
@@ -1010,7 +1046,9 @@ class FakeDataGenerator:
         )
         cls.set_context(seed=seed, prompt=prompt)
 
-        if schema:
+        if schema and contract is not None:
+            fake_data = contract.generate(schema, attempt)
+        elif schema:
             fake_data = cls.generate_from_schema(schema, attempt, prompt=prompt)
         else:
             # Fallback: generic response

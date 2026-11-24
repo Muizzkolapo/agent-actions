@@ -46,7 +46,7 @@ The log line before the warning names the `agac dispositions` command that shows
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow NAME` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow NAME` | The workflow name (required). `-a` names the same option. |
 | `-u, --user-code DIRECTORY` | The path to the folder of your code that contains the tools |
 | `--use-tools` | Let actions use tools |
 | `-e, --execution-mode` | The execution mode: `auto` (default), `parallel` or `sequential` |
@@ -59,6 +59,7 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--wait` | While the run is paused for a batch, wait and run the workflow again until no batch is open. Then exit with the code of the final status. See [Wait for batch jobs](#wait-for-batch-jobs) |
 | `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs, in whole seconds. The minimum is 1 (default: 60) |
 | `--wait-timeout SECONDS` | With `--wait`: stop the wait when this time after the start of the run is over, and exit 4. The batch jobs stay open for the next run (default: no limit) |
+| `--sandbox` | Run the workflow with no model call and no API key. The mock provider answers each LLM action, tool actions run their own code, and HITL actions approve each record. The run writes to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`, and does not read or change the output of real runs. It does not write the declared `outputs:`. See [Sandbox Runs](../../guides/sandbox.md) |
 
 ## Exit Codes {/* #exit-codes */}
 
@@ -82,9 +83,9 @@ A failed action has priority: when one action failed and another action holds fa
 A filtered record, a record that a guard skipped, or a record below a failed record does not change the code.
 
 :::warning[CAUTION]
-In earlier versions, a paused run and a run that finished with failed or exhausted records
-exited `0`. They now exit `4` and `3`. A script that stops on each non-zero code (`set -e`)
-must accept `4` after it submits a batch, or use `--wait`.
+A paused run exits `4`. A run that finished with failed or exhausted records exits `3`.
+A script that stops on each non-zero code (`set -e`) must accept `4` after it submits a
+batch, or use `--wait`.
 :::
 
 ## When the Quota of a Provider Is at Its Limit {/* #quota-stop */}
@@ -153,6 +154,16 @@ A run can also stop before every action ended when no batch is open. Then `--wai
 
 The command holds the [run lock](#concurrent-runs) from the first pass to the last pass. Thus no other
 `agac run` or `agac retry` of the workflow can start during the wait.
+
+## Run Offline in a Sandbox {/* #sandbox */}
+
+`--sandbox` runs the workflow with no model call and no API key. The mock provider answers each LLM action. The workflow file does not change:
+
+```bash
+agac run -w my_workflow --sandbox
+```
+
+The run writes its output to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`. It does not read or change the output of real runs, so a real run after it answers each action. Give `--sandbox` to `status`, `records`, `traces` and the other read commands to read this output. See [Sandbox Runs](../../guides/sandbox.md).
 
 ## Run a Smaller Version of a Project {/* #running-a-project-smaller-than-it-is */}
 
@@ -402,6 +413,8 @@ keep the `deferred` mark that they got at submission. The next run settles them 
 The default concurrency limit is 5 actions. The maximum is 50.
 :::
 
+The limit applies to every action, an online action too. To limit only the batch actions of a step that prepare at the same time, set [`batch_preparation_concurrency`](../configuration/index.md#batch-preparation-concurrency) in the workflow file. See [Memory while a batch step prepares](../execution/run-modes.md#batch-preparation-memory).
+
 If your workflow has many parallel actions and you get rate limit errors, consider a lower limit. If you have capacity, increase the limit, to a maximum of 50.
 
 ## Concurrent Runs {/* #concurrent-runs */}
@@ -413,7 +426,7 @@ A run holds a lock on `agent_io/store/<workflow>.db.lock` until the run exits. A
 Problem: RunInProgressError: Another run of workflow 'ql_trace_probe' is in progress (pid 48211). Wait for it to finish or stop it, then run again.
 ```
 
-Runs of different workflows do not block each other. Read-only commands (`inspect`,
+Runs of different workflows do not block each other. A [sandbox run](#sandbox) of a workflow holds the same lock as a real run, so the two cannot run at the same time. Read-only commands (`inspect`,
 `records`, `status`, `traces`, `preview`, `dispositions`, `retry --dry-run`) never take the
 lock. The operating system releases the lock when the run exits or when something kills the run. Thus no lock
 stays after the run. A run that submits a batch job exits. Thus the next run can collect the batch job.

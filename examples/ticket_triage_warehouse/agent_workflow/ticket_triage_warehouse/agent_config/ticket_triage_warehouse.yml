@@ -1,0 +1,56 @@
+name: ticket_triage_warehouse
+description: "Triage support tickets read from the warehouse and write the routing back"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: agac-provider   # the offline mock; set your own vendor and model to use a real LLM
+  model_name: mock
+  data_source:
+    type: database
+    connection: warehouse
+    sql: SELECT ticket_id, subject, body FROM tickets
+
+actions:
+  - name: classify
+    intent: "Classify the ticket and summarise it"
+    prompt: $ticket_triage_warehouse.Classify
+    schema: classify
+    context_scope:
+      observe: [source.subject, source.body]
+
+  - name: route
+    kind: tool
+    impl: route_ticket
+    intent: "Send the ticket to a team, escalating refunds"
+    dependencies: [classify]
+    schema: route
+    context_scope:
+      observe: [classify.category, classify.urgency, source.body]
+
+  - name: digest
+    kind: tool
+    impl: count_by_team
+    granularity: File
+    intent: "Count the tickets each team received"
+    dependencies: [route]
+    schema: digest
+    context_scope:
+      observe: [route.team]
+
+outputs:
+  - action: route
+    connection: warehouse
+    table: ticket_routing
+    carry: [ticket_id, subject]
+    key: [ticket_id]
+  - action: classify
+    connection: warehouse
+    table: triage_log
+    mode: append
+  - action: digest
+    connection: warehouse
+    table: routing_digest
+    mode: replace

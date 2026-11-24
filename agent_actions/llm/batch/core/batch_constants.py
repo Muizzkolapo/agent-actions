@@ -2,6 +2,8 @@
 
 from enum import Enum
 
+from agent_actions.errors.classification import mark_action_fatal
+
 
 class BatchStatus(str, Enum):
     """Batch job status values (inherits str for JSON serialization)."""
@@ -72,32 +74,31 @@ class RecoveryPhase(str, Enum):
         return self.value
 
 
-class RetiredRecoveryState(RuntimeError):
-    """Persisted state names a recovery mechanism this version cannot act on."""
+class UnknownRecoveryState(RuntimeError):
+    """Stored state names a recovery type or phase this version does not know."""
 
 
-# A phase this version does not run reaches here as a RecoveryState phase or as
-# a registry entry's recovery_type. Dropping such an entry makes its parent batch
-# look unsubmitted, so the next run pays for it again.
-_RETIRED_NAMES = frozenset({"reprompt"})
-
-
-def _refuse_if_retired(value: str) -> None:
-    if value in _RETIRED_NAMES:
-        raise RetiredRecoveryState(
-            f"This run was deferred mid-{value}, a recovery phase this version does not "
-            f"run. Its stored state cannot be resumed. Re-run the action with --fresh to "
-            f"start it again; the records it had already completed are in the store."
+def _refuse_unknown(kind: str, value: str, known: type[Enum]) -> None:
+    # Not a ValueError: the loaders skip those, and a skipped entry makes its
+    # parent batch look unsubmitted, so the next run pays for it again.
+    if value not in {member.value for member in known}:
+        # Its remedy, --fresh, is the whole workflow's, not one file's.
+        raise mark_action_fatal(
+            UnknownRecoveryState(
+                f"The stored recovery {kind} '{value}' is not one this version knows, "
+                f"so its batch cannot be resumed. Run the workflow with `agac run --fresh` "
+                f"to start it over; that removes the workflow's stored results."
+            )
         )
 
 
 def coerce_recovery_phase(value: str) -> RecoveryPhase:
-    _refuse_if_retired(value)
+    _refuse_unknown("phase", value, RecoveryPhase)
     return RecoveryPhase(value)
 
 
 def coerce_recovery_type(value: str) -> RecoveryType:
-    _refuse_if_retired(value)
+    _refuse_unknown("type", value, RecoveryType)
     return RecoveryType(value)
 
 

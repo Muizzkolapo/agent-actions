@@ -86,7 +86,7 @@ The example above uses observe mode. Observe mode runs the checks, attaches the 
 | `structural` | string or mapping | `retry` | How the model generates the output again after a **schema** failure. The values are the same four values, but not `none`. See [Re-roll or steer](#re-roll-or-steer) |
 | `max_iterations` | integer 1–10 | `3` | The total number of generations for each record, including the first. If you set it explicitly with `repair: none`, it is a configuration error, not a setting that does nothing |
 | `on_exhausted` | string | `return_last` | The result when no iterations remain: `return_last`, `fail`, or `raise`. The same rule applies: do not set it under `repair: none` |
-| `judge_budget` | integer ≥ 1 | no limit | The maximum number of real `llm_judge` LLM calls that the suite of this action may make in the full run |
+| `judge_budget` | integer ≥ 1 | no limit | The maximum number of values that the `llm_judge` rules of this action may send to the judge in the full run. One value counts once, whatever `votes` is |
 | `judge_mode` | string | the run mode of the action | How Agent Actions sends the `llm_judge` calls of the action: `batch` (as batches of their own, see [Judging in batch](#judging-in-batch)) or `online`. Set `online` to keep the judge calls of a batch action online. `batch` on an online action is a preflight defect |
 
 Each entry in `expectations:` (or in a suite file) has this shape:
@@ -241,18 +241,20 @@ Preflight also rejects a constant condition that refers to no record fields, bec
 | `model` (string) | the `model_name` of the action | The model that judges the value, in place of the default |
 | `context` (list) | none | A list of `action.field` references. Agent Actions resolves them with the *same* `context_scope` mechanism as prompts. It sends them to the judge as grounding text. A reference does not take the optional mark `?` (see [Optional Fields](../context/context-scope.md#limits)) |
 
+A `context:` reference names an upstream action and a field of its declared output. It cannot name `source`. Preflight refuses a reference such as `source.ticket_text` with `context reference 'source.ticket_text' names unknown action 'source'`. To give the judge a staged field, let an upstream action, for example a tool, write the field to its output. Then reference that action. An upstream action that already holds the field also works.
+
 ### Testing a judge offline
 
 On `model_vendor: agac-provider`, the judge receives a verdict object. Thus you can test a judged rule with no network and no key. The mock selects `passed: true` or `passed: false` with its seeded generator. It writes a generated sentence as the `reason`. The same rule and value give the same verdict on each run. Different values get the two verdicts, so the pass path and the fail path both run. The verdict does not judge the value. It tests the connections, not the rule. Under `run_mode: batch`, the mock batch provider answers each judge request of a [judge batch](#judging-in-batch) in the same way. Its seed is not the seed of the online mock, so one value can get a different verdict in the two run modes.
 
 ### `context:` auto-injection
 
-At load time, Agent Actions automatically adds each reference in `context:` to the `context_scope.observe` of the action. You do not need to also list the reference there. If you do list it, Agent Actions removes the duplicate. This applies to the inline `expectations:` list of an action and to the rules of its own schema. A named `suite:` is the exception. The layer that adds the references cannot load a suite. Thus you must list the references of a suite in `observe:` yourself. For this reason, `retrieve_passage.passage_text` is available to the judge in the example above. This is true although `answer_is_grounded` is on a different action than `retrieve_passage`.
+At load time, Agent Actions automatically adds each reference in `context:` to the `context_scope.observe` of the action. You do not need to also list the reference there. If you do list it, Agent Actions removes the duplicate. This applies to the inline `expectations:` list of an action, to the rules of its own schema and to the rules of a named `suite:`. As a reference in `observe:` does, the reference makes the action run after the action that it names. A suite that does not load adds no references. Preflight and the run tell you why the suite does not load. For this reason, `retrieve_passage.passage_text` is available to the judge in the example above. This is true although `answer_is_grounded` is on a different action than `retrieve_passage`. A named suite inside an `as:` include is a special case. The include renames the short names of the branch, but not in the rules of a suite. Thus a reference in the suite must use the final name (for example `c__write.text`). The load refuses a short name in a suite (see [Branches](../configuration/branches.md#as)).
 
 ### Caching and budget
 
 - **Cache:** The key of a judge call is `(expectation, resolved value)`. Two records (or two rules) can produce byte-identical content for the same rule. Then Agent Actions gets the second result from the cache, and does not make another real LLM call. The `context:` of the rule is not part of the key. If two records hold the same value with different grounding context, the judge reads only the context of the first record. The second record gets the same verdict. This is the same online and in batch.
-- **Budget:** `judge_budget` on the `expect:` block sets the maximum number of real judge calls for all the records that the action processes in one run. Cache hits do not count. When the budget is exhausted, Agent Actions marks each subsequent judge outcome `skipped`. The message says that the budget is exhausted. A skipped outcome did not pass. Thus a skipped outcome with `error` severity is in **both** the `failed` list and the `skipped` list of the verdict. Agent Actions could not check the rule, and a rule that it could not check is not satisfied.
+- **Budget:** `judge_budget` on the `expect:` block sets the maximum number of judged values for all the records that the action processes in one run. One value counts one unit, whatever `votes` is: the `votes` calls for that value share the unit. Cache hits do not count. When the budget is exhausted, Agent Actions marks each subsequent judge outcome `skipped`. The message says that the budget is exhausted. A skipped outcome did not pass. Thus a skipped outcome with `error` severity is in **both** the `failed` list and the `skipped` list of the verdict. Agent Actions could not check the rule, and a rule that it could not check is not satisfied.
 - **Failure isolation:** If the LLM call of the judge has an error (network, authentication, rate limit), only that outcome fails. The outcome has the error in its `detail`. The error does not stop the processing of the record. A quota or billing stop at a judge call stops the run (see [quota stop](../cli/run.md#quota-stop)).
 
 ### Judging in batch
@@ -358,54 +360,6 @@ The payload is the difference between this option and `retry`. An authored promp
 :::note[See exhaustion happen]
 `tests/integration/fixtures/runtime_probes/repair_exhaustion` is a rule that the mock provider can never satisfy, with `on_exhausted: return_last`. `tests/integration/test_runtime_probes.py` runs it through the real CLI. The test asserts that the record continues to exist with its last failed verdict attached. This is the concrete shape of the `return_last` row above. The `partial_file_rejection` workflow of the same fixture project shows the other side. If the first stage refuses a staging file, the run stops before it processes any file. Thus a run that exits 0 did stage each file.
 :::
-
-### Migrating from `reprompt:`
-
-`reprompt:` was removed. Agent Actions refuses a configuration that has it at load. The error names the `expect:` block that
-replaces it. The full migration is below. All four blocks that can contain `reprompt:`
-refuse it: an action, `defaults:`, a top-level `agents:` entry, and the `default_agent_config:` block
-of `agent_actions.yml`. Thus if you move it up a level, the workflow still gets the error.
-
-**A block that only checked the schema** (the common case) becomes an `expect:` with no rules. Set it
-one time for the workflow:
-
-```yaml
-# before                                  # after
-defaults:                                 defaults:
-  reprompt:                                 expect:
-    on_schema_mismatch: reprompt              repair: auto
-    max_attempts: 3                           max_iterations: 3
-    use_self_reflection: true                 structural: auto
-    on_exhausted: return_last                 on_exhausted: return_last
-```
-
-`structural: auto` keeps the schema feedback that the `reprompt:` block sent. If you do not set it, a schema failure
-sends the original prompt again. This is usually what you want, because a response that the schema
-rejected has no partial result to keep.
-
-`use_self_reflection` has no replacement and does not need one. It added one fixed question.
-`repair: auto` sends the actual failure with the `detail` and `hint` of each rule.
-
-**A block that names a `validation:` tool** becomes a rule. Most of these tools are the same as a built-in type:
-
-| The tool checked | The rule |
-|---|---|
-| no field came back null | `no_null_fields` |
-| a field matches a pattern | `matches_regex` |
-| the length of a field | `word_count_between`, `item_count` |
-| a field is one of a set | `accepted_values` |
-| the response parsed | nothing. The structural gate does this check |
-
-A check that is really specific to the project becomes an [`@expectation_check`](#extending-with-your-own-checks).
-It returns `(passed, detail)`, not only a boolean. Thus the failure goes into the repair
-prompt, not only into the log.
-
-**`on_schema_mismatch:` was also removed.** `expect: {repair: auto}` does what `reprompt` mode did.
-`reject` (halt, and do not generate again) becomes `max_iterations: 1` with `on_exhausted: raise`.
-
-**A run deferred during a reprompt** cannot resume. Its stored state names a recovery phase that this
-version does not run. Agent Actions refuses the run and does not read it in a different way. Run the action again with `--fresh`. The
-records that the run completed before are in the store.
 
 ## Setting it once for a workflow
 
@@ -644,6 +598,48 @@ Use the tiers in this order of preference:
 2. An `expression` condition (declarative, across fields).
 3. `llm_judge` (semantic, natural language).
 4. A custom check. This is Python code that you then own and test.
+
+## Testing rules with the mock provider
+
+On `model_vendor: agac-provider`, the mock reads the rules of the action as well as its schema. `agac run --sandbox` sends each LLM action to the mock with no edit to the workflow (see [Sandbox Runs](../../guides/sandbox.md)). It reads the same rules as the run: the inline `expectations:` list, the rules of the schema file and a named `suite:`. Thus a workflow that you switch to the mock usually passes its rules, and a repair loop usually ends on the first generation. Some rules can still fail: an `expression` rule, a custom check, a pattern outside the subset below, and constraints that contradict. The mock does this online and in a batch in the same way.
+
+For each top-level field that a rule names, the mock makes a value that meets the schema and the rules of that field:
+
+| Rule or keyword | What the mock makes |
+|-----------------|---------------------|
+| `enum` and `accepted_values` | A value that all of them allow |
+| `pattern` and `matches_regex` | A string that the regular expression matches. On a field of type `integer` or `number`, `matches_regex` gets a number of that type. The check reads the number as text |
+| `matches_regex` with `negate: true` | A value that the expression does not match. A field-name value that matches is replaced by plain words |
+| `word_count_between` | A sentence with a word count in the range |
+| `item_count` | A list with a length in the range, inside `minItems` and `maxItems` |
+| `not_null`, `no_null_fields` | A value that is not null and not empty |
+| A rule on `field[*]` | Each element meets the rule |
+| `expression`, a custom check and each other type | A generated value. The real check tests it |
+
+Then the real runner checks the full record. If a rule fails, the mock makes the record again, up to 20 times. An `llm_judge` rule is not part of this check. The judge call gets a verdict as [Testing a judge offline](#testing-a-judge-offline) tells.
+
+The regular expression support is a subset: literals and escaped characters, `.`, `\d`, `\w`, `\s` and their negations, `[...]` with ranges and negation, `?`, `*`, `+`, `{m}`, `{m,}`, `{m,n}`, `{,n}`, groups, `|`, `^` and `$`. An unbounded repeat (`*`, `+`, `{m,}`) adds a maximum of three repeats. A repeat count can be a maximum of 1000. A pattern outside the subset gets a generated value that the check tests. Examples are a lookahead, a backreference, an inline flag, a larger repeat count and a pattern that Python refuses.
+
+**Upstream values.** If a reference in `context_scope.observe` names a field, and an output field has the same name, the mock copies the input value. A wildcard reference (`action.*`) does not copy a value. A reference to the `feedback` input of a loop does not copy a value either, for example `prior.question`. That input holds the previous iteration, and a copy would keep each iteration on one value. The value must meet the schema and the rules of the output field. Thus an id stays the same through the actions of the workflow. The mock reads the context that the request sends. Under `context_block: auto`, a field that the prompt prints as `{{ action.field }}` is not in that context. To copy such a field, set `context_block: all` on the action.
+
+**Constraints that no value meets.** If the mock cannot meet a rule after 20 tries, it logs a warning once for each action and field in the run. The warning names the action, the field, the constraints on the field and the rules that still fail. For example, `maxLength: 5` and `word_count_between: {min: 10}` on one field make this warning. The mock adds no field that the schema does not declare, so a rule on such a field (for example `nested.x`) also makes this warning. The mock still returns its best record, and the run continues. The best record is one that the schema accepts, if the mock found one.
+
+## When not to use an expectation
+
+An expectation judges the output of one record against a written rule. Use this test: can a careful reader decide the rule from this one record and the rule text? If yes, use an expectation. If no, use a tool or a chain of actions:
+
+- **A comparison of two groups.** No field of one record holds the difference between a control group and a test group. Use the actions that run each group and a tool that compares them.
+- **A rule across records.** Duplicates, uniqueness in a file and coverage of a set are properties of a set of records. A rule sees one record only. Use a tool at `granularity: file`. See [File-Level Tools](../../guides/custom-tools.md#file-level-tools).
+- **A judge that must not see part of the record.** The judge sees each field that the selector and `context:` give it. If the judge must not see a reference value, or ids that show the reference value, build the hidden view in a tool. Then check it in an action after the tool. The bundled `agac-blind-verification` skill describes this pattern (see [`agac skills`](../cli/skills.md)).
+- **A check that a tool already does well.** Keep a deterministic tool that gives the correct verdict. To move its logic into a rule, write an [`@expectation_check`](#extending-with-your-own-checks).
+- **A payload that several actions compile.** A rule reads a field selector from the output of its own action. A `context:` reference reads one field of one upstream action. Neither of them builds a payload from several actions. Also, a repair generates only the action that holds the `expect:` block. It cannot correct a defect in the output of a different action. Use a tool that compiles the payload, and a check action after it.
+- **Cascading repairs.** A correction to one field can make other fields stale, so that other actions must run again. A repair generates one action again. It does not enter the DAG again. Use a [loop](../configuration/loops.md#loop-or-repair). A loop runs a branch of several actions again, and the next attempt reads what the checks found.
+
+## Before a judge rule blocks
+
+1. **Calibrate the rule in `warn` mode.** Collect 5 to 20 outputs that people accept. Add 3 to 10 outputs that are bad for the reason that the rule targets. Run the rule with `severity: warn` and `repair: none` on these records. `repair: none` makes no repair round, so the calibration costs only the judge votes. Do not set `max_iterations` or `on_exhausted` with `repair: none`. Agent Actions refuses them. Read the results with [`agac expect report`](../cli/expect.md#expect-report). The `detail` of each outcome gives the vote count, for example `3/5 judge votes passed`. Change the rule to `error` only when the known-good outputs pass by a clear majority. If a known-good output fails, the rule is wrong. Change the rule text, not the outputs. The bundled `agac-expectations` skill has the full procedure in its `references/calibration.md` file.
+2. **Add `not_null` beside an `llm_judge` on the same field.** Every rule runs, whatever its place in the list. Thus `not_null` does not keep a value away from the judge. It gives the record a clear failure reason, for example `value is an empty str`, and the repair round gets that reason as feedback. Without it, the only failure is the FAIL of the judge, which does not say that the field is empty. With a list selector, put a `not_null` rule on each field in the list. `not_null` accepts a string of only spaces. To refuse it, add `matches_regex` with `pattern: '\S'`.
+3. **Size `judge_budget` in judged values.** The budget counts one unit for each value that the judge checks, whatever `votes` is. Set it to about records × judge rules × `max_iterations`, plus a margin. Each judge rule can make `votes` × `max_iterations` model calls for one record, but a value that does not change between rounds reuses its verdict. Do not set the budget too low. When the budget is used up, a skipped rule with `error` severity fails the record (see [Caching and budget](#caching-and-budget)). To lower the cost, give the judge a less expensive model with the `model` parameter.
 
 ## Current limitations
 

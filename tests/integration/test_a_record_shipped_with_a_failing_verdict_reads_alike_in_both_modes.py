@@ -23,12 +23,13 @@ REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
 WORKFLOW = "ships_failing"
 
+# `(?!)` is a pattern no string matches, so the mock cannot meet the rule either.
 _EXPECT = {
     "return_last": "{ repair: auto, max_iterations: 2, on_exhausted: return_last, "
     "expectations: [ { id: never_matches, type: matches_regex, field: summary, "
-    "params: { pattern: '^NEVER_MATCHES$' } } ] }",
+    "params: { pattern: '(?!)' } } ] }",
     "repair_none": "{ repair: none, expectations: [ { id: never_matches, type: matches_regex, "
-    "field: summary, params: { pattern: '^NEVER_MATCHES$' } } ] }",
+    "field: summary, params: { pattern: '(?!)' } } ] }",
 }
 
 _CONFIG = """\

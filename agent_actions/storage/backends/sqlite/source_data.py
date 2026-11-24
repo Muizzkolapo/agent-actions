@@ -25,16 +25,17 @@ class SQLiteSourceDataMixin(SQLitePayloadCodecMixin):
     """
 
     @staticmethod
-    def _repeat_of_column(repeat_of: Any) -> str | None:
-        """``source_data.repeat_of_source_guid`` for a row: ``""`` when it repeats nothing.
-
-        NULL, as on a row written before the column existed, leaves the answer to the payload.
-        """
+    def _repeat_of_column(repeat_of: Any, relative_path: str, index: int) -> str:
+        """``source_data.repeat_of_source_guid`` for a row: ``""`` when it repeats nothing."""
         if repeat_of is None:
             return ""
         if isinstance(repeat_of, str) and repeat_of:
             return repeat_of
-        return None
+        raise DataValidationError(
+            f"Source record {index} for '{relative_path}' has repeat_of_source_guid "
+            f"{repeat_of!r}; it must be a non-empty guid",
+            context={"relative_path": relative_path, "record_index": index},
+        )
 
     def write_source(
         self,
@@ -47,7 +48,7 @@ class SQLiteSourceDataMixin(SQLitePayloadCodecMixin):
 
         # A blank source_guid at the storage boundary is an upstream invariant
         # violation, not a routine skip: fail loud (a partial drop is silent data loss).
-        rows: list[tuple[str, str, str, str | None]] = []
+        rows: list[tuple[str, str, str, str]] = []
         for index, item in enumerate(data):
             source_guid = item.get("source_guid")
             if not source_guid:
@@ -61,7 +62,9 @@ class SQLiteSourceDataMixin(SQLitePayloadCodecMixin):
                     relative_path,
                     source_guid,
                     deep_json.dumps(item, ensure_ascii=False),
-                    self._repeat_of_column(item.get("repeat_of_source_guid")),
+                    self._repeat_of_column(
+                        item.get("repeat_of_source_guid"), relative_path, index
+                    ),
                 )
             )
 
@@ -195,7 +198,7 @@ class SQLiteSourceDataMixin(SQLitePayloadCodecMixin):
         ids = tuple(dict.fromkeys(record_ids))
         if not ids:
             return False
-        # Each id is bound twice in each predicate below, so chunk at half the
+        # Each id is bound twice in the predicate below, so chunk at half the
         # param cap to stay under it.
         chunk_size = _SQL_MAX_PARAMS // 2
         with self._lock:
@@ -211,34 +214,6 @@ class SQLiteSourceDataMixin(SQLitePayloadCodecMixin):
                 )
                 if cursor.fetchone() is not None:
                     return True
-                # A NULL column is a row written before it existed: ask its payload.
-                cursor.execute(
-                    f"SELECT 1 FROM source_data WHERE repeat_of_source_guid IS NULL "  # nosec B608  # only ? placeholders are interpolated
-                    f"AND typeof(data) = 'text' AND json_valid(data) AND ("
-                    f"(source_guid IN ({placeholders}) "
-                    f"AND json_extract(data, '$.repeat_of_source_guid') IS NOT NULL) "
-                    f"OR json_extract(data, '$.repeat_of_source_guid') IN ({placeholders})) "
-                    f"LIMIT 1",
-                    chunk + chunk,
-                )
-                if cursor.fetchone() is not None:
-                    return True
-            # A compressed row is read here, as is a text row SQLite's JSON functions
-            # refuse (nested 1000 levels deep, or holding a NaN), rather than failing
-            # the query for every row.
-            cursor.execute(
-                "SELECT source_guid, data FROM source_data WHERE repeat_of_source_guid IS NULL"
-                " AND (typeof(data) <> 'text' OR NOT json_valid(data))"
-            )
-            unreadable_by_sqlite = cursor.fetchall()
-        wanted = set(ids)
-        for row in unreadable_by_sqlite:
-            stored = self.decode_payload(
-                row["data"], table="source_data", where=f"record '{row['source_guid']}'"
-            )
-            repeat_of = stored.get("repeat_of_source_guid") if isinstance(stored, dict) else None
-            if repeat_of is not None and (row["source_guid"] in wanted or repeat_of in wanted):
-                return True
         return False
 
     def clear_source_data(self) -> None:

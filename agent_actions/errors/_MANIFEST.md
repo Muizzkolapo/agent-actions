@@ -14,8 +14,8 @@
 | `terminal_failure` | Function | Build the `RuntimeError` raised when none of an action's records succeeded, tagged so a batch check records the action failed instead of re-raising it for the next run to re-poll. | - |
 | `raised_by_terminal_failure` | Function | True if any error in the chain was built by `terminal_failure`. | - |
 | `classification.py` | Module | Declares and detects errors fatal to a whole action, as opposed to one input, a batch the provider refused, the error a file raises when every one of its records was reached and failed (`mark_every_record_failed`, `every_record_failed`), and the error a pass raises when every input file failed that way, none to an error fatal to the action (`mark_every_file_failed`, `every_file_failed`). | `errors` |
-| `mark_action_fatal` | Function | Tag an error as fatal to the whole action rather than one input. Called where the failure is understood: the record and file processing loops that re-raise instead of tombstoning, the template renderer, the target writer when the store fails to write a file, and batch submission, whose refused batch would otherwise let the action complete on its other files' batches. A loop that declares nothing keeps its failures per-item. | - |
-| `is_action_fatal` | Function | True if any error in the chain was marked, or came from an `on_exhausted: raise` policy. Searches the chain because each layer wraps on the way up. | - |
+| `mark_action_fatal` | Function | Tag an error as fatal to the whole action rather than one input. Called where the failure is understood: the record and file processing loops that re-raise instead of tombstoning, the template renderer, the target writer when the store fails to write a file, batch submission, whose refused batch would otherwise let the action complete on its other files' batches, every raise of `ExpectationConfigurationError` (an `expect:` block that cannot be resolved), the refusal of an unknown recovery type or phase (`UnknownRecoveryState`), the batch registry's cache check (a safety check not reached in practice: a missing or corrupt registry loads as empty), an SQLite store that is not open, and the batch collect pass when a failed file's records cannot be marked failed. A loop that declares nothing keeps its failures per-item. | - |
+| `is_action_fatal` | Function | True if any error in the chain was marked, or came from an `on_exhausted: raise` policy. Searches the chain because each layer wraps on the way up. The batch collect pass (`process_all_batch_results`) stops on this and on a policy halt only, never on an error's type: a bare RuntimeError a provider's SDK raises for one file fails that file. | - |
 | `mark_submission_refused` | Function | Tag an error as a batch the provider did not take, so nothing was sent or stored. Called by batch submission. | - |
 | `is_submission_refused` | Function | True if any error in the chain was marked refused. The executor reads it to name, in a warning, the files whose batches the failed action leaves uncollected. | - |
 | `common.py` | Module | Common errors used across multiple domains. | `errors` |
@@ -23,6 +23,7 @@
 | `configuration.py` | Module | Configuration-related errors. `ConfigurationError.__init__` guards `config_key` with `config_key or message or "<no key>"` to ensure the interpolated key is never `None`. | `errors` |
 | `ConfigurationError` | Class | Base exception for configuration-related errors. | - |
 | `ConfigValidationError` | Class | Raised when configuration validation fails. | - |
+| `StoreFormatError` | Class | Raised when a store records a storage format other than the one this version writes. The message names the store and `agac clean -a <workflow> --all`. | - |
 | `DuplicateFunctionError` | Class | Raised when duplicate @udf_tool function names are detected. | - |
 | `FunctionNotFoundError` | Class | Raised when a UDF is not found in the registry. | - |
 | `UDFLoadError` | Class | Raised when a UDF module fails to load. `DISCOVERY_SENTINEL` class attribute marks failures of the user-code directory itself (vs. a specific module import), so formatters can render directory-appropriate messages. | - |
@@ -95,5 +96,6 @@ No direct project surface. Consumed internally by config, validation, workflow, 
 | `agent_actions/output` | inbound | Output processing raises `SerializationError`, `TransformationError`, `EmptyOutputError`. |
 | `agent_actions/cli` | inbound | CLI catches and formats all error types. |
 | `agent_actions/logging` | inbound | Error translator and formatters consume error hierarchy. |
-| `agent_actions/storage` | inbound | Storage backends raise `FileSystemError` subclasses. |
+| `agent_actions/storage` | inbound | Storage backends raise `FileSystemError` subclasses; the SQLite backend declares a store that is not open fatal with `mark_action_fatal`. |
+| `agent_actions/expectations` | inbound | `service.py` raises `ExpectationConfigurationError`, a `ConfigurationError`, declared fatal with `mark_action_fatal`. |
 | `agent_actions/utils` | outbound | `AgentActionsError.detailed_str` uses `safe_format.format_exception_context`. |

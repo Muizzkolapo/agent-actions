@@ -348,31 +348,6 @@ class TestARunCappedByTheEnvironment:
         assert _stamp(project, "flatten")["record_limit"] is None
 
 
-class TestTheRetiredEnvironmentName:
-    """Rejected end to end, before any action runs — not only in the resolver."""
-
-    def test_the_run_fails_and_names_the_replacement(self, project, monkeypatch):
-        """Asserted on the exception, not the console: the runner invokes the
-        command group directly, below the entrypoint that renders errors."""
-        _stage(project, 6)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
-
-        result = CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
-
-        assert result.exit_code != 0
-        assert "AGAC_RECORD_LIMIT" in str(result.exception), result.exception
-
-    def test_nothing_is_processed(self, project, monkeypatch):
-        """Refused while the run is assembled, so no action gets as far as
-        completing and then failing to record that it did."""
-        _stage(project, 6)
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
-
-        CliRunner().invoke(cli, ["run", "-a", TOOL_WORKFLOW, "--fresh"])
-
-        assert _processed(project) == 0
-
-
 TAG_TOOL = """from typing import Any
 
 from agent_actions import udf_tool

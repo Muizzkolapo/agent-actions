@@ -1,6 +1,5 @@
 """Tests for SQLite storage backend."""
 
-import json
 import sqlite3
 
 import pytest
@@ -560,32 +559,6 @@ class TestCheckpointKeepsEveryRowOfARecord:
 
         assert backend.read_checkpoint_records("action_a", "output.json") == again
 
-    def test_a_row_stored_as_one_record_is_read_as_that_record(self, backend):
-        """A run checkpointed before rows were kept as a list leaves a record, not a list."""
-        row = {"source_guid": "g1", "content": "older"}
-        backend.connection.execute(
-            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
-            "VALUES (?, ?, ?, ?)",
-            ("action_a", "output.json", "g1", json.dumps(row)),
-        )
-        backend.connection.commit()
-
-        assert backend.read_checkpoint_records("action_a", "output.json") == [row]
-
-    def test_a_row_stored_as_one_record_is_named_as_holding_an_unknown_number(self, backend):
-        """That version kept the last row of each record it saved, so its row cannot say
-        whether the record was answered with others."""
-        backend.connection.execute(
-            "INSERT INTO checkpoint_output (action_name, relative_path, source_guid, record_data) "
-            "VALUES (?, ?, ?, ?)",
-            ("action_a", "output.json", "g1", json.dumps({"source_guid": "g1"})),
-        )
-        backend.connection.commit()
-        backend.save_checkpoint_records("action_a", "output.json", [{"source_guid": "g2"}])
-        backend.save_checkpoint_records("action_a", "other.json", [{"source_guid": "g3"}])
-
-        assert backend.checkpointed_without_row_count("action_a", "output.json") == {"g1"}
-
 
 class TestWritingAFileClearsItsCheckpointRows:
     """A checkpoint row left beside a file is read as an answer given after the file was
@@ -624,77 +597,6 @@ class TestWritingAFileClearsItsCheckpointRows:
         assert backend.read_checkpoint_records("action_a", "output.json") == [
             {"source_guid": "g1"}
         ]
-
-
-class TestPreviewTargetNullRecordCount:
-    """Tests for preview_target fallback when record_count IS NULL."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        db_path = tmp_path / "agent_io" / "test.db"
-        backend = SQLiteBackend(str(db_path), "test_workflow")
-        backend.initialize()
-        yield backend
-        backend.close()
-
-    def test_null_record_count_uses_json_length(self, backend):
-        """preview_target computes correct count from JSON when record_count IS NULL."""
-        import json
-
-        records = [{"id": 1}, {"id": 2}, {"id": 3}]
-        # Insert directly with NULL record_count to simulate legacy data
-        backend.connection.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, NULL)",
-            ("node_1", "legacy.json", json.dumps(records)),
-        )
-        backend.connection.commit()
-
-        result = backend.preview_target("node_1")
-        assert result["total_count"] == 3
-        assert len(result["records"]) == 3
-
-
-class TestGetStorageStatsNullRecordCount:
-    """Tests for get_storage_stats with NULL record_count values."""
-
-    @pytest.fixture
-    def backend(self, tmp_path):
-        db_path = tmp_path / "agent_io" / "test.db"
-        backend = SQLiteBackend(str(db_path), "test_workflow")
-        backend.initialize()
-        yield backend
-        backend.close()
-
-    def test_null_record_count_returns_zero_not_none(self, backend):
-        """Per-node stats return 0 (not None) when all record_count values are NULL."""
-        import json
-
-        backend.connection.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, NULL)",
-            ("node_1", "file.json", json.dumps([{"id": 1}])),
-        )
-        backend.connection.commit()
-
-        stats = backend.get_storage_stats()
-        assert stats["nodes"]["node_1"] == 0
-        assert isinstance(stats["nodes"]["node_1"], int)
-
-    def test_mixed_null_and_populated_record_count(self, backend):
-        """Per-node stats sum correctly when mixing NULL and populated record_count."""
-        import json
-
-        backend.connection.execute(
-            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
-            "VALUES (?, ?, ?, NULL)",
-            ("node_1", "legacy.json", json.dumps([{"id": 1}])),
-        )
-        backend.write_target("node_1", "new.json", [{"id": 2}, {"id": 3}])
-
-        stats = backend.get_storage_stats()
-        # SUM ignores NULLs: only the non-NULL row (2) is summed
-        assert stats["nodes"]["node_1"] == 2
 
 
 class TestSetDispositionRecordIdValidation:
@@ -798,52 +700,7 @@ class TestServiceInitSqliteError:
 
 
 class TestSchemaEnforcement:
-    """Tests for _enforce_schema dropping stale tables."""
-
-    def test_old_schema_migrated_with_alter_table(self, tmp_path):
-        """Table with missing columns gets them added via ALTER TABLE, preserving data."""
-        import sqlite3
-
-        db_path = tmp_path / "test.db"
-        # Create a DB with old schema missing 'detail' and 'input_snapshot' columns
-        conn = sqlite3.connect(str(db_path))
-        conn.execute("""
-            CREATE TABLE record_disposition (
-                id INTEGER PRIMARY KEY,
-                action_name TEXT,
-                record_id TEXT,
-                disposition TEXT,
-                reason TEXT
-            )
-        """)
-        conn.execute(
-            "INSERT INTO record_disposition (action_name, record_id, disposition) VALUES "
-            "('a', 'r', 'd')"
-        )
-        conn.commit()
-        conn.close()
-
-        backend = SQLiteBackend(str(db_path), "test_workflow")
-        backend.initialize()
-
-        # Table should now have all required columns
-        cursor = backend.connection.cursor()
-        cursor.execute("PRAGMA table_info(record_disposition)")
-        columns = {row[1] for row in cursor.fetchall()}
-        assert "detail" in columns
-        assert "input_snapshot" in columns
-
-        # Old data must be preserved (ALTER TABLE, not DROP TABLE)
-        cursor.execute("SELECT COUNT(*) FROM record_disposition")
-        assert cursor.fetchone()[0] == 1
-
-        # Verify the existing row is intact
-        cursor.execute("SELECT action_name, record_id, disposition FROM record_disposition")
-        row = cursor.fetchone()
-        assert row["action_name"] == "a"
-        assert row["record_id"] == "r"
-        assert row["disposition"] == "d"
-        backend.close()
+    """A store this version wrote keeps its data when it opens again."""
 
     def test_correct_schema_not_dropped(self, tmp_path):
         """Table with all columns is left intact on initialize()."""

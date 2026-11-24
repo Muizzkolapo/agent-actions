@@ -257,7 +257,7 @@ class TestTheBackstopBehindTheRefusal:
     behavioural test can reach it — a mutation probe flipping `forbid` to
     `ignore` survives the whole suite. Pinned here so the line is not read as
     dead and deleted, which would leave the refusal resting on one mechanism:
-    `_refuse_undeclared_keys` returns its input untouched for anything that is
+    `refuse_undeclared_keys` returns its input untouched for anything that is
     not a dict, and `forbid` is what covers that.
     """
 

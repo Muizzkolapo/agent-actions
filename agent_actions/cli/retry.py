@@ -22,6 +22,7 @@ from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -34,8 +35,13 @@ from agent_actions.cli.exit_codes import (
     classify_outcome,
     report_quota_stop,
 )
-from agent_actions.cli.run import start_tracked_run
+from agent_actions.cli.run import (
+    check_declared_outputs,
+    start_tracked_run,
+    write_declared_outputs,
+)
 from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.errors import ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
@@ -251,7 +257,7 @@ class RetryCommand:
         )
         backend.initialize()
 
-        store_dir = paths.io_dir / "store" / self.agent_name
+        store_dir = sandbox.store_file(paths.io_dir, self.agent_name).with_suffix("")
         manifest_file = _manifest_path(store_dir)
         prior_manifest = _read_manifest(manifest_file)
 
@@ -447,6 +453,7 @@ class RetryCommand:
         for action in downstream_actions:
             state_mgr.update_status(action, ActionStatus.PENDING, **{REPAIRED_BY: created_at})
 
+        check_declared_outputs(workflow, project_root)
         tracker, run_id = start_tracked_run(workflow, self.agent_name, project_root)
 
         outcome = RunOutcome.FAILED
@@ -495,6 +502,8 @@ class RetryCommand:
         _delete_manifest(manifest_file)
 
         self._report(outcome, state_mgr, execution_order)
+        if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
+            write_declared_outputs(workflow, project_root, self.args.agent)
         return outcome
 
     def _report(self, outcome: RunOutcome, state_mgr, execution_order: list[str]) -> None:
@@ -511,12 +520,12 @@ class RetryCommand:
             waiting = state_mgr.get_batch_submitted_actions(execution_order)
             self.console.print(
                 f"\n[cyan]Retry paused - batch job(s) submitted for: {', '.join(waiting)}. "
-                f"Collect them with: agac run -a {self.agent_name}[/cyan]"
+                f"Collect them with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
             )
         elif outcome is RunOutcome.PAUSED:
             self.console.print(
                 f"\n[cyan]Retry paused before every action finished. "
-                f"Continue with: agac run -a {self.agent_name}[/cyan]"
+                f"Continue with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
             )
         else:
             self.console.print("\n[green]Retry complete.[/green]")
@@ -928,14 +937,15 @@ class RetryCommand:
         if not unfinished:
             return
 
-        remedy = f"Run the workflow first — agac run -a {self.agent_name} — then retry."
+        flag = sandbox.flag()
+        remedy = f"Run the workflow first — agac run -a {self.agent_name}{flag} — then retry."
         if halted:
             resume = (
                 f"resume {halted[0]} with a retry from it, which names no record and runs it "
-                f"in full — agac retry -a {self.agent_name} --from {halted[0]} — then retry."
+                f"in full — agac retry -a {self.agent_name} --from {halted[0]}{flag} — then retry."
             )
             remedy = (
-                f"Run the workflow first — agac run -a {self.agent_name} — then {resume}"
+                f"Run the workflow first — agac run -a {self.agent_name}{flag} — then {resume}"
                 if len(unfinished) > len(halted)
                 else f"First {resume}"
             )
@@ -1433,6 +1443,10 @@ def _open_pairs(failures: dict[str, list[dict]]) -> frozenset[tuple[str, str]]:
 
 @click.command()
 @workflow_option()
+@sandbox_option(
+    help="Retry the records of sandbox runs (agac run --sandbox), with the offline mock",
+    note="the offline mock answers every LLM action; only sandbox output is read and written",
+)
 @click.option(
     "--from",
     "from_action",

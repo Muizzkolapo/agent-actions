@@ -1,8 +1,9 @@
 """`on_exhausted: raise` on an expectation is a halt: recorded as one, refused on the next run,
 and resumed by `agac retry` — in both run modes.
 
-Two staged records and a field check that fails the second it is asked about, so the second
-record runs out of iterations. Only `run_mode` differs between the two projects; every command
+Two staged records and a field check that fails record `p2` in the first process that checks
+it, so that record runs out of iterations. Only `run_mode` differs between the two projects; every
+command
 is a real `agac` invocation against the agac provider mock.
 """
 

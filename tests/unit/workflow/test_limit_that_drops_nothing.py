@@ -28,16 +28,12 @@ def _records(count: int) -> list[dict[str, str]]:
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-    monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
 
 
 @pytest.fixture
 def executor():
     deps = MagicMock(spec=ExecutorDependencies)
     deps.state_manager = MagicMock(spec=ActionStateManager)
-    # No marker in the stamp is the ordinary case; a mock would
-    # otherwise answer with something truthy.
-    deps.state_manager.adopt_truncation_marker.return_value = False
     deps.action_runner = MagicMock()
     deps.action_runner.staged_input_fingerprint.return_value = None
     deps.action_runner.retried_records = frozenset()
@@ -220,13 +216,12 @@ class TestALimitThatCouldNotHaveDroppedAnything:
         storage.clear_disposition.assert_not_called()
 
     @pytest.mark.parametrize(
-        ("env_limit", "stamp", "config", "marker", "expected"),
+        ("env_limit", "stamp", "config", "expected"),
         [
             pytest.param(
                 "3",
                 _stamp(records_processed=6, truncated=False),
                 {},
-                False,
                 ActionStatus.PENDING,
                 id="limit_below_what_it_processed",
             ),
@@ -234,7 +229,6 @@ class TestALimitThatCouldNotHaveDroppedAnything:
                 "6",
                 _stamp(records_processed=6, truncated=False),
                 {},
-                False,
                 ActionStatus.COMPLETED,
                 id="limit_exactly_the_count_it_processed",
             ),
@@ -243,7 +237,6 @@ class TestALimitThatCouldNotHaveDroppedAnything:
                 None,
                 _stamp(record_limit=2, records_processed=2, truncated=True),
                 {},
-                False,
                 ActionStatus.PENDING,
                 id="lifting_a_limit_that_truncated",
             ),
@@ -251,7 +244,6 @@ class TestALimitThatCouldNotHaveDroppedAnything:
                 None,
                 _stamp(record_limit=10, records_processed=6, truncated=False),
                 {},
-                False,
                 ActionStatus.COMPLETED,
                 id="lifting_a_limit_that_did_not_truncate",
             ),
@@ -259,7 +251,6 @@ class TestALimitThatCouldNotHaveDroppedAnything:
                 None,
                 _stamp(record_limit=100, records_processed=6, truncated=False),
                 {"record_limit": 200},
-                False,
                 ActionStatus.COMPLETED,
                 id="raising_a_configured_limit_that_never_bit",
             ),
@@ -268,7 +259,6 @@ class TestALimitThatCouldNotHaveDroppedAnything:
                 "1000",
                 _stamp(),
                 {},
-                False,
                 ActionStatus.PENDING,
                 id="stamp_that_cannot_say_keeps_coarse_behaviour",
             ),
@@ -278,37 +268,24 @@ class TestALimitThatCouldNotHaveDroppedAnything:
                 "1000",
                 _stamp(truncated=False),
                 {},
-                False,
                 ActionStatus.PENDING,
                 id="stamp_untruncated_without_count_keeps_coarse_behaviour",
-            ),
-            # 609's marker says the run that wrote the stamp was itself capped below
-            # its config, so precision about the new limit must not suppress it.
-            pytest.param(
-                None,
-                _stamp(records_processed=6, truncated=False),
-                {"record_limit": 1000},
-                True,
-                ActionStatus.PENDING,
-                id="recorded_cap_reopens_even_when_new_limit_could_not_bite",
             ),
             # The file_limit term has no count to reason from.
             pytest.param(
                 None,
                 _stamp(file_limit=2, records_processed=6, truncated=False),
                 {"file_limit": 5},
-                False,
                 ActionStatus.PENDING,
                 id="changed_file_limit_still_invalidates",
             ),
         ],
     )
     def test_a_limit_change_re_runs_only_when_it_could_change_the_records(
-        self, monkeypatch, executor, env_limit, stamp, config, marker, expected
+        self, monkeypatch, executor, env_limit, stamp, config, expected
     ):
         if env_limit is not None:
             monkeypatch.setenv("AGAC_RECORD_LIMIT", env_limit)
-        executor.deps.state_manager.adopt_truncation_marker.return_value = marker
         executor.deps.state_manager.get_status_details.return_value = stamp
 
         status = executor._maybe_invalidate_completed_status("act", config, ActionStatus.COMPLETED)

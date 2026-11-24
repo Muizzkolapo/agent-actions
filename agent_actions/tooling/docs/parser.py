@@ -319,12 +319,6 @@ class WorkflowParser:
             action["guard"] = action_data.get("guard")  # Conditional execution
             action["prompt"] = action_data.get("prompt")  # Prompt reference
 
-            # Loop configuration (legacy)
-            if "loop" in action_data:
-                action["loop"] = action_data["loop"]  # {param, range, mode}
-            if "loop_consumption" in action_data:
-                action["loop_consumption"] = action_data["loop_consumption"]
-
             # Versions configuration (parallel execution)
             if "versions" in action_data:
                 action["versions"] = action_data["versions"]  # {param, range}

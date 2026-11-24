@@ -13,6 +13,7 @@ from agent_actions.cli.cli_decorators import (
     requires_project,
     workflow_option,
 )
+from agent_actions.config import sandbox
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
@@ -98,6 +99,8 @@ class ActionCommand(BaseInspectCommand):
     ) -> None:
         kind = self._stringify(action_config.get("kind", DEFAULT_ACTION_KIND))
         model = _escape_markup(str(action_config.get("model_name") or "—"))
+        if sandbox.is_active() and action_config.get("model_vendor") == sandbox.SANDBOX_VENDOR:
+            model += "  ·  [dim]answered by the sandbox mock[/dim]"
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
         guard_label = (

@@ -14,8 +14,14 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from agent_actions.cli.cli_decorators import handles_user_errors, requires_project, workflow_option
+from agent_actions.cli.cli_decorators import (
+    handles_user_errors,
+    requires_project,
+    sandbox_option,
+    workflow_option,
+)
 from agent_actions.cli.renderers.whole_table import print_whole
+from agent_actions.config import sandbox
 from agent_actions.config.path_config import load_project_config, resolve_project_root
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.llm.config.prices import ModelPrice, estimated_cost, parse_prices
@@ -80,7 +86,7 @@ class UsageCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.agent, auto_create=False, project_root=project_root
         )
-        db_path = paths.io_dir / "store" / f"{self.agent_name}.db"
+        db_path = sandbox.store_file(paths.io_dir, self.agent_name)
         if not db_path.exists():
             raise click.ClickException(
                 f"No store for workflow '{self.agent_name}' at {db_path}. Has it been run?"
@@ -204,6 +210,7 @@ def _cost_cell(cost: float | None, rows: list[Row]) -> str:
 
 @click.command()
 @workflow_option()
+@sandbox_option()
 @click.option(
     "--run",
     default=None,

@@ -4,16 +4,18 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Iterator
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
 from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
+from agent_actions.errors.configuration import StoreFormatError
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.lifecycle_read import reset_for_downstream, validate_lifecycle_batch
 from agent_actions.record.reasons import PARSE_ERROR
+from agent_actions.utils.gc_pause import collector_paused
 from agent_actions.utils.readonly import plain_copy
 from agent_actions.utils.schema_echo import is_schema_echo, make_schema_echo_error
 
@@ -78,14 +80,6 @@ DispositionRow = tuple[str, str, str, str | None, str | None, str | None, str | 
 """(action_name, record_id, disposition, reason, relative_path, input_snapshot, detail)."""
 
 
-def batch_file_names_key(action_name: str) -> str:
-    """The metadata key recording the name each nested batch input file is stored under.
-
-    It names stored rows, so it lives exactly as long as the action's target data.
-    """
-    return f"batch_file_names:{action_name}"
-
-
 class StorageBackend(ABC):
     """Abstract interface for pluggable storage backends (SQLite, S3, DuckDB, etc.).
 
@@ -95,16 +89,14 @@ class StorageBackend(ABC):
     consumers — they see the exact same list[dict] as before.
     """
 
-    # Version 1 = full records, 2 = delta storage, 3 = compressed payload columns
-    _STORAGE_FORMAT_VERSION = 3
+    # Written when a store is made. A backend refuses to open a store of any other.
+    _STORAGE_FORMAT_VERSION = 4
 
     def __init__(self) -> None:
         """Initialize base storage backend state."""
         self._reconstruction_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._execution_order_cache: list[str] | None = None
         self._dependency_graph_cache: dict[str, list[str]] | None = None
-        self._format_version_written = False
-        self._format_version_checked = False
         self._rows_collected: dict[str, int] = {}
         self._rows_collected_lock = threading.Lock()
         self._staged_this_run: dict[str, set[str]] = {}
@@ -155,8 +147,30 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def initialize(self) -> None:
-        """Create tables, indexes, and other infrastructure required by the backend."""
+        """Create tables, indexes, and other infrastructure required by the backend.
+
+        A new store records ``_STORAGE_FORMAT_VERSION``. An existing store passes
+        :meth:`_refuse_other_format` before anything reads or writes it.
+        """
         ...
+
+    def _refuse_other_format(self, stored: str | None, store: str, workflow_name: str) -> None:
+        """Raise unless *stored* is the storage format this version writes."""
+        if stored == str(self._STORAGE_FORMAT_VERSION):
+            return
+        found = "records no storage format" if stored is None else f"uses storage format {stored}"
+        raise StoreFormatError(
+            f"The store {store} {found}. This version of agent-actions reads only storage "
+            f"format {self._STORAGE_FORMAT_VERSION}. Run `agac clean -a {workflow_name} --all` "
+            f"to remove the store, then run the workflow again.",
+            context={
+                "store": store,
+                "stored_version": stored,
+                "supported": self._STORAGE_FORMAT_VERSION,
+                "hint": f"Run `agac clean -a {workflow_name} --all` to remove the store, "
+                "then run the workflow again.",
+            },
+        )
 
     def _gate_schema_echo_records(
         self,
@@ -254,10 +268,6 @@ class StorageBackend(ABC):
         # LLM output — the carry-forward / resume path bypasses the live-LLM guard.
         delta_records = self._gate_schema_echo_records(action_name, delta_records)
 
-        if not self._format_version_written:
-            self.save_metadata("storage_format_version", str(self._STORAGE_FORMAT_VERSION))
-            self._format_version_written = True
-
         self._reconstruction_cache.clear()
         return self._write_target_raw(action_name, relative_path, delta_records)
 
@@ -267,34 +277,6 @@ class StorageBackend(ABC):
         Raises:
             FileNotFoundError: If the target data doesn't exist.
         """
-        if not self._format_version_checked:
-            stored_version = self.load_metadata("storage_format_version")
-            if stored_version is not None:
-                try:
-                    version_int = int(stored_version)
-                except ValueError:
-                    from agent_actions.errors.configuration import ConfigValidationError
-
-                    raise ConfigValidationError(
-                        "Corrupt storage_format_version in workflow_metadata: "
-                        f"{stored_version!r}. "
-                        f"Expected an integer. Re-run with --fresh to reset.",
-                        context={"stored_version": stored_version},
-                    ) from None
-                if version_int > self._STORAGE_FORMAT_VERSION:
-                    from agent_actions.errors.configuration import ConfigValidationError
-
-                    raise ConfigValidationError(
-                        f"Database uses storage format version {version_int}, "
-                        f"but this code supports up to version {self._STORAGE_FORMAT_VERSION}. "
-                        f"Please upgrade agent-actions.",
-                        context={
-                            "stored_version": version_int,
-                            "supported": self._STORAGE_FORMAT_VERSION,
-                        },
-                    )
-            self._format_version_checked = True
-
         result = self._reconstructed_target(action_name, relative_path)
         reset_for_downstream(result, action_name=action_name)
         return result
@@ -344,12 +326,14 @@ class StorageBackend(ABC):
     def _reconstructed_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Stored rows, reconstructed and lifecycle-validated. Cached pre-reset."""
         cache_key = (action_name, relative_path)
-        if cache_key not in self._reconstruction_cache:
-            result = self._read_target_raw(action_name, relative_path)
-            result = self._reconstruct_from_deltas(action_name, relative_path, result)
-            validate_lifecycle_batch(result, action_name=action_name)
-            self._reconstruction_cache[cache_key] = result
-        return plain_copy(self._reconstruction_cache[cache_key])
+        # Many new objects, none in a cycle: each collection they set off walks the heap.
+        with collector_paused():
+            if cache_key not in self._reconstruction_cache:
+                result = self._read_target_raw(action_name, relative_path)
+                result = self._reconstruct_from_deltas(action_name, relative_path, result)
+                validate_lifecycle_batch(result, action_name=action_name)
+                self._reconstruction_cache[cache_key] = result
+            return plain_copy(self._reconstruction_cache[cache_key])
 
     def forget_reconstructed(self, action_name: str, relative_path: str) -> None:
         """Drop one file's reconstructed rows from the cache; the next read rebuilds them."""
@@ -480,7 +464,7 @@ class StorageBackend(ABC):
             return set()
 
         identities: set[str] = set()
-        for records in self._read_target_raw_batch(upstream_actions, relative_path).values():
+        for _act, records in self._each_upstream_raw(upstream_actions, relative_path):
             for record in records:
                 if isinstance(record, dict):
                     guid = record.get("source_guid")
@@ -490,7 +474,20 @@ class StorageBackend(ABC):
                     # would call a row joinable that rejoins an empty namespace.
                     if guid and isinstance(content, dict) and content:
                         identities.add(guid)
+            del records
         return identities
+
+    def _each_upstream_raw(
+        self, action_names: list[str], relative_path: str
+    ) -> Iterator[tuple[str, list[dict[str, Any]]]]:
+        """Each action's stored rows of the file, decoded one action at a time.
+
+        Not all at once: a delta row keeps its whole envelope, so every upstream's
+        decoded rows together weigh several times the file they rebuild. The caller
+        keeps what it needs of one action's rows and lets them go before the next.
+        """
+        for name in action_names:
+            yield from self._read_target_raw_batch([name], relative_path).items()
 
     def _extract_delta(
         self,
@@ -554,15 +551,13 @@ class StorageBackend(ABC):
         if not upstream_actions:
             return [{k: v for k, v in r.items() if k != "_delta_mode"} for r in delta_records]
 
-        upstream_data = self._read_target_raw_batch(upstream_actions, relative_path)
-
         # A guid's "full" record is self-contained above the action that stored it,
         # so it bounds that guid's merge — the shallowest such action, because a
         # position in this list is not proof of being an ancestor.
         upstream: dict[str, dict[str, dict[str, Any]]] = {}
         full_boundary_guids: dict[str, str] = {}  # guid → action that has full record
         position = {act: i for i, act in enumerate(upstream_actions)}
-        for act, records in upstream_data.items():
+        for act, records in self._each_upstream_raw(upstream_actions, relative_path):
             guid_map: dict[str, dict[str, Any]] = {}
             for rec in records:
                 guid = rec.get("source_guid")
@@ -580,6 +575,7 @@ class StorageBackend(ABC):
                         if held is None or position.get(act, 0) < position.get(held, 0):
                             full_boundary_guids[guid] = act
             upstream[act] = guid_map
+            del records
 
         # For each current record, determine how far back to reconstruct: a guid
         # whose boundary is upstream skips that boundary's own upstream, which the
@@ -907,14 +903,6 @@ class StorageBackend(ABC):
         """Every row checkpointed for an action/path, in the order their records were saved."""
         return []
 
-    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
-        """Records of an action/path whose checkpoint cannot say how many rows answered them.
-
-        An earlier version kept one row per record, the last given under its identity, so
-        such a row may be one of several.
-        """
-        return set()
-
     def clear_checkpoint_records(  # noqa: B027
         self,
         action_name: str,
@@ -1055,10 +1043,7 @@ class StorageBackend(ABC):
 
         Subclasses **must** override — the default raises so that backend
         authors are forced to implement it and ``--fresh`` cannot silently
-        leave stale data behind. An override must also delete the metadata at
-        ``batch_file_names_key(action_name)``: it names the files those rows were
-        stored under, and left behind, a run after ``--fresh`` would store a
-        file under a name nothing holds any more. ``clear_batch_state`` keeps it.
+        leave stale data behind.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target()")
 
@@ -1066,8 +1051,7 @@ class StorageBackend(ABC):
         """Delete the files at *relative_paths* an action stores, keeping the rest.
 
         Returns how many were deleted. Raises unless overridden, as ``delete_target``
-        does. The names recorded for batch input files are the caller's to forget:
-        which of them name these files is a batch rule.
+        does.
         """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_target_files()")
 

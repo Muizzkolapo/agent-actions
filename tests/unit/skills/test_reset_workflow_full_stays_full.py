@@ -98,16 +98,20 @@ class TestWithoutTheFramework:
         assert record.exists()
         assert "agac clean -a wf --all" in capsys.readouterr().err
 
-    def test_target_and_source_still_go(self, script, project, monkeypatch):
+    def test_target_still_goes_and_source_stays(self, script, project, monkeypatch):
         """Keeping the store is not an excuse to do nothing."""
         root, base = project
         _record(root)
+        (base / "target" / "anything").write_text("[]")
+        (base / "source").mkdir()
+        (base / "source" / "anything").write_text("[]")
         _import_failing_on(monkeypatch, lambda n: n.startswith("agent_actions"), ImportError)
 
         _run_full(script, monkeypatch, root)
 
         assert (base / "target").exists(), "target/ is recreated after the wipe"
         assert not (base / "target" / "anything").exists()
+        assert (base / "source" / "anything").exists(), "no reset removes source/"
 
 
 class TestWithTheFramework:
@@ -226,3 +230,25 @@ class TestARunInProgress:
         _run_full(script, monkeypatch, root)
 
         assert [p.name for p in (base / "store").iterdir()] == ["wf.db.lock"]
+
+
+def test_a_store_of_another_format_is_removed(script, project, monkeypatch, capsys):
+    """`agac clean --all` removes it too: nothing this version reads can name its batches."""
+    import sqlite3
+
+    from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+    root, base = project
+    db_path = base / "store" / "wf.db"
+    backend = SQLiteBackend(str(db_path), "wf")
+    backend.initialize()
+    backend.close()
+    conn = sqlite3.connect(db_path)
+    conn.execute("UPDATE workflow_metadata SET value = '3' WHERE key = 'storage_format_version'")
+    conn.commit()
+    conn.close()
+
+    _run_full(script, monkeypatch, root)
+
+    assert not db_path.exists()
+    assert "another storage format" in capsys.readouterr().err

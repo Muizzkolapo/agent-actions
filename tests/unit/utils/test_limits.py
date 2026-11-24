@@ -19,7 +19,7 @@ from agent_actions.utils.limits import (
 @pytest.fixture(autouse=True)
 def _no_ambient_limits(monkeypatch):
     """A developer shell exporting either variable must not decide these tests."""
-    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -167,33 +167,10 @@ class TestTheEnvironmentIsCheckedBeforeTheRunStarts:
             check_environment()
 
     def test_usable_values_pass(self, monkeypatch):
-        monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
         monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
         monkeypatch.setenv("AGAC_FILE_LIMIT", "1")
 
         check_environment()
-
-
-class TestTheRetiredEnvironmentName:
-    """AGAC_MAX_RECORDS was renamed; reading it is an error, not a no-op."""
-
-    def test_it_is_refused_and_names_its_replacement(self, monkeypatch):
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
-
-        with pytest.raises(ValueError, match="AGAC_RECORD_LIMIT"):
-            resolve_record_limit({"record_limit": 23})
-
-    def test_it_is_refused_even_when_the_run_asked_for_its_own_limit(self, monkeypatch):
-        monkeypatch.setenv("AGAC_MAX_RECORDS", "2")
-
-        with pytest.raises(ValueError, match="AGAC_RECORD_LIMIT"):
-            resolve_record_limit({"record_limit": 23, RECORD_LIMIT_KEY: 5})
-
-    def test_the_new_name_alone_is_fine(self, monkeypatch):
-        monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "2")
-
-        assert resolve_record_limit({"record_limit": 23})[0] == 2
 
 
 class TestTheEnvironmentLimit:

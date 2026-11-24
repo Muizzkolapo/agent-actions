@@ -32,6 +32,7 @@ const sidebars: SidebarsConfig = {
         'guides/design-patterns',
         'guides/custom-tools',
         'guides/human-in-the-loop',
+        'guides/sandbox',
         'guides/editor-setup',
         'guides/troubleshooting',
       ],
@@ -123,6 +124,7 @@ const sidebars: SidebarsConfig = {
             'reference/data-io/output-format',
             'reference/data-io/data-lineage',
             'reference/data-io/chunking',
+            'reference/data-io/databases',
           ],
         },
         {

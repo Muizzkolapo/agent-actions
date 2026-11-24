@@ -10,6 +10,7 @@ from agent_actions.expectations.service import (
     create_expectation_service_from_config,
 )
 from agent_actions.expectations.types import Suite
+from tests.helpers.schema_project import schema_project
 from tests.unit.expectations.judging import SIDE_CALL, voted
 
 SUITE = Suite(
@@ -156,18 +157,8 @@ def test_factory_refuses_a_repair_prompt_naming_an_unknown_placeholder():
         )
 
 
-def _schema_project(tmp_path, name="quality"):
-    import yaml
-
-    (tmp_path / "agent_actions.yml").write_text(yaml.safe_dump({"schema_path": "schema"}))
-    schema_dir = tmp_path / "schema"
-    schema_dir.mkdir()
-    (schema_dir / f"{name}.yml").write_text(yaml.safe_dump({"expectations": INLINE}))
-    return tmp_path
-
-
 def test_factory_resolves_a_named_suite_through_the_schema_path(tmp_path):
-    root = _schema_project(tmp_path)
+    root = schema_project(tmp_path, {"quality": {"expectations": INLINE}})
     service = create_expectation_service_from_config(
         {"suite": "quality", "repair": "none"}, action_name="a", project_root=root
     )
@@ -175,7 +166,7 @@ def test_factory_resolves_a_named_suite_through_the_schema_path(tmp_path):
 
 
 def test_factory_defaults_a_bare_expect_to_the_actions_schema(tmp_path):
-    root = _schema_project(tmp_path)
+    root = schema_project(tmp_path, {"quality": {"expectations": INLINE}})
     service = create_expectation_service_from_config(
         {"repair": "none"},
         action_name="a",
@@ -198,12 +189,15 @@ def test_factory_refuses_a_named_suite_without_a_project_root():
 
 
 def test_factory_does_not_treat_an_empty_expect_dict_as_absent():
-    with pytest.raises(ConfigurationError):
+    with pytest.raises(
+        ConfigurationError,
+        match="has a bare expect: block but no schema to read expectations from",
+    ):
         create_expectation_service_from_config({}, action_name="a")
 
 
 def test_factory_wraps_a_missing_suite_in_a_configuration_error(tmp_path):
-    root = _schema_project(tmp_path)
+    root = schema_project(tmp_path, {"quality": {"expectations": INLINE}})
     with pytest.raises(ConfigurationError, match="nothing_here"):
         create_expectation_service_from_config(
             {"suite": "nothing_here", "repair": "none"}, action_name="a", project_root=root

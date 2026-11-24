@@ -358,9 +358,7 @@ and the checkpoint is saved before it. `build_carry_forward` (with nothing store
 `checkpointed_answers` (beside a stored file) leave that record out rather than carry its
 rows, and the run answers it again. Carried,
 they would keep that one identity, of which the carry keeps a single row. A record
-answered with one row is carried as before. A record an earlier version checkpointed is
-answered again as well: that version kept one row per `source_guid`, the last, and the
-row cannot say whether the record had others (`checkpointed_without_row_count`).
+answered with one row is carried as before.
 
 ### Checkpoint storage
 
@@ -427,8 +425,8 @@ On resume, `build_carry_forward()` reads prior output for carried records:
 answered_since_stored(action_name, path)        ← checkpointed after the file
     → stored row never carried                     was stored (online path)
     checkpointed_answers(...) → finished with the run's own; a record
-                                checkpointed with several rows, or by
-                                an earlier version, is answered again
+                                checkpointed with several rows is
+                                answered again
 try read_target(action_name, relative_path)     ← completed action
 except FileNotFoundError:
     read_checkpoint_records(action_name, path)   ← interrupted action
@@ -631,44 +629,8 @@ store does not meet one). Keyed by the basename, two files of one name in two di
 shared one batch and the second was never sent, and a nested file's answers and its
 nothing-to-send write were two files.
 
-A store written by an older version holds a nested file, its batch state and every
-downstream join under the basename, and moving them would break the joins. So
-`batch_file_identity` keeps the basename for a file the store already holds under it (its
-output, or a registry entry), unless a top-level input of the action stores under that
-name or another nested file stored under it claimed it first. In the first stage a
-top-level input is a file directly under the staging root that the walk processes (its own
-skip rule and the start node's `file_type` decide); in a later stage it is a dependency
-storing that name, a version base counting as each of its versions. A file given its own
-name over a basename the store holds is logged once, since any of its records held there
-are sent again. The choice is recorded per action (`batch_file_names:{action}`) and follows
-the stored rows, not the inputs of the day: a reset keeps it, `--fresh` removes it, and a
-repair records its choice as any run does, so two files cannot claim one name within it.
-What this leaves:
-
-- A store the older version already split across two names (answers under `page.json`, a
-  nothing-to-send write under `sub/page.json`) stays split. The file keeps `page.json`, and
-  nothing writes `sub/page.json` again, but the actions below read both: they answer that
-  file's records twice, and a record limit counts them twice, until `--fresh`.
-- Two files of one basename that collided in such a store: the first walked keeps the flat
-  name, and the other is sent again under its own. Where the flat file held only the
-  other's rows, the first is sent again too. Where it held both files' rows, the flat file
-  is written for the first file's inputs alone, which leaves the other's out: in that same
-  run when every record of the first file is already answered, otherwise once its batch is
-  collected, and until then the other's rows are read twice below.
-- A nested file from the older version whose batch is still out when a top-level file of
-  its basename appears moves to its own name in that run. Its records are sent a second
-  time, and held under both names until the top-level file, which finds that batch under
-  its own name and so waits a run, is sent and writes the flat file over.
-- A store this version wrote can keep a nested file under the flat name too: a file moved
-  into a subdirectory, or a nested file first seen after a top-level file of its basename
-  has left, takes the name the departed file was stored under.
-- Two inputs in one directory that differ only by suffix (`sub/page.csv`, `sub/page.json`)
-  still share one stored name, as they do online.
-- An older version runs a store this one wrote without error, but reads every key by the
-  basename. It sends every record of a nested file again and stores a second copy under the
-  basename, beside the one this version wrote, and it cannot load the context map of a batch
-  this version left out, so that batch's answers are never stored. Run it with `--fresh`.
-  Its `--fresh` leaves `batch_file_names` behind, so run `--fresh` again on coming back.
+Two inputs in one directory that differ only by suffix (`sub/page.csv`, `sub/page.json`)
+still share one stored name, as they do online.
 
 The two paths do not always leave the same file. Where batch differs it holds more, with
 one exception noted last:

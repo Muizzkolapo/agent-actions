@@ -14,7 +14,6 @@ from agent_actions.config.path_config import (
     find_project_root_dir,
     load_project_config,
     resolve_project_root,
-    warn_unread_project_keys,
 )
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import (
@@ -23,7 +22,6 @@ from agent_actions.config.schema import (
     dump_defaults,
     refuse_blank_output_field,
     refuse_context_scope_siblings,
-    refuse_retired_keys,
 )
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
 from agent_actions.llm.config.endpoints import clear_project_endpoints, load_project_endpoints
@@ -37,14 +35,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Legacy top-level `agents:` configs are validated against AgentConfig
-# (extra="allow", since the expander also uses it for post-expansion dicts)
-# rather than the strict ActionConfig, so a removed spelling would
-# otherwise pass through silently instead of being refused.
-_REMOVED_AGENT_SPELLINGS = {
-    "depends_on": "dependencies",
-}
-
 
 def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, Any]:
     """Return *project_defaults* with its chunk block spread into loose keys.
@@ -54,18 +44,6 @@ def _flatten_project_chunk_block(project_defaults: dict[str, Any]) -> dict[str, 
     block they would outrank the workflow's own loose keys; as loose keys the
     shallow merge below puts the workflow above them, which is the real order.
     """
-    retired = set(ChunkConfig.retired_spellings()) & project_defaults.keys()
-    if retired:
-        raise ConfigurationError(
-            "default_agent_config: "
-            + "; ".join(
-                f"unknown chunk setting '{key}' — did you mean "
-                f"'{ChunkConfig.retired_spellings()[key]}'?"
-                for key in sorted(retired)
-            ),
-            context={"operation": "load_project_defaults"},
-        )
-
     block = project_defaults.get("chunk_config")
     if block is None:
         return project_defaults
@@ -103,9 +81,6 @@ def _validate_project_expect_block(project_defaults: dict[str, Any]) -> dict[str
     `repair: none` silently dropped the iteration keys it cannot use, and a scalar
     `expect: "auto"` was coerced to None.
 
-    That matters more since #1066, whose refusal message sends a migrating author to this
-    very block -- landing them back in the silence the refusal exists to end.
-
     Validated the way chunk_config already is above, and dumped with exclude_unset so the
     merge below still sees only what the author wrote.
     """
@@ -137,6 +112,7 @@ def project_action_defaults(project_config: dict[str, Any]) -> dict[str, Any]:
     """The project's ``default_agent_config`` as the defaults each workflow's sit over."""
     project_defaults = project_config.get("default_agent_config", {})
     _refuse_or_raise(project_defaults, "default_agent_config", "load_project_defaults")
+    _refuse_undeclared_or_raise(project_defaults, "load_project_defaults")
     project_defaults = _flatten_project_chunk_block(project_defaults)
     project_defaults = _validate_project_expect_block(project_defaults)
     _refuse_blank_project_output_field(project_defaults)
@@ -162,8 +138,7 @@ def project_agent_config(project_config: dict[str, Any]) -> dict[str, Any]:
 
     defaults = project_config.get("default_agent_config", {})
     _refuse_or_raise(defaults, "default_agent_config", "merge_agent_configs")
-    _refuse_retired_or_raise(defaults, "default_agent_config", "merge_agent_configs")
-    _refuse_removed_spellings_or_raise(defaults, "default_agent_config", "merge_agent_configs")
+    _refuse_undeclared_or_raise(defaults, "merge_agent_configs")
     _refuse_project_split_field(defaults)
     return DefaultAgentConfig.model_validate(defaults).model_dump()
 
@@ -192,37 +167,16 @@ def _refuse_or_raise(block: Any, surface: str, operation: str) -> None:
         raise ConfigurationError(str(e), context={"operation": operation}) from e
 
 
-def _refuse_retired_or_raise(block: Any, surface: str, operation: str) -> None:
-    """Raise the framework's own error for a key whose runtime is gone."""
+def _refuse_undeclared_or_raise(project_defaults: Any, operation: str) -> None:
+    """Raise the framework's own error for a `default_agent_config:` key nothing takes."""
+    from agent_actions.output.response.config_schema import (
+        refuse_undeclared_default_agent_keys,
+    )
+
     try:
-        refuse_retired_keys(block, surface)
+        refuse_undeclared_default_agent_keys(project_defaults)
     except ValueError as e:
         raise ConfigurationError(str(e), context={"operation": operation}) from e
-
-
-def _refuse_removed_spellings_or_raise(
-    block: Any, surface: str, operation: str, agent_type: str | None = None
-) -> None:
-    """Raise the framework's own error for a field spelling that was renamed.
-
-    Called on the project block as well as each agent: refused per-agent but
-    accepted in `default_agent_config:`, a removed spelling is an escape hatch
-    rather than a gap — hoisting the key to silence the per-agent error applies
-    it to every agent instead, and the canonical `dependencies` stays empty, so
-    DAG ordering changes silently rather than merely losing a setting (1065).
-    """
-    if not isinstance(block, dict):
-        return
-    removed = _REMOVED_AGENT_SPELLINGS.keys() & block.keys()
-    if not removed:
-        return
-    context: dict[str, Any] = {
-        "replacements": {k: _REMOVED_AGENT_SPELLINGS[k] for k in sorted(removed)},
-        "operation": operation,
-    }
-    if agent_type is not None:
-        context["agent_type"] = agent_type
-    raise ConfigurationError(f"{surface} uses a removed field spelling", context=context)
 
 
 class ConfigManager:
@@ -262,7 +216,10 @@ class ConfigManager:
         try:
             if rendered is None:
                 rendered = render_pipeline_with_templates(
-                    config_path, self.template_dir, project_root=self.project_root
+                    config_path,
+                    self.template_dir,
+                    project_root=self.project_root,
+                    workflow=config_type == "workflow",
                 )
             loaded = yaml.safe_load(rendered)
             if not isinstance(loaded, dict):
@@ -348,9 +305,12 @@ class ConfigManager:
                 "Cannot find agent name: configuration is empty or not a mapping",
                 context={"config_type": type(config).__name__},
             )
-        if "name" in config and "actions" in config:
-            return str(config["name"])
-        return str(next(iter(config)))
+        if "name" not in config:
+            raise ConfigurationError(
+                "Workflow configuration has no 'name' key",
+                context={"config_path": str(self.constructor_path)},
+            )
+        return str(config["name"])
 
     def validate_agent_name(self) -> None:
         if self.user_config is None:
@@ -361,7 +321,7 @@ class ConfigManager:
         config_filename = Path(self.constructor_path).stem
         if self.agent_name != config_filename:
             raise ConfigurationError(
-                "Top-level key does not match the filename",
+                "Workflow 'name' does not match the filename",
                 context={
                     "agent_name": self.agent_name,
                     "config_filename": config_filename,
@@ -371,6 +331,7 @@ class ConfigManager:
 
     def get_user_agents(self) -> list[dict[str, Any]]:
         from agent_actions.output.response.expander import ActionExpander
+        from agent_actions.output.response.expander_merge import observe_suite_judge_context_refs
 
         if self.user_config is None:
             raise RuntimeError(
@@ -378,128 +339,78 @@ class ConfigManager:
             )
         # A raise below must not leave the endpoints of a project loaded earlier.
         clear_project_endpoints()
-        if "name" in self.user_config and "actions" in self.user_config:
-            try:
-                path_manager = PathManager(project_root=self.project_root)
-                project_root = path_manager.get_project_root()
-                project_config = load_project_config(project_root)
-                warn_unread_project_keys(project_config)
-                project_defaults = project_action_defaults(project_config)
-            except (FileNotFoundError, ProjectRootNotFoundError):
-                project_config = {}
-                project_defaults = {}
-            except (yaml.YAMLError, OSError, ConfigValidationError) as e:
-                raise ConfigurationError(
-                    "Failed to load project defaults",
-                    context={
-                        "config_path": str(self.constructor_path),
-                        "operation": "load_project_defaults",
-                    },
-                    cause=e,
-                ) from e
-            # Beside its reader, like default_agent_config above: the plain loader
-            # stays a dict read, and a refusal names the endpoint and the key itself.
-            load_project_endpoints(project_config)
-            # Validate entire workflow config (actions, defaults, duplicates,
-            # dangling deps, circular deps) in one pass via Pydantic.
-            try:
-                workflow = WorkflowConfig.model_validate(self.user_config)
-            except ValidationError as e:
-                field_errors = [
-                    {
-                        "field": ".".join(str(x) for x in err["loc"]),
-                        "message": err["msg"],
-                        "type": err["type"],
-                    }
-                    for err in e.errors()
-                ][:10]
-                raise ConfigurationError(
-                    "Workflow configuration is invalid",
-                    context={
-                        "config_path": str(self.constructor_path),
-                        "workflow_name": self.user_config.get("name", "unknown"),
-                        "validation_errors": field_errors,
-                    },
-                    cause=e,
-                ) from e
-
-            validated_actions = [
-                action.model_dump(mode="python", exclude_unset=True, by_alias=True)
-                for action in workflow.actions
-            ]
-            merged_defaults = merge_workflow_defaults(
-                project_defaults, dump_defaults(workflow.defaults)
-            )
-            workflow_name = workflow.name
-            config_for_expander = {
-                "name": workflow_name,
-                "actions": validated_actions,
-                "defaults": merged_defaults,
-            }
-
-            agent_config_map = ActionExpander.expand_actions_to_agents(config_for_expander)
-            return agent_config_map.get(workflow_name, [])  # type: ignore[return-value]
-        if self.agent_name is None:
-            raise RuntimeError(
-                "agent_name is None: validate_agent_name() must be called before get_user_agents()"
-            )
-        from agent_actions.output.response.expander_validation import (
-            routing_kind,
-            validate_granularity_for_kind,
-        )
-
-        agents_section = self.user_config[self.agent_name]
-        self._load_project_endpoints()
-        if "agents" in agents_section:
-            listed = agents_section["agents"]
-            if not isinstance(listed, list) or not all(isinstance(a, dict) for a in listed):
-                raise ConfigurationError(
-                    f"Workflow '{self.agent_name}': 'agents' must be a list of agent "
-                    "entries, each a mapping",
-                    context={"agent_name": self.agent_name},
-                )
-        else:
-            listed = [
-                agent
-                for agent in agents_section
-                if isinstance(agent, dict) and "agent_type" in agent
-            ]
-        agents: list[dict[str, Any]] = []
-        for agent in listed:
-            kind = routing_kind(agent)
-            name = agent.get("name") or agent.get("agent_type", "?")
-            validate_granularity_for_kind(kind, agent.get("granularity"), name)
-            agent = {**agent, "kind": kind}
-            if kind in {"tool", "hitl"}:
-                agent["model_vendor"] = kind
-            # A HITL review sees the whole dataset in one step, as in the actions format.
-            if kind == "hitl" and agent.get("granularity") is None:
-                agent["granularity"] = "file"
-            agents.append(agent)
-        return agents
-
-    def _load_project_endpoints(self) -> None:
-        """Validate the project's endpoints for a workflow that reads no project defaults."""
+        project_root: Path | None = None
         try:
-            project_root = PathManager(project_root=self.project_root).get_project_root()
+            path_manager = PathManager(project_root=self.project_root)
+            project_root = path_manager.get_project_root()
             project_config = load_project_config(project_root)
+            project_defaults = project_action_defaults(project_config)
         except (FileNotFoundError, ProjectRootNotFoundError):
             project_config = {}
+            project_defaults = {}
+        except (yaml.YAMLError, OSError, ConfigValidationError) as e:
+            raise ConfigurationError(
+                "Failed to load project defaults",
+                context={
+                    "config_path": str(self.constructor_path),
+                    "operation": "load_project_defaults",
+                },
+                cause=e,
+            ) from e
+        # Beside its reader, like default_agent_config above: the plain loader
+        # stays a dict read, and a refusal names the endpoint and the key itself.
         load_project_endpoints(project_config)
+        # Validate entire workflow config (actions, defaults, duplicates,
+        # dangling deps, circular deps) in one pass via Pydantic.
+        try:
+            workflow = WorkflowConfig.model_validate(self.user_config)
+        except ValidationError as e:
+            raise self._invalid_workflow(e, self.user_config.get("name", "unknown")) from e
+
+        validated_actions = [
+            action.model_dump(mode="python", exclude_unset=True, by_alias=True)
+            for action in workflow.actions
+        ]
+        merged_defaults = merge_workflow_defaults(
+            project_defaults, dump_defaults(workflow.defaults)
+        )
+        workflow_name = workflow.name
+        config_for_expander = {
+            "name": workflow_name,
+            "actions": validated_actions,
+            "defaults": merged_defaults,
+        }
+
+        agent_config_map = ActionExpander.expand_actions_to_agents(config_for_expander)
+        expanded = agent_config_map.get(workflow_name, [])
+        # Here, not at the _project_root stamp: dependency inference runs before it.
+        observe_suite_judge_context_refs(expanded, project_root)
+        return expanded
+
+    def _invalid_workflow(self, error: ValidationError, workflow_name: str) -> ConfigurationError:
+        field_errors = [
+            {
+                "field": ".".join(str(x) for x in err["loc"]),
+                "message": err["msg"],
+                "type": err["type"],
+            }
+            for err in error.errors()
+        ][:10]
+        return ConfigurationError(
+            "Workflow configuration is invalid",
+            context={
+                "config_path": str(self.constructor_path),
+                "workflow_name": workflow_name,
+                "validation_errors": field_errors,
+            },
+            cause=error,
+        )
 
     def merge_agent_configs(self, user_agents: list[dict[str, Any]]) -> None:
         from agent_actions.output.response.config_schema import AgentConfig
 
         default_agent_config = project_agent_config(self.default_config or {})
         for agent in user_agents:
-            _refuse_or_raise(agent, "agent", "merge_agent_configs")
-            _refuse_retired_or_raise(agent, "agent", "merge_agent_configs")
-            _refuse_removed_spellings_or_raise(
-                agent,
-                "Agent configuration",
-                "merge_agent_configs",
-                agent.get("agent_type") or "NOT_SET",
-            )
             try:
                 agent_model = AgentConfig.model_validate(agent)
             except ValidationError as e:

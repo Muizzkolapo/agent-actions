@@ -35,9 +35,8 @@ def mock_deps():
     # repair in progress: nothing is compared and nothing is reset.
     deps.action_runner.retried_records = frozenset()
     deps.action_runner.action_configs = {}
-    # No completion stamp and no cap recorded: a mock in their place reads as a changed model.
+    # No completion stamp: a mock in its place reads as a changed model.
     deps.state_manager.get_status_details.return_value = {}
-    deps.state_manager.adopt_truncation_marker.return_value = False
     deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
     deps.action_runner.execution_order = ["agent_a", "agent_b"]
     # Default: no item-level failures (so actions complete as "completed", not

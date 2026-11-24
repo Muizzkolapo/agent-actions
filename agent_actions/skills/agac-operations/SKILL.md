@@ -67,7 +67,7 @@ See run (docs: `reference/cli/run`), retry (docs: `reference/cli/retry`), dispos
 
 You can set `run_mode` in `defaults:` and override it on one action. `llm_judge` calls follow the action's mode, or `expect: {judge_mode: batch | online}`. See Run modes (docs: `reference/execution/run-modes`) and Batch recovery (docs: `reference/execution/batch-recovery`).
 
-CAUTION: The batch and online paths had differences in earlier releases (the text of a `json_mode: false` action, judge calls, the context-window check). Current releases make them alike. After you upgrade agent-actions, run your sample in batch mode once, and compare it with an online run of the same records.
+The batch and online paths read an answer, call the judge and check the context window in the same way. Before a large batch run, run your sample in batch mode once, and compare it with an online run of the same records.
 
 ## Resume and recovery
 
@@ -106,7 +106,7 @@ The health check reads counts. It does not read the content of the output. For a
 |---|---|---|
 | Context window | agent-actions estimates a prompt as characters / 4 and refuses a prompt above the model's window. A model name that it does not know gets 128,000 tokens. `context_window` on the action or in `defaults:` sets the window | Set `context_window` when the model reads more than agent-actions knows. Split oversized inputs (below). Keep large fields out of `observe` where a distilled field exists. Keep `context_block: auto` (the default), so a field the prompt prints is not sent twice |
 | Memory | Batch preparation holds the records of the action in memory. Very large records times many records can fill the machine | Close other large programs. Watch the process memory during the first large batch step |
-| Disk | The store grows with each action. Old workflow stores and virtual environments add up | Remove old stores with `agac clean` or `scripts/reset_workflow.py --full` (agac-agent-skills) when you no longer need them |
+| Disk | The store grows with each action. Old workflow stores and virtual environments add up | Remove old stores with `agac clean --all` or `scripts/reset_workflow.py --full` (agac-agent-skills) when you no longer need them |
 | Rate limits | Online mode with high `record_concurrency` gets HTTP 429 from some providers | Set `retry` and `request_timeout` in `defaults:`. Lower `record_concurrency` for providers with low limits |
 
 See Context handling (docs: `reference/execution/context-handling`) and Chunking (docs: `reference/data-io/chunking`).

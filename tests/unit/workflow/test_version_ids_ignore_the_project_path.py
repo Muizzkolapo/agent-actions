@@ -35,9 +35,24 @@ def _row(version: str, guid: str, correlation: str) -> dict:
     }
 
 
+class _Backend:
+    """Each version holds *outputs*' rows for it in items.json."""
+
+    def __init__(self, outputs: dict[str, list[dict]]):
+        self._outputs = outputs
+
+    def list_target_files(self, version: str) -> list[str]:
+        return ["items.json"] if version in self._outputs else []
+
+    def read_target(self, version: str, _path: str) -> list[dict]:
+        return [dict(row) for row in self._outputs[version]]
+
+    def forget_reconstructed(self, _version: str, _path: str) -> None:
+        pass
+
+
 def _correlate(caplog, outputs: dict[str, list[dict]]) -> list[dict]:
-    correlator = VersionOutputCorrelator(agent_folder=None)
-    correlator._load_version_outputs = lambda sources, lost: (outputs, {"items.json"})
+    correlator = VersionOutputCorrelator(agent_folder=None, storage_backend=_Backend(outputs))
     correlator._forget_files_no_version_holds = lambda *args: None
     with caplog.at_level(logging.WARNING):
         return correlator.prepare_correlated_input("merge", ["vote_1", "vote_2"], 0)["items.json"]

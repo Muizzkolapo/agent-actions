@@ -74,7 +74,6 @@ def _records(count: int) -> list[dict[str, str]]:
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
-    monkeypatch.delenv("AGAC_MAX_RECORDS", raising=False)
 
 
 def _params(tmp_path, upstream_dirs=None):
@@ -245,6 +244,28 @@ class TestTheVersionCorrelator:
 
         self._correlate(tmp_path, backend)
 
+        assert slice_observation(backend, "consumer") is None
+
+    def test_a_source_that_vanishes_before_the_walk_reads_it_again_poisons_the_count(
+        self, tmp_path
+    ):
+        """Read to check, then gone when the walk looks its file up: the walk's input
+        is short in the same way, so the count is unknown in the same way."""
+        backend = _Backend(
+            {
+                "train_1": {"a.json": self._correlated(4, "train_1")},
+                "train_2": {"a.json": self._correlated(4, "train_2")},
+            }
+        )
+        correlated = self._correlate(tmp_path, backend)
+        record_indices_to_process(_records(4), {}, "consumer", storage_backend=backend)
+        assert slice_observation(backend, "consumer") == (4, False)
+
+        backend._read_errors.add(("train_2", "a.json"))
+        backend._read_exception = FileNotFoundError("checked but gone")
+        rows = correlated["a.json"]
+
+        assert [sorted(row["content"]) for row in rows] == [["train_1"]] * 4
         assert slice_observation(backend, "consumer") is None
 
     def test_a_clean_correlation_leaves_the_count_alone(self, tmp_path):

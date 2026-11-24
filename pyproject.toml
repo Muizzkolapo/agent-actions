@@ -84,6 +84,14 @@ dev = [
 nlp = [
     "spacy>=3.0.0,<4",
 ]
+# One extra a connection type, named as the type is in `connections:`.
+bigquery = ["google-cloud-bigquery>=3.11.0,<4"]
+databricks = ["databricks-sql-connector>=3.0.0,<5"]
+duckdb = ["duckdb>=1.0.0,<3"]
+mysql = ["pymysql>=1.1.0,<3"]
+postgres = ["psycopg[binary]>=3.1.0,<4"]
+redshift = ["redshift-connector>=2.1.0,<3"]
+snowflake = ["snowflake-connector-python>=3.6.0,<6"]
 
 [build-system]
 requires = ["hatchling"]
@@ -126,6 +134,10 @@ dev = [
     "pre-commit>=3.6.0,<4",
     "vulture>=2.11,<3",
     "bandit>=1.7.0,<2",
+    # The drivers of the connection types a test can start a database for.
+    "duckdb>=1.0.0,<3",
+    "psycopg[binary]>=3.1.0,<4",
+    "pymysql>=1.1.0,<3",
 ]
 
 [tool.mypy]
@@ -164,6 +176,13 @@ warn_unused_ignores = false
 # External library stubs
 [[tool.mypy.overrides]]
 module = [
+    "pymysql.*",
+    "psycopg.*",
+    "duckdb.*",
+    "snowflake.*",
+    "databricks.*",
+    "redshift_connector.*",
+    "google.cloud.*",
     "tiktoken.*",
     "sentence_transformers.*",
     "google.genai.*",

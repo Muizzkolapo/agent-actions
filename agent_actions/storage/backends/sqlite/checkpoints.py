@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Collection
 from typing import Any
 
+from agent_actions.errors.processing import SerializationError
 from agent_actions.errors.validation import DataValidationError
 from agent_actions.storage.backends.sqlite.codec import SQLitePayloadCodecMixin
 from agent_actions.storage.backends.sqlite.common import logger
@@ -108,33 +109,21 @@ class SQLiteCheckpointMixin(SQLitePayloadCodecMixin):
             )
             rows: list[dict[str, Any]] = []
             for stored in cursor.fetchall():
-                answer = self.decode_payload(
-                    stored["record_data"],
-                    table="checkpoint_output",
-                    where=f"action '{action_name}' file '{relative_path}'"
-                    f" record '{stored['source_guid']}'",
+                where = (
+                    f"action '{action_name}' file '{relative_path}'"
+                    f" record '{stored['source_guid']}'"
                 )
-                # An earlier version stored one row, not a list, per record.
-                rows.extend(answer if isinstance(answer, list) else [answer])
+                answer = self.decode_payload(
+                    stored["record_data"], table="checkpoint_output", where=where
+                )
+                if not isinstance(answer, list):
+                    raise SerializationError(
+                        f"checkpoint_output for {where} holds {type(answer).__name__}, "
+                        "not the list of rows its record answered with",
+                        context={"table": "checkpoint_output", "where": where},
+                    )
+                rows.extend(answer)
             return rows
-
-    def checkpointed_without_row_count(self, action_name: str, relative_path: str) -> set[str]:
-        """Records of an action/path an earlier version checkpointed: one row, not a list.
-
-        Only a row stored as text can be one: every row stored compressed holds a list.
-        """
-        action_name = self._validate_identifier(action_name, "action_name")
-        relative_path = self._validate_identifier(relative_path, "relative_path")
-
-        with self._lock:
-            cursor = self.connection.cursor()
-            cursor.execute(
-                "SELECT source_guid FROM checkpoint_output "
-                "WHERE action_name = ? AND relative_path = ?"
-                " AND typeof(record_data) = 'text' AND substr(record_data, 1, 1) <> '['",
-                (action_name, relative_path),
-            )
-            return {row["source_guid"] for row in cursor.fetchall()}
 
     def clear_checkpoint_records(
         self,

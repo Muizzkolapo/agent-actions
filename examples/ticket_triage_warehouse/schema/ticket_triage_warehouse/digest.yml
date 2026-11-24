@@ -1,0 +1,4 @@
+name: digest
+fields:
+  - {id: tickets, type: integer, required: true}
+  - {id: teams, type: string, required: true}

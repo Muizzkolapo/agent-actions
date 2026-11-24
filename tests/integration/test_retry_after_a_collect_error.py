@@ -1,8 +1,8 @@
 """After a batch collect pass fails, `agac retry` points the way, and the way works.
 
-A collect pass can raise an ordinary error while it reads one file's results, for
-example when the provider drops the connection. The action reads `failed`, the file's
-records stay `deferred`, and its finished batch stays in the registry, uncollected.
+A collect pass can raise an error declared fatal to the action while it reads one file's
+results, for example when the store cannot write the file. The action reads `failed`, the
+file's records stay `deferred`, and its finished batch stays in the registry, uncollected.
 `retry` looked only for failed records, found none, and printed a green "Nothing to
 retry", so nothing told the user that running the workflow again is what collects it.
 """
@@ -17,6 +17,7 @@ from click.testing import CliRunner
 from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_SUCCESS
 from agent_actions.cli.main import cli
 from agent_actions.config.project_paths import ProjectPathsFactory
+from agent_actions.errors import mark_action_fatal
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.storage import get_storage_backend
@@ -87,16 +88,19 @@ def project(tmp_path, monkeypatch):
 
 @pytest.fixture
 def after_a_collect_error(project, monkeypatch):
-    """A submitted batch whose collect pass then failed on an ordinary error."""
+    """A submitted batch whose collect pass then failed on an error fatal to the action.
+
+    An error that is only one file's would mark that file's records failed instead.
+    """
     submitted = _invoke("run", "-a", WORKFLOW, "--fresh")
     assert submitted.exit_code == EXIT_PAUSED, submitted.output
     assert "run again" in submitted.output
 
-    def provider_dropped(self, *args, **kwargs):
-        raise RuntimeError("the provider dropped the connection")
+    def store_failed(self, *args, **kwargs):
+        raise mark_action_fatal(OSError("the store could not write the file"))
 
     with monkeypatch.context() as patched:
-        patched.setattr(BatchProcessingService, "_process_single_batch_file", provider_dropped)
+        patched.setattr(BatchProcessingService, "_process_single_batch_file", store_failed)
         failed = _invoke("run", "-a", WORKFLOW)
     assert failed.exit_code == 1, failed.output
     return project

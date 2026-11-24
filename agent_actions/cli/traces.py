@@ -6,10 +6,12 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.cli_decorators import (
-    action_option,
     handles_user_errors,
     requires_project,
+    sandbox_option,
+    workflow_option,
 )
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
@@ -33,8 +35,9 @@ def _print_trace(trace: dict) -> None:
 
 
 @click.command()
-@click.option("-w", "--workflow", "--agent", "workflow", required=True, help="Workflow name")
-@action_option(required=True, help="Action whose traces to print")
+@workflow_option("workflow", help="Workflow name")
+@sandbox_option()
+@click.option("-A", "--action", required=True, help="Action whose traces to print")
 @click.option("--record", "record_id", default=None, help="Only this record's traces")
 @click.option("--json", "as_json", is_flag=True, help="Print the traces as a JSON list")
 @handles_user_errors("traces")
@@ -54,7 +57,7 @@ def traces(
     paths = ProjectPathsFactory.create_project_paths(
         workflow_name, workflow, auto_create=False, project_root=project_root
     )
-    db_path = paths.io_dir / "store" / f"{workflow_name}.db"
+    db_path = sandbox.store_file(paths.io_dir, workflow_name)
     if not db_path.exists():
         raise click.ClickException(f"No store for workflow '{workflow_name}' at {db_path}")
 

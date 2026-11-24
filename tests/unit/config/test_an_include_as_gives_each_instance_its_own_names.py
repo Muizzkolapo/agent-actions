@@ -6,9 +6,12 @@ from __future__ import annotations
 import copy
 
 import pytest
+import yaml
 
 from agent_actions.config.includes import expand_workflow_includes, renamed_clause
+from agent_actions.errors import ConfigurationError
 from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from tests.unit.config.test_a_workflow_includes_a_branch_file import (
     WF,
     A,
@@ -16,6 +19,7 @@ from tests.unit.config.test_a_workflow_includes_a_branch_file import (
     Z,
     _agents,
     _names,
+    _project,
     _refusal,
     _render,
     _with,
@@ -289,6 +293,111 @@ class TestAShortNameNothingGivesIsRefused:
             "reads 'z', which is not a branch action or a declared input. Declare it under "
             "'inputs:'."
         )
+
+
+def _judging(*refs: str) -> list[dict]:
+    return [
+        {
+            "id": "grounded",
+            "type": "llm_judge",
+            "field": "text",
+            "params": {"context": list(refs), "rule": "ok"},
+        }
+    ]
+
+
+def _suite_judging(root, *refs: str) -> None:
+    (root / "schema").mkdir(parents=True, exist_ok=True)
+    (root / "schema" / "quality.yml").write_text(yaml.safe_dump({"expectations": _judging(*refs)}))
+
+
+SUITE_REVIEW = _with(REVIEW, expect={"suite": "quality", "repair": "none"})
+
+
+def _suite_refusal(name: str, final: str) -> str:
+    return (
+        f"Branch 'round' (branches/round.yml), included in {WF} as 'c', action 'review': "
+        f"reads '{name}' in an llm_judge context of suite 'quality'. An include with 'as:' "
+        "does not rename the rules of a named suite, so a context reference in the suite "
+        f"must use the final name: write '{final}' in place of '{name}'. Or move the rule "
+        "into the schema of the action or into an inline expectations: list, where the "
+        "include renames it."
+    )
+
+
+class TestANamedSuiteInAnInstanceIsNotRenamed:
+    def test_a_short_name_of_a_branch_action_is_refused_with_the_final_name(self, tmp_path):
+        _suite_judging(tmp_path, "write.text")
+        branch = _round([WRITE, SUITE_REVIEW])
+
+        assert _refusal(tmp_path, [A, _use("c")], {"round": branch}) == _suite_refusal(
+            "write", "c__write"
+        )
+
+    def test_a_short_name_of_a_bound_input_is_refused_with_the_final_name(self, tmp_path):
+        _suite_judging(tmp_path, "spec.text")
+        branch = _round([WRITE, SUITE_REVIEW])
+
+        assert _refusal(tmp_path, [A, _use("c")], {"round": branch}) == _suite_refusal("spec", "a")
+
+    def test_a_short_name_the_suite_does_not_read_keeps_its_own_message(self, tmp_path):
+        # The suite names the final name; the workflow defaults read the short name.
+        _suite_judging(tmp_path, "a.text")
+        reader = _with(
+            SUITE_REVIEW, dependencies=["spec"], context_scope={"observe": ["spec.text"]}
+        )
+        del reader["guard"]
+        workflow = _project(
+            tmp_path, [A, _use("c")], {"round": _round([reader], outputs=["review"])}
+        )
+        data = yaml.safe_load(workflow.read_text())
+        data["defaults"]["context_scope"] = {"observe": ["spec.text"]}
+        workflow.write_text(yaml.safe_dump(data, sort_keys=False))
+
+        with pytest.raises(ConfigurationError) as caught:
+            render_pipeline_with_templates(
+                workflow, tmp_path / "templates", compile_schemas=False, project_root=tmp_path
+            )
+
+        assert str(caught.value) == (
+            f"Branch 'round' (branches/round.yml), included in {WF} as 'c', action 'review': "
+            "reads 'spec' (from 'context_scope' under the workflow's 'defaults:'), a short name "
+            "of the branch. A default outside the include does not take the short names of an "
+            "include with 'as:'. Write the final name 'a'."
+        )
+
+    def test_a_suite_that_names_the_final_names_loads(self, tmp_path):
+        _suite_judging(tmp_path, "c__write.text", "a.text")
+        branch = _round([WRITE, SUITE_REVIEW])
+
+        agents = _agents(tmp_path, [A, _use("c")], {"round": branch})
+
+        assert list(agents) == ["a", "c__write", "c__review"]
+        assert agents["c__review"]["context_scope"]["observe"] == [
+            "c__write.text",
+            "a.text",
+        ]
+
+    @pytest.mark.parametrize(
+        "over",
+        [
+            {"expect": {"expectations": _judging("write.text", "spec.text"), "repair": "none"}},
+            {
+                "expect": {"repair": "none"},
+                "schema": {
+                    "fields": [{"id": "text", "type": "string"}],
+                    "expectations": _judging("write.text", "spec.text"),
+                },
+            },
+        ],
+        ids=["inline", "own-schema"],
+    )
+    def test_the_forms_the_include_renames_still_load(self, tmp_path, over):
+        branch = _round([WRITE, _with(REVIEW, **over)])
+
+        agents = _agents(tmp_path, [A, _use("c")], {"round": branch})
+
+        assert agents["c__review"]["context_scope"]["observe"] == ["c__write.text", "a.text"]
 
 
 class TestTheAsEntryIsRefused:

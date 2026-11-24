@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import ConfigurationError, enrich_exception_context
+from agent_actions.errors import ConfigurationError, enrich_exception_context, mark_action_fatal
 from agent_actions.expectations.loader import (
     NoRulesDeclared,
     SuiteLoadError,
@@ -109,9 +109,9 @@ def _combine(results: list[SuiteResult], suite_name: str) -> SuiteResult:
 class ExpectationsExhaustedError(RuntimeError):
     """The repair loop ended without a pass and ``on_exhausted`` is ``raise``.
 
-    A RuntimeError so it halts the run: the batch result loop re-raises those
-    and logs-and-continues past anything else, and ``raise`` is the policy that
-    is supposed to stop everything.
+    It carries the ``on_exhausted: raise`` tag, which the batch result loop
+    reads to raise it as a halt once the pass is done: ``raise`` is the policy
+    that is supposed to stop everything.
     """
 
     def __init__(self, action_name: str, failed_ids: list[str], iterations: int) -> None:
@@ -501,7 +501,9 @@ class ExpectationConfigurationError(ConfigurationError):
 
     Distinct from a per-record configuration problem: this one fails identically
     for every input file, so a batch run must stop rather than log it per file
-    and finish reporting success with each of them missing from the output.
+    and finish reporting success with each of them missing from the output. Each
+    raise declares it fatal to the action (``mark_action_fatal``), which is what
+    the batch collect pass reads; the type alone declares nothing.
     """
 
 
@@ -545,11 +547,13 @@ def create_expectation_service_from_config(
         elif schema_name:
             suite_name = schema_name
         else:
-            raise ExpectationConfigurationError(
-                f"Action '{action_name}' has a bare expect: block but no schema "
-                "to read expectations from. Add a schema:, or use suite: or an "
-                "inline expectations: list.",
-                context={"action": action_name},
+            raise mark_action_fatal(
+                ExpectationConfigurationError(
+                    f"Action '{action_name}' has a bare expect: block but no schema "
+                    "to read expectations from. Add a schema:, or use suite: or an "
+                    "inline expectations: list.",
+                    context={"action": action_name},
+                )
             )
     if schema_data is not None:
         try:
@@ -558,11 +562,13 @@ def create_expectation_service_from_config(
             )
         except NoRulesDeclared as exc:
             if repair == "none":
-                raise ExpectationConfigurationError(
-                    f"Action '{action_name}' has a bare expect: block under "
-                    f"repair: none, but its schema has no expectations to run, so "
-                    f"nothing would be checked and nothing regenerated: {exc}",
-                    context={"action": action_name},
+                raise mark_action_fatal(
+                    ExpectationConfigurationError(
+                        f"Action '{action_name}' has a bare expect: block under "
+                        f"repair: none, but its schema has no expectations to run, so "
+                        f"nothing would be checked and nothing regenerated: {exc}",
+                        context={"action": action_name},
+                    )
                 ) from exc
             # Under a repair policy the block is the structural contract on its
             # own: conform to the schema, regenerate when the output does not.
@@ -571,9 +577,11 @@ def create_expectation_service_from_config(
         except ValueError as exc:
             # The schema has rules; they are in the wrong place or the wrong
             # shape, which is a different thing from having none.
-            raise ExpectationConfigurationError(
-                f"Action '{action_name}': {exc}",
-                context={"action": action_name},
+            raise mark_action_fatal(
+                ExpectationConfigurationError(
+                    f"Action '{action_name}': {exc}",
+                    context={"action": action_name},
+                )
             ) from exc
     elif suite_name:
         # The action config carries the project root, stamped when the workflow
@@ -583,17 +591,21 @@ def create_expectation_service_from_config(
         if project_root is None:
             project_root = Path(config["_project_root"]) if config.get("_project_root") else None
         if project_root is None:
-            raise ExpectationConfigurationError(
-                f"Action '{action_name}' resolves suite '{suite_name}' but no "
-                "project root was available to resolve it.",
-                context={"action": action_name, "suite": suite_name},
+            raise mark_action_fatal(
+                ExpectationConfigurationError(
+                    f"Action '{action_name}' resolves suite '{suite_name}' but no "
+                    "project root was available to resolve it.",
+                    context={"action": action_name, "suite": suite_name},
+                )
             )
         try:
             suite = load_named_suite(suite_name, Path(project_root))
         except SuiteLoadError as exc:
-            raise ExpectationConfigurationError(
-                f"Action '{action_name}': {exc}",
-                context={"action": action_name, "suite": suite_name},
+            raise mark_action_fatal(
+                ExpectationConfigurationError(
+                    f"Action '{action_name}': {exc}",
+                    context={"action": action_name, "suite": suite_name},
+                )
             ) from exc
     else:
         suite = build_inline_suite(entries or [], action_name)

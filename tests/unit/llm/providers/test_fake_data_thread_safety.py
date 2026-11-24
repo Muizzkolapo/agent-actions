@@ -121,11 +121,11 @@ class TestClientDeterminism:
         """The attempt counter is keyed per action, so voters do not consume each other's."""
         from concurrent.futures import ThreadPoolExecutor
 
-        from agent_actions.llm.providers.agac.client import AgacClient
+        from agent_actions.llm.providers.agac import contract
 
         self.setup_method()
         with ThreadPoolExecutor(max_workers=3) as pool:
             list(pool.map(lambda i: self.call(f"rank_value_{i}", "p", "same-guid"), (1, 2, 3)))
 
-        counts = dict(AgacClient._attempt_counts)
+        counts = {k: v for run in contract._runs.values() for k, v in run.attempts.items()}
         assert sorted(counts.values()) == [1, 1, 1], f"attempts collided: {counts}"

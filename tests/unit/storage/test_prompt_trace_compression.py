@@ -79,21 +79,17 @@ class TestTraceTextIsStoredCompressed:
         assert _stored(backend, "llm_context") == [("null", None)]
 
 
-class TestStoresWrittenBeforeCompression:
-    def test_a_plain_text_row_still_reads_back(self, backend):
+class TestPlainTextTraces:
+    def test_a_plain_text_row_is_an_error(self, backend):
         backend.connection.execute(
-            "INSERT INTO prompt_trace (action_name, record_id, attempt, compiled_prompt,"
-            " llm_context, response_text) VALUES (?, 'tid-old', 0, 'old prompt', 'old "
-            "ctx', 'old')",
+            "INSERT INTO prompt_trace (action_name, record_id, attempt, compiled_prompt)"
+            " VALUES (?, 'tid-plain', 0, 'plain prompt')",
             (ACTION,),
         )
         backend.connection.commit()
-        backend.write_prompt_trace(ACTION, "tid-new", _prompt(1), llm_context=_context(1))
 
-        traces = {t["record_id"]: t for t in backend.get_prompt_traces(ACTION)}
-        assert traces["tid-old"]["compiled_prompt"] == "old prompt"
-        assert traces["tid-old"]["response_text"] == "old"
-        assert traces["tid-new"]["compiled_prompt"] == _prompt(1)
+        with pytest.raises(ValueError, match="compressed trace"):
+            backend.get_prompt_traces(ACTION)
 
 
 class TestCompressedTracesAcrossInstancesAndClears:

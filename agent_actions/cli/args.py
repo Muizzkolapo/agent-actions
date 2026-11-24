@@ -18,7 +18,7 @@ class CleanCommandArgs(BaseModel):
 
     agent: str = Field(..., description="Name of the agent whose workspace should be cleaned.")
     force: bool = Field(False, description="Skip interactive confirmation.")
-    target: bool = Field(False, description="Also remove the target directory (generated output).")
+    target: bool = Field(False, description="Remove the target directory (generated output).")
     all: bool = Field(False, description="Remove all directories including target and staging.")
 
 
@@ -111,6 +111,9 @@ class RunCommandArgs(BaseModel):
         ge=1,
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
+    refresh_input: bool = Field(
+        False, description="Read a database data source again instead of its stored snapshot"
+    )
     rerun: tuple[str, ...] = Field(
         (), description="Answer every record of these actions and what reads them again"
     )

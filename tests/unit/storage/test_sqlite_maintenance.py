@@ -121,15 +121,12 @@ class TestPromptTraceRetention:
     """Tests for prompt trace retention policy."""
 
     def _insert_trace(self, backend, action, record_id, created_at):
-        """Insert a prompt trace with a specific created_at timestamp."""
+        """Write a prompt trace, then date it *created_at*."""
+        backend.write_prompt_trace(action, record_id, "test prompt", attempt=1)
         with backend._lock:
             backend.connection.execute(
-                """
-                INSERT OR REPLACE INTO prompt_trace
-                (action_name, record_id, attempt, compiled_prompt, created_at)
-                VALUES (?, ?, 1, 'test prompt', ?)
-                """,
-                (action, record_id, created_at),
+                "UPDATE prompt_trace SET created_at = ? WHERE action_name = ? AND record_id = ?",
+                (created_at, action, record_id),
             )
             backend.connection.commit()
 

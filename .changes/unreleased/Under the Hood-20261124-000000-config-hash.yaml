@@ -1,0 +1,10 @@
+kind: Under the Hood
+body: >-
+  The config digest of an action (`config_hash`) covers only the prompt, the schema, the
+  guard clause and behaviour, and the routing keys that the action sets. It holds no
+  `model` entry: a model change is named on its own from `model_name` and `model_vendor`.
+  A prompt, schema, guard or routing edit changes the digest. A completed action whose
+  stamp holds a digest computed another way reads as edited (action config): each run
+  keeps its answers and warns, until `agac run --rerun <action>` or `agac run --fresh`
+  answers its records again.
+time: 2026-11-24T00:00:00.000000+00:00

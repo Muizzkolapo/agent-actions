@@ -24,7 +24,8 @@ resumes from where it stopped.
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, without the path or the extension (required). `-a` names the same option. |
+| `--sandbox` | Retry the records of a sandbox run (`agac run --sandbox`). The mock provider answers each LLM action, and the retry reads and writes only the sandbox output. See [Sandbox Runs](../../guides/sandbox.md) |
 | `--from TEXT` | The action to start the retry from. If you do not give this option, the retry starts from the earliest failure. |
 | `--record TEXT` | Limit the retry to a single record (by `source_guid`) at the `--from` action |
 | `--dry-run` | Show what the command would retry, and do not execute |
@@ -263,7 +264,7 @@ retry of one row of the first action replaces the rows that the second action ma
 If the retry still cannot place a row, the retry carries the row and does not rewrite it.
 These rows are:
 
-- A row that lists no producers. A row that an earlier release stored may list no producers.
+- A row that lists no producers.
 - A row made from a record that the retry named together with records that the retry did
   not name.
 
@@ -286,7 +287,6 @@ There, the retry finds the new rows in place of the record, as described above.
 If the run never repairs a record at its start action, the run reaches that record at no
 action. These records are:
 
-- A failure that an earlier release recorded under the target ID of a batch record.
 - A failure written by hand.
 - A record whose input file is gone.
 - A record in a file that the action failed to process.
@@ -527,9 +527,8 @@ that file would be carried permanently if its input no longer has the record, or
 it. A file in which each record failed is written with those failures after a reset, and
 keeps no such row.
 
-The retry refuses a failure that stopped partway. Examples are an error that ends a file at
-one record, and a failure recorded before this release, which cannot say if it stopped
-partway.
+The retry refuses a failure that stopped partway. An example is an error that ends a file at
+one record.
 
 This check also does not refuse these actions:
 
@@ -564,8 +563,7 @@ record that keeps its `success` keeps its answer. The retry never carries such a
 stored file that a `--rerun` made stale. The two run modes differ:
 
 1. Online: the retry finishes the record from its checkpoint row. It does not send the record
-   again. It sends the record again only when the record has several checkpoint rows, or when
-   an earlier version made its checkpoint.
+   again. It sends the record again only when the record has several checkpoint rows.
 2. Batch: the retry sends the record again.
 
 ```bash
@@ -697,11 +695,15 @@ that would actually run.
 
 The batch does not have to be out at the provider. The retry also refuses to run for a batch
 that finished but whose results were never collected. A collect pass leaves this state when
-it stops on an error. An example is when the provider drops the connection while the run
-reads the results of a file. Then the action reads `failed`, the records of the file still
-wait, and the finished batch is still in the registry. `retry` does not report this state as
-nothing to retry. Run the workflow again to collect the batch. Then retry the records that are
-still failed.
+it stops on an error that is fatal to the action. An example is a store that fails to write
+the file. Then the action reads `failed`, the records of the file still wait, and the
+finished batch is still in the registry. `retry` does not report this state as nothing to
+retry. Run the workflow again to collect the batch. Then retry the records that are still
+failed.
+
+An error that is a failure of one file only does not leave this state. An example is an error
+from the provider while the run reads the results of a file. The run marks the records of that
+file as failed, and `retry` sends them again.
 
 ### A record left deferred after its batch was collected
 

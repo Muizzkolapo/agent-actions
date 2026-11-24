@@ -205,6 +205,9 @@ for each level:
     ├── 1 pending → execute_single_action (no semaphore)
     │   N pending → asyncio.gather(*tasks) with Semaphore
     │               (each task runs in asyncio.to_thread)
+    │               a batch action that prepares also takes a slot of
+    │               batch_preparation_concurrency first, when the
+    │               workflow sets it
     │               an exception a task raised is re-raised once
     │               every task has finished (see below)
     │
@@ -230,7 +233,7 @@ still `running` to failed, recording the run's error on it, and the run exits
 non-zero. `agac retry` writes the node-level failure such an action could not store
 and re-runs it in full, as for any failure of the action's own.
 
-Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. Different actions overlap on their own threads. Within one online LLM action, records run one at a time unless `record_concurrency` is above 1; then `OnlineLLMStrategy` keeps up to that many in flight on a thread pool of its own.
+Important: `asyncio.to_thread` wraps synchronous `run_action()`. Parallel execution is thread-based, not coroutine-based. Different actions overlap on their own threads. Each batch action of a step holds one input file's records while it prepares; the workflow key `batch_preparation_concurrency` limits how many of them prepare at once without holding back the online actions of the step. A store read runs with the cyclic garbage collector paused (`utils.gc_pause`), counted across these threads. Within one online LLM action, records run one at a time unless `record_concurrency` is above 1; then `OnlineLLMStrategy` keeps up to that many in flight on a thread pool of its own.
 
 ---
 
@@ -242,7 +245,7 @@ Every action goes through this decision tree before any code runs:
 execute_action_sync(action_name)
     │
     ▼
-Limits changed since last run? (record/file limit, or a recorded cap)
+Limits changed since last run? (record/file limit)
     YES → invalidate COMPLETED, reset to PENDING
           and reset every action that reads its output, in any state,
           directly or through other actions (see below)
@@ -298,11 +301,10 @@ _execute_action_run()
 **A file whose input is gone goes with it.** A reset relies on the re-run writing each
 file again, and a file whose input was removed is never written again. So once a walk has
 reached every input there is, `process_files` deletes what the action stores under any
-name no input it reached maps to: a file's path, a first stage's with a `.json` suffix
-(`batch_output_name`), or the name recorded for a nested batch input file
-(`batch_file_names:{action}`, whose entries for inputs that are gone go too), each as the
-store lists it (`stored_path`: SQLite strips the whitespace around a name and turns a
-backslash into a slash, so a name matched as staged would lose the file just written). A
+name no input it reached maps to: a file's path, or a first stage's or a batch input
+file's with a `.json` suffix (`batch_output_name`), each as the store lists it
+(`stored_path`: SQLite strips the whitespace around a name and turns a backslash into a
+slash, so a name matched as staged would lose the file just written). A
 reader's inputs are its upstreams' stored files, so it lets go of what its upstream no
 longer holds; the run that walks is the run that submits, so a batch action does it before
 anything is collected. A file that failed to process was reached and keeps its rows. A
@@ -323,7 +325,11 @@ FILE tool folded it into another row (`folded_sources`, read by `merge.rows_fold
 version's own folds only, since the field also lists the folds made above every version) is
 merged `cascade_skipped` through `merge.consumed_into_another`, and the merge leaves it
 `unprocessed` with reason `consumed_into_another_record`. Its input is never stored:
-its own target holds its answers, which a re-run carries records from. The correlator
+its own target holds its answers, which a re-run carries records from. Nor is it held:
+correlation pairs rows within one file, so the correlator reads and correlates each file
+once before the walk, to fail the merge before any file is processed, and hands the walk
+a `CorrelatedInput` that correlates a file again when the walk looks it up; each version
+file is dropped from the store's cache after each read. The correlator
 also deletes, before the walk, each stored file of the merge that no version source
 lists, under a file limit and a repair too: it lists every file its version sources hold,
 so it can tell an input that is gone from one it never opened. Correlation runs inside
@@ -666,7 +672,7 @@ Run N: Resume (if recovery submitted)
 5. BatchProcessingService← orchestrates result processing
 6. VersionOutputCorrelator← version/loop input correlation
 7. ActionStateManager    ← .agent_status.json persistence
-8. SkipEvaluator         ← skip_condition evaluation
+8. SkipEvaluator         ← action skip strategies (none registered)
 9. BatchLifecycleManager ← polling + processing lifecycle
 10. ActionOutputManager   ← previous output loading
 11. ActionExecutor        ← bundles all above + console
@@ -844,7 +850,7 @@ partway.
 ```
 _compute_action_config_hash() covers:
     prompt, schema, guard clause, guard behavior
-    routing keys (ROUTING_KEYS), only when the action sets one
+    routing keys (ROUTING_KEYS) that the action sets
 Stamped beside it, each compared on its own (_edits_since):
     model_name, model_vendor
     context_scope_hash   (_compute_context_scope_hash: observe/passthrough/
@@ -856,12 +862,11 @@ Stamped beside it, each compared on its own (_edits_since):
                           tool and UDF guard registered with; "" with
                           neither, None, never compared, if not loaded)
 
-Never add a key to _compute_action_config_hash: every stored digest would
+Do not add a key to _compute_action_config_hash: every stored digest would
 change and every completed action of every workflow would be named as edited.
 Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
-The routing keys are the one exception: the hash input holds them only when an
-action sets one, so the digest of every action without them is the digest it
-had before, and no completed action is named as edited.
+The model is not in the hash: _edits_since compares model_name and
+model_vendor on their own, so a model change is named as a model edit.
 
 If you change one of these fields and re-run WITHOUT --fresh:
     Nothing is reset. The executor finds the mismatch and logs a warning
@@ -871,8 +876,8 @@ If you change one of these fields and re-run WITHOUT --fresh:
     An action stopped partway is compared at the start of the next run,
     against the `answered_under` its run recorded (_edits_since serves
     both), and resumes under the edit.
-    Limits and a recorded truncation still reset the action and its
-    readers: those change which records exist, not how one is answered.
+    A limit change still resets the action and its readers: it changes
+    which records exist, not how one is answered.
 
 A first stage also stamps `staged_input` (path, size, mtime of each file
 it read, taken as its work began). A different set on a later run puts it
@@ -990,6 +995,6 @@ they never carried.
 | `managers/state.py` | `ActionStateManager` — status persistence, status sets |
 | `managers/batch.py` | `BatchLifecycleManager` — polling, result processing |
 | `managers/output.py` | `ActionOutputManager` — previous output, version correlation |
-| `managers/skip.py` | `SkipEvaluator` — skip_condition |
+| `managers/skip.py` | `SkipEvaluator` — action skip strategies (none registered) |
 | `managers/manifest.py` | `ManifestManager` — .manifest.json for external tools |
 | `parallel/action_executor.py` | `ActionLevelOrchestrator` — topological sort, parallel dispatch |

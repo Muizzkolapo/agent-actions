@@ -2,8 +2,8 @@
 
 Every early return past a park is guarded, but the exception exit is not a
 return. Anything raised between the park and the finaliser unwinds past every
-guard, and the outer loop answers a non-RuntimeError by logging it and moving to
-the next file — so `on_exhausted: raise` finishes the run reporting success.
+guard, and the outer loop answers an error not declared fatal by logging it and
+moving to the next file — so `on_exhausted: raise` finishes the run reporting success.
 """
 
 from unittest.mock import MagicMock
@@ -35,7 +35,7 @@ def test_an_unrelated_failure_does_not_discard_the_halt():
 
     assert raised_by_exhaustion_policy(caught.value), (
         "an incidental failure replaced the deliberate halt; the outer loop logs a "
-        "non-RuntimeError and moves on, so the run finishes reporting success"
+        "failure not declared fatal and moves on, so the run finishes reporting success"
     )
     assert isinstance(caught.value.__cause__, ValueError), "the original cause was dropped"
 
@@ -58,11 +58,9 @@ def test_a_failure_with_nothing_parked_is_left_alone():
         ProcessingError("provider rejected the payload"),
         ConfigurationError("record is missing _state"),
         DependencyError("upstream action produced nothing"),
-        # The outer loop re-raises (RuntimeError, ExpectationConfigurationError).
-        # Widening the guard to match that tuple is the obvious edit, and it drops
-        # the halt for the commonest error family on this path: a bare RuntimeError
-        # for a record absent from the context map, or for an action that produced
-        # nothing.
+        # A bare RuntimeError is the commonest error family on this path: one for a
+        # record absent from the context map, or for an action that produced
+        # nothing. Letting it through the guard drops the halt.
         RuntimeError("Cannot repair rec-a: absent from the context map"),
     ],
 )
@@ -172,10 +170,10 @@ def test_a_configuration_error_is_not_rebadged_as_a_policy_halt():
 def test_only_the_run_fatal_config_error_is_exempt():
     """The exemption has to match what the outer loop treats as run-fatal.
 
-    process_all_batch_results re-raises (RuntimeError, ExpectationConfigurationError)
-    and logs everything else before moving to the next file. Exempting a config
-    error the loop does NOT re-raise drops the halt and lets the run finish
-    reporting success.
+    process_all_batch_results re-raises an error declared fatal to the action, as
+    every ExpectationConfigurationError is, and logs everything else before moving
+    to the next file. Exempting a config error the loop does NOT re-raise drops the
+    halt and lets the run finish reporting success.
     """
     from agent_actions.errors import RecordContextError
 

@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.errors.base import exhaustion_halt
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import (
     BatchIdentity,
@@ -527,76 +528,6 @@ class TestRecoveryStatePersistence:
 # ---------------------------------------------------------------------------
 
 
-class TestRemoveBatchPlaceholder:
-    """Direct tests for _remove_batch_placeholder."""
-
-    def test_removes_valid_placeholder(self, tmp_path):
-        import json
-
-        from agent_actions.llm.batch.services.processing_recovery import (
-            _remove_batch_placeholder,
-        )
-
-        placeholder = tmp_path / "output.json"
-        placeholder.write_text(
-            json.dumps({"batch_job_id": "batch_123", "status": "submitted", "agent": "test"})
-        )
-
-        _remove_batch_placeholder(placeholder)
-
-        assert not placeholder.exists()
-
-    def test_leaves_non_placeholder_json(self, tmp_path):
-        import json
-
-        from agent_actions.llm.batch.services.processing_recovery import (
-            _remove_batch_placeholder,
-        )
-
-        real_output = tmp_path / "output.json"
-        real_output.write_text(json.dumps([{"content": {"data": "real"}}]))
-
-        _remove_batch_placeholder(real_output)
-
-        assert real_output.exists()  # NOT deleted
-
-    def test_leaves_completed_batch_file(self, tmp_path):
-        import json
-
-        from agent_actions.llm.batch.services.processing_recovery import (
-            _remove_batch_placeholder,
-        )
-
-        completed = tmp_path / "output.json"
-        completed.write_text(
-            json.dumps({"batch_job_id": "batch_123", "status": "completed", "agent": "test"})
-        )
-
-        _remove_batch_placeholder(completed)
-
-        assert completed.exists()  # status != submitted, not removed
-
-    def test_handles_missing_file(self, tmp_path):
-        from agent_actions.llm.batch.services.processing_recovery import (
-            _remove_batch_placeholder,
-        )
-
-        missing = tmp_path / "nonexistent.json"
-        _remove_batch_placeholder(missing)  # no error
-
-    def test_handles_malformed_json(self, tmp_path):
-        from agent_actions.llm.batch.services.processing_recovery import (
-            _remove_batch_placeholder,
-        )
-
-        bad_file = tmp_path / "corrupt.json"
-        bad_file.write_text("not json{{{")
-
-        _remove_batch_placeholder(bad_file)
-
-        assert bad_file.exists()  # not deleted, just warned
-
-
 def _make_parent_entry(
     batch_id: str = "batch-parent",
     file_name: str = "my_action",
@@ -682,7 +613,7 @@ class TestDownstreamBugs:
         svc._workflow_name = "test_action"
         svc._provider_status = MagicMock(return_value=BatchStatus.COMPLETED)
         svc._process_single_batch_file = MagicMock(
-            side_effect=RuntimeError("Reprompt validation exhausted")
+            side_effect=exhaustion_halt("Reprompt validation exhausted")
         )
 
         with pytest.raises(RuntimeError, match="Reprompt validation exhausted"):

@@ -32,9 +32,9 @@ from .expander_merge import (
     inherited_context_scope,
     initialize_optional_fields,
     layered_defaults,
-    merge_directive_value,
     merge_expect,
     merge_vendor_params,
+    observe_judge_context_refs,
     process_chunk_config,
 )
 from .expander_schema import (
@@ -301,15 +301,11 @@ class ActionExpander:
         if vendor_params is not None:
             agent["vendor_params"] = vendor_params
 
-        # Union context: refs into observe so infer_dependencies picks up the
-        # source action automatically. The action's inline list, or its resolved
-        # schema's rules; a named suite: isn't loadable here without project_root.
-        context_refs = collect_judge_context_refs(agent["expect"], agent.get("schema"))
-        if context_refs:
-            agent["context_scope"] = agent.get("context_scope") or {}
-            agent["context_scope"]["observe"] = merge_directive_value(
-                agent["context_scope"].get("observe", []), context_refs
-            )
+        # The action's inline list, or its resolved schema's rules. A named suite
+        # loads from the project root, so ConfigManager observes its refs instead.
+        observe_judge_context_refs(
+            agent, collect_judge_context_refs(agent["expect"], agent.get("schema"))
+        )
 
         return agent
 

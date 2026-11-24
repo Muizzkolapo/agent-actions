@@ -701,11 +701,10 @@ class TestTheOriginalBatchFinaliserAlsoRaises:
 class TestAnUnrelatedFailureIsNotReportedAsAHalt:
     """A write failure must stay a write failure.
 
-    The outer loop dispatches on the exception type: RuntimeError re-raises and
-    halts, anything else is logged so the run can tombstone the records and move
-    on. Converting a failed write into the halt takes the RuntimeError branch and
-    skips that tombstoning, leaving records stuck DEFERRED where the retry
-    command cannot find them.
+    The outer loop parks a halt and raises it once the pass is done; an error not
+    declared fatal is logged so the run can tombstone the records and move on.
+    Converting a failed write into the halt skips that tombstoning, leaving
+    records stuck DEFERRED where the retry command cannot find them.
     """
 
     def _finalise_with_a_broken_write(self, pending, error):
@@ -738,8 +737,8 @@ class TestAnUnrelatedFailureIsNotReportedAsAHalt:
         )
         assert isinstance(raised, OSError), (
             f"the write failure was reported as {type(raised).__name__}; the outer loop "
-            "then takes "
-            "the RuntimeError branch and never tombstones the abandoned records"
+            "then parks "
+            "it as a halt and never tombstones the abandoned records"
         )
         assert "No space left on device" in str(raised), (
             "the operator has to see the disk error in the logged message, which uses str(exc)"
@@ -777,8 +776,8 @@ class TestNothingSitsBetweenParkingAndRaising:
     """The halt is parked on the statement before the finaliser, not earlier.
 
     Anything that throws in between — rebuilding the retry metadata, converting
-    the records — reaches the outer loop, which logs a non-RuntimeError and moves
-    to the next file. A halt parked before that work is simply forgotten.
+    the records — reaches the outer loop, which logs an error not declared fatal and
+    moves to the next file. A halt parked before that work is simply forgotten.
     """
 
     def _round_that_exhausts(self, retry_service_error):
@@ -1059,11 +1058,16 @@ class TestAConfigErrorStopsTheRunRatherThanEmptyingIt:
         return None, written, tombstone
 
     def test_an_action_wide_config_error_reaches_the_caller(self):
-        from agent_actions.expectations.service import ExpectationConfigurationError
-
-        raised, written, _t = self._run_two_files(
-            ExpectationConfigurationError("names suite 'x' but no project root")
+        from agent_actions.expectations.service import (
+            ExpectationConfigurationError,
+            create_expectation_service_from_config,
         )
+
+        with pytest.raises(ExpectationConfigurationError) as unresolvable:
+            create_expectation_service_from_config(
+                {"suite": "x"}, action_name=ACTION, agent_config={}
+            )
+        raised, written, _t = self._run_two_files(unresolvable.value)
         assert isinstance(raised, ExpectationConfigurationError), (
             f"the run swallowed an action-wide config error and reported success with {written}; "
             "every file carries that same action config, so they are all silently missing"

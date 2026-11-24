@@ -16,6 +16,7 @@ from agent_actions.cli.args import DEFAULT_POLL_SECONDS, RunCommandArgs
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -28,8 +29,9 @@ from agent_actions.cli.exit_codes import (
     report_quota_stop,
 )
 from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
-from agent_actions.errors import ProviderQuotaStop
+from agent_actions.errors import AgentActionsError, ProviderQuotaStop
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.storage.run_lock import hold_run_lock
@@ -42,11 +44,90 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
+    """The actions with a batch not yet collected, read from the store before any load."""
+    import json
+
+    status_file = sandbox.status_file(io_dir)
+    try:
+        statuses = json.loads(status_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(statuses, dict):
+        return []
+    waiting = {"batch_submitted", "checking_batch"}
+    open_actions = {
+        action
+        for action, details in statuses.items()
+        if isinstance(details, dict) and details.get("status") in waiting
+    }
+    store = sandbox.store_file(io_dir, workflow_name)
+    if store.exists():
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+        from agent_actions.storage import get_storage_backend
+
+        backend = get_storage_backend(
+            workflow_path=str(io_dir.parent), workflow_name=workflow_name
+        )
+        backend.initialize()
+        try:
+            for action in statuses:
+                jobs = BatchRegistryManager(backend, action).get_all_jobs().values()
+                if any(job.is_in_flight or job.awaits_collection for job in jobs):
+                    open_actions.add(action)
+        finally:
+            backend.close()
+    return sorted(open_actions)
+
+
+def check_declared_outputs(workflow: AgentWorkflow, project_root: Path | None) -> None:
+    """Refuse the workflow's declared outputs before any action runs, if they cannot be written."""
+    declared = (workflow.config.manager.user_config or {}).get("outputs")
+    if not declared or sandbox.is_active():
+        return
+    from agent_actions.connections.export import check_outputs
+    from agent_actions.utils.project_root import find_project_root
+
+    root = project_root or find_project_root(str(Path.cwd())) or Path.cwd()
+    check_outputs(declared, root, actions=list(workflow.execution_order))
+
+
+def write_declared_outputs(workflow: AgentWorkflow, project_root: Path | None, agent: str) -> None:
+    """Write the workflow's declared outputs once every action has finished."""
+    declared = (workflow.config.manager.user_config or {}).get("outputs")
+    if not declared:
+        return
+    if sandbox.is_active():
+        click.echo("SANDBOX: the outputs the workflow declares are not written.")
+        return
+    from agent_actions.connections.export import write_outputs
+    from agent_actions.utils.project_root import find_project_root
+
+    root = project_root or find_project_root(str(Path.cwd())) or Path.cwd()
+    try:
+        written = write_outputs(
+            workflow.storage_backend, declared, root, actions=list(workflow.execution_order)
+        )
+    except AgentActionsError:
+        click.echo(
+            "Every action finished, but writing the outputs failed. The results are "
+            f"stored: write them again with agac export -w {agent}",
+            err=True,
+        )
+        raise
+    for table, count in written.items():
+        click.echo(f"Wrote {count} rows to {table}")
+
+
 def start_tracked_run(
     workflow: AgentWorkflow, agent_name: str, project_root: Path | None
 ) -> tuple[RunTracker, str]:
     """Start a run in the run history, hand its id to the workflow, and open its log files."""
-    tracker = RunTracker(project_root=project_root)
+    run_dir = sandbox.run_dir(
+        Path(workflow.services.core.action_runner.get_action_folder(agent_name))
+    )
+    artefact_dir = run_dir / "artefact" if sandbox.is_active() else None
+    tracker = RunTracker(artefact_dir=artefact_dir, project_root=project_root)
     run_id = tracker.start_workflow_run(
         workflow_id=agent_name,
         workflow_name=agent_name,
@@ -63,9 +144,8 @@ def start_tracked_run(
         name=agent_name, run_id=run_id
     )
 
-    agent_folder = workflow.services.core.action_runner.get_action_folder(agent_name)
     LoggerFactory.initialize(
-        output_dir=agent_folder,
+        output_dir=run_dir,
         workflow_name=agent_name,
         invocation_id=run_id,
         force=True,
@@ -121,6 +201,8 @@ class RunCommand:
         try:
             with hold_run_lock(paths.io_dir, self.agent_name):
                 started = time.monotonic()
+                if self.args.refresh_input:
+                    self._refresh_input(paths)
                 outcome = self._run_holding_the_lock(paths, project_root)
                 if self.args.wait:
                     outcome = self._wait_for_batches(outcome, paths, project_root, started)
@@ -168,7 +250,7 @@ class RunCommand:
         click.echo(
             f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
             f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
-            f"to check them and continue: agac run -w {self.args.agent} --wait"
+            f"to check them and continue: agac run -w {self.args.agent}{sandbox.flag()} --wait"
         )
 
     def _run_holding_the_lock(
@@ -193,6 +275,7 @@ class RunCommand:
             finally:
                 PromptValidator().validate(prompt_files)
 
+        check_declared_outputs(workflow, project_root)
         tracker, run_id = start_tracked_run(workflow, self.agent_name, project_root)
 
         outcome = RunOutcome.FAILED
@@ -205,6 +288,13 @@ class RunCommand:
             outcome = classify_outcome(state_mgr, workflow.execution_order)
             self._open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
             self._report(outcome, workflow)
+            if sandbox.is_active():
+                click.echo(
+                    "SANDBOX run: no model was called. Read its results with --sandbox, "
+                    f"such as agac records -w {self.args.agent} --sandbox"
+                )
+            if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
+                self._write_outputs(workflow, project_root)
 
         except ProviderQuotaStop as stop:
             outcome = RunOutcome.QUOTA_STOP
@@ -237,6 +327,28 @@ class RunCommand:
 
         return outcome
 
+    def _write_outputs(self, workflow: AgentWorkflow, project_root: Path | None) -> None:
+        write_declared_outputs(workflow, project_root, self.args.agent)
+
+    def _refresh_input(self, paths: ProjectPaths) -> None:
+        """Have the database snapshots read again this run; refused under an open batch.
+
+        Decided before the workflow loads, from what is stored, since loading (with
+        ``--rerun``) clears state. A batch answers the rows it was sent, so reading
+        the query again under one would forget a record whose answer is on its way.
+        ``--fresh`` discards the batches, so it is not refused.
+        """
+        if not self.args.fresh:
+            open_batches = batches_still_open(paths.io_dir, self.agent_name)
+            if open_batches:
+                raise click.UsageError(
+                    "--refresh-input reads the query again, but a batch is still open for "
+                    f"{', '.join(open_batches)}. Run without it until the batch is collected."
+                )
+        from agent_actions.input.loaders.database_source import request_refresh
+
+        request_refresh()
+
     def _report(self, outcome: RunOutcome, workflow: AgentWorkflow) -> None:
         """Print the sentence for *outcome*; the exit code is read from the outcome alone."""
         state_mgr = workflow.services.core.state_manager
@@ -254,8 +366,9 @@ class RunCommand:
             partial = actions_with_record_failures(state_mgr, execution_order)
             click.echo(
                 f"Workflow finished with failed or exhausted records in: {', '.join(partial)}. "
-                f"See them with agac dispositions -w {self.args.agent} --quarantined; "
-                f"repair them with agac retry -w {self.args.agent}."
+                f"See them with agac dispositions -w {self.args.agent} --quarantined"
+                f"{sandbox.flag()}; repair them with agac retry -w {self.args.agent}"
+                f"{sandbox.flag()}."
             )
         elif outcome is RunOutcome.SUCCESS:
             # All complete prints nothing more; guard-skipped actions get the sentence.
@@ -280,6 +393,16 @@ class RunCommand:
 
 @click.command()
 @workflow_option()
+@sandbox_option(
+    help=(
+        "Answer every LLM action with the offline mock, agac-provider, and keep the "
+        "output apart from real runs. No API key is needed and no model is called"
+    ),
+    note=(
+        "the offline mock answers every LLM action. The output goes to agent_io/sandbox/ "
+        "and agent_io/store/<workflow>.sandbox.db"
+    ),
+)
 @click.option(
     "-u",
     "--user-code",
@@ -325,6 +448,15 @@ class RunCommand:
     is_flag=True,
     default=False,
     help="Clear stored results and status before execution (useful after failed runs)",
+)
+@click.option(
+    "--refresh-input",
+    is_flag=True,
+    default=False,
+    help=(
+        "Read a database data source again instead of its stored snapshot. Rows "
+        "added or changed since are answered; the rest keep their answers."
+    ),
 )
 @click.option(
     "--rerun",
@@ -383,6 +515,7 @@ def run(
     record_limit: int | None = None,
     file_limit: int | None = None,
     fresh: bool = False,
+    refresh_input: bool = False,
     rerun: tuple[str, ...] = (),
     verify_keys: bool = False,
     wait: bool = False,
@@ -402,10 +535,12 @@ def run(
         agac run -a my_agent
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
+        agac run -a my_agent --refresh-input
         agac run -a my_agent --rerun classify
         agac run -a my_agent --rerun classify --rerun summarize
         agac run -a my_agent --record-limit 2 --file-limit 1
         agac run -a my_agent --wait --poll 60 --wait-timeout 86400
+        agac run -a my_agent --sandbox
     """
     if not wait:
         for given, flag in ((poll, "--poll"), (wait_timeout, "--wait-timeout")):
@@ -420,6 +555,7 @@ def run(
         record_limit=record_limit,
         file_limit=file_limit,
         fresh=fresh,
+        refresh_input=refresh_input,
         rerun=rerun,
         verify_keys=verify_keys,
         wait=wait,

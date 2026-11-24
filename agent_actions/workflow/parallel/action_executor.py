@@ -3,13 +3,14 @@ Action-level execution orchestration module.
 """
 
 import asyncio
+import contextlib
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from agent_actions.errors import ProviderQuotaStop, WorkflowError, get_error_detail
-from agent_actions.llm.config.vendor import effective_run_mode
+from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.logging.core.manager import fire_event, get_manager
 from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.logging.events import ActionCompleteEvent, ActionFailedEvent, ActionStartEvent
@@ -30,6 +31,9 @@ class ParallelExecutionParams:
     action_executor: Any
     concurrency_limit: int
     level_idx: int
+    batch_preparation_concurrency: int | None = None
+    # The batch actions of the level that prepare, not collect: only they are limited.
+    batch_preparing: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass
@@ -43,6 +47,7 @@ class LevelExecutionParams:
     action_executor: Any
     total_steps: int
     concurrency_limit: int = 5
+    batch_preparation_concurrency: int | None = None
 
 
 class ActionLevelOrchestrator:
@@ -213,6 +218,11 @@ class ActionLevelOrchestrator:
     async def _execute_parallel_actions(self, params: ParallelExecutionParams):
         """Execute multiple actions in parallel."""
         semaphore = asyncio.Semaphore(params.concurrency_limit)
+        batch_slots = (
+            asyncio.Semaphore(params.batch_preparation_concurrency)
+            if params.batch_preparation_concurrency
+            else None
+        )
 
         total_actions = len(self.execution_order)
 
@@ -225,8 +235,15 @@ class ActionLevelOrchestrator:
             # gather runs each coroutine as a task with its own copy of the context,
             # so this label reaches only the events this action fires, its worker
             # threads included.
+            # Taken before the step's own slot, so a batch action waiting for its turn
+            # to prepare holds no slot an online action could run in.
+            batch_slot: contextlib.AbstractAsyncContextManager[Any] = (
+                batch_slots
+                if batch_slots is not None and action in params.batch_preparing
+                else contextlib.nullcontext()
+            )
             with get_manager().context(action_name=action, action_index=original_idx):
-                async with semaphore:
+                async with batch_slot, semaphore:
                     try:
                         result = await params.action_executor.execute_action_async(
                             action,
@@ -407,6 +424,13 @@ class ActionLevelOrchestrator:
                         action_executor=params.action_executor,
                         concurrency_limit=params.concurrency_limit,
                         level_idx=params.level_idx,
+                        batch_preparation_concurrency=params.batch_preparation_concurrency,
+                        batch_preparing=frozenset(
+                            action
+                            for action in pending_actions
+                            if runs_in_batch(self.action_configs[action])
+                            and not params.state_manager.is_batch_submitted(action)
+                        ),
                     )
                 )
 

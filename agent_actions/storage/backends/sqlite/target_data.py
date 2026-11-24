@@ -4,9 +4,6 @@ import sqlite3
 from collections.abc import Iterable
 from typing import Any
 
-from agent_actions.storage.backend import (
-    batch_file_names_key,
-)
 from agent_actions.storage.backends.sqlite.codec import SQLitePayloadCodecMixin
 from agent_actions.storage.backends.sqlite.common import logger
 from agent_actions.utils import deep_json
@@ -130,38 +127,15 @@ class SQLiteTargetDataMixin(SQLitePayloadCodecMixin):
             return [row["relative_path"] for row in cursor.fetchall()]
 
     def has_target_rows(self, action_name: str) -> bool:
-        """One indexed probe; a row stored before record_count existed is measured from its
-        data."""
         action_name = self._validate_identifier(action_name, "action_name")
         with self._lock:
             cursor = self.connection.cursor()
-            # CAST: a store migrated to record_count holds it as TEXT, where '0' > 0.
-            # SQLite can measure a text row itself; a compressed one is measured below.
             cursor.execute(
                 "SELECT EXISTS (SELECT 1 FROM target_data WHERE action_name = ? "
-                "AND COALESCE(CAST(record_count AS INTEGER), "
-                "CASE WHEN typeof(data) = 'text' THEN json_array_length(data) END) > 0)",
+                "AND record_count > 0)",
                 (action_name,),
             )
-            if cursor.fetchone()[0]:
-                return True
-            cursor.execute(
-                "SELECT relative_path, data FROM target_data WHERE action_name = ? "
-                "AND record_count IS NULL AND typeof(data) <> 'text'",
-                (action_name,),
-            )
-            uncounted = cursor.fetchall()
-        return any(
-            self._count_stored(action_name, row["relative_path"], row["data"]) > 0
-            for row in uncounted
-        )
-
-    def _count_stored(self, action_name: str, relative_path: str, data: Any) -> int:
-        """How many rows a stored file holds, read from the file itself."""
-        records = self.decode_payload(
-            data, table="target_data", where=f"action '{action_name}' file '{relative_path}'"
-        )
-        return len(records) if isinstance(records, list) else 1
+            return bool(cursor.fetchone()[0])
 
     def has_target_file(self, action_name: str, relative_path: str) -> bool:
         action_name = self._validate_identifier(action_name, "action_name")
@@ -193,29 +167,11 @@ class SQLiteTargetDataMixin(SQLitePayloadCodecMixin):
             cursor = self.connection.cursor()
 
             cursor.execute(
-                """
-                SELECT relative_path,
-                       COALESCE(record_count,
-                                CASE WHEN typeof(data) = 'text'
-                                     THEN json_array_length(data) END) as record_count,
-                       CASE WHEN record_count IS NULL AND typeof(data) <> 'text'
-                            THEN data END as uncounted
-                FROM target_data
-                WHERE action_name = ?
-                ORDER BY relative_path
-                """,
+                "SELECT relative_path, record_count FROM target_data "
+                "WHERE action_name = ? ORDER BY relative_path",
                 (action_name,),
             )
-            # A compressed row written without its count is measured from the file itself.
-            file_metadata = [
-                {
-                    "relative_path": row["relative_path"],
-                    "record_count": row["record_count"]
-                    if row["uncounted"] is None
-                    else self._count_stored(action_name, row["relative_path"], row["uncounted"]),
-                }
-                for row in cursor.fetchall()
-            ]
+            file_metadata = [dict(row) for row in cursor.fetchall()]
 
             files = [row["relative_path"] for row in file_metadata]
 
@@ -299,10 +255,6 @@ class SQLiteTargetDataMixin(SQLitePayloadCodecMixin):
                 )
                 deleted = cursor.rowcount
                 self._forget_dictionary(cursor, action_name, self._TARGET_DATA)
-                cursor.execute(
-                    "DELETE FROM workflow_metadata WHERE key = ?",
-                    (batch_file_names_key(action_name),),
-                )
                 self.connection.commit()
                 logger.debug(
                     "Deleted %d target records for %s",

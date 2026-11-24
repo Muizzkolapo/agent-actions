@@ -16,7 +16,8 @@ agac dispositions -w <workflow-name> [options]
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` and `--agent` name the same option. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file, with no path or extension (required). `-a` names the same option. |
+| `--sandbox` | Read the output of sandbox runs (`agac run --sandbox`) in place of the output of real runs. See [Sandbox Runs](../../guides/sandbox.md) |
 | `-A, --action TEXT` | Show the dispositions for only the specified action |
 | `--quarantined` | Show only the failed, exhausted and unprocessed records, with details |
 | `--json` | Print the counts as one JSON document, for a script. See [JSON Output](#json-output). `--json` does not take `--quarantined`. If you give the two flags together, the command stops with exit code 2. See the error below this table |

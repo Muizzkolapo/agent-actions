@@ -102,6 +102,25 @@ actions:
 - Agent Actions sends the judge batch of an Ollama batch action (see [Judging in batch](../validation/expectations.md#judging-in-batch)) in the same way, `batch_max_workers` requests at a time.
 - Each request of an Ollama batch waits the [`request_timeout`](../configuration/index.md#request-timeout) of the action, or 600 seconds if the action sets none.
 
+### Memory while a batch step prepares {/* #batch-preparation-memory */}
+
+A batch action prepares its requests one input file at a time. The store keeps the output of an action as one entry for each input file. Thus, to read a record, the store reads all of the records of that file. While the action prepares a file, it holds:
+
+- The records of that file, with the namespace of each action above it. This is the largest part.
+- One request for each record of the file. A request holds only what the prompt observes.
+- The context map of the batch. Collection rebuilds each output row from this map. The map holds each record of the file, and it shares the record with the input. The store keeps the map in parts of about 4 MB. Thus a save does not make a second copy of the file in memory.
+
+The action lets the file go before it reads the next file. Thus the memory grows with the largest input file, and not with all of the files. To lower the peak, split a large staging file into smaller files.
+
+All of the actions of a step run at the same time, up to `--concurrency-limit` (default 5). Each batch action of the step holds one file. An online action beside it also holds the file that it processes. For a step with large records, use one of these settings:
+
+| Setting | What it limits | Effect on the other actions |
+|---------|----------------|-----------------------------|
+| [`batch_preparation_concurrency`](../configuration/index.md#batch-preparation-concurrency) in the workflow file | The batch actions of a step that prepare at the same time | An online action of the step continues to run beside them. A batch action that collects is not limited |
+| `--concurrency-limit 1` or `--execution-mode sequential` | Every action of the run | An online action of the step waits for the batch actions, or the batch actions wait for the online action. An online action can run for many minutes, so the batch requests can go out much later |
+
+Each batch file writes a `Prepared {action}/{file} in ...` line to the run log. The line gives the time, the number of records and requests, and the peak memory of the process. Each `StepCompleteEvent` has `peak_rss_mb`. Use these values to find the step and the file that use the most memory.
+
 ### How a batch reads an answer
 
 A batch action reads each answer as the same action reads the answer online:
@@ -158,6 +177,42 @@ A run that cannot reach the provider while it checks whether its batches have fi
 in the same way. The run continues to pause for as long as the provider cannot be
 asked. To abandon those batches, use `agac run --fresh`. This command sends each record of the
 workflow again.
+
+### When the run cannot read the results of one file
+
+The run can fail while it reads the results of one file. An example is an error from the SDK
+of the provider while the run downloads the results. This error is a failure of that file only.
+The run marks the records of that file as failed, with the error as the reason. Then the run
+reads the other files.
+
+- If the run reads another file of the action, or an earlier run read one, the action completes
+  with failures (exit code 3). `agac retry` sends the records of that file again.
+- If no file of the action is read, because the action has one file or because every file
+  fails, the action fails with the error "No batch results were successfully processed" (exit
+  code 1). The files stay in the batch registry, not collected. Run the workflow again without
+  `--fresh` to read them. The first run after the failure can report the batch as submitted. Run
+  again until the run reads the results.
+- If the run waits for another file (see the section above), the action pauses.
+
+If the run fails after it wrote the results of the file, for example while it removes the
+recovery batches of that file, the records keep the answers that the run wrote. The run logs a
+warning that names the file and the error.
+
+Some errors stop the run at the file, because each file fails in the same way, or because the
+run cannot keep what it read:
+
+- An `expect:` block that the run cannot resolve. An example is a `suite:` that the run cannot
+  load.
+- A store that fails to write the file.
+
+The action fails, and the next run reads that file again.
+
+To mark the records of a file as failed, the run reads what it sent in the batch of that file.
+If the run cannot read it, the records stay `deferred`. Thus the run reads the other files, and
+then fails the action with an error that names each of these files. If another file halts the
+action in the same pass (for example under `on_exhausted: raise`), the action fails with that
+halt instead, and these files are named only in a warning in the log. In both cases the files
+stay in the batch registry, not collected, and the next run reads them again.
 
 ### When the provider omits a record {/* #when-the-provider-leaves-a-record-out */}
 

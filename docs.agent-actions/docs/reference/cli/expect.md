@@ -37,7 +37,7 @@ summarize  suite summarize:schema · repair auto
 
 | Option | Description |
 |--------|-------------|
-| `-w`, `--workflow` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w`, `--workflow` | The workflow name (required). `-a` names the same option. |
 | `-A`, `--action` | Limit the listing to one action |
 | `--json` | Write the listing as JSON on stdout |
 
@@ -139,7 +139,8 @@ The report sorts the rules by how frequently they failed. Thus the rule that cos
 
 | Option | Description |
 |--------|-------------|
-| `-w`, `--workflow` | The workflow name (required). `-a` and `--agent` name the same option. |
+| `-w`, `--workflow` | The workflow name (required). `-a` names the same option. |
+| `--sandbox` | Read the output of sandbox runs (`agac run --sandbox`) in place of the output of real runs. See [Sandbox Runs](../../guides/sandbox.md) |
 | `-A`, `--action` | Limit the report to one action |
 | `--json` | Write the report as JSON on stdout |
 | `--fail-under` | Exit with a non-zero code if the pass percentage of any action is less than this value |

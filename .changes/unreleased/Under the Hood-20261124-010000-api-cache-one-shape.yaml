@@ -1,0 +1,8 @@
+kind: Under the Hood
+body: >-
+  An API data source keeps its response in one cache shape: a list of records in
+  `_remote_cache/api/<fingerprint>/data/<action>.json`. A cache file that does not hold a
+  list, or that cannot be read as JSON, is a cache miss: the source is fetched again and
+  the file is overwritten. The resolve reads only the cache file of its own action and
+  rewrites no other file in the cache directory.
+time: 2026-11-24T01:00:00.000000+00:00

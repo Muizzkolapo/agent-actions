@@ -3,24 +3,22 @@
 from pathlib import Path
 
 import pytest
-import yaml
 
 from agent_actions.expectations.service import (
     ExpectationConfigurationError,
     create_expectation_service_from_config,
 )
+from tests.helpers.schema_project import schema_project
 
 SUITE = "grounded_summary"
 
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
-    (tmp_path / "agent_actions.yml").write_text("name: test\nschema_path: schema\n")
-    schema_dir = tmp_path / "schema"
-    schema_dir.mkdir()
-    (schema_dir / f"{SUITE}.yml").write_text(
-        yaml.safe_dump(
-            {
+    return schema_project(
+        tmp_path,
+        {
+            SUITE: {
                 "expectations": [
                     {
                         "id": "enough_options",
@@ -30,9 +28,9 @@ def project(tmp_path: Path) -> Path:
                     }
                 ],
             }
-        )
+        },
+        project_config="name: test\nschema_path: schema\n",
     )
-    return tmp_path
 
 
 def _expect() -> dict:
@@ -220,26 +218,25 @@ class TestTheBatchRepairPathResolvesItToo:
 
 def _pipeline_project(tmp_path, *, expect_block: bool):
     """A real on-disk project whose action names a schema file carrying rules."""
-    root = tmp_path / "proj"
-    (root / "wf" / "agent_config").mkdir(parents=True)
-    (root / "wf" / "agent_io" / "staging").mkdir(parents=True)
-    (root / "templates").mkdir()
-    (root / "schema").mkdir()
-    (root / "agent_actions.yml").write_text(
-        "default_agent_config:\n"
-        "  api_key: OPENAI_API_KEY\n"
-        "  model_name: gpt-4o-mini\n"
-        "  model_vendor: openai\n"
-        "schema_path: schema\n"
-    )
-    (root / "schema" / "quality.yml").write_text(
-        yaml.safe_dump(
-            {
+    root = schema_project(
+        tmp_path / "proj",
+        {
+            "quality": {
                 "fields": [{"id": "summary", "type": "string", "required": True}],
                 "expectations": [{"id": "has_summary", "type": "not_null", "field": "summary"}],
             }
-        )
+        },
+        project_config=(
+            "default_agent_config:\n"
+            "  api_key: OPENAI_API_KEY\n"
+            "  model_name: gpt-4o-mini\n"
+            "  model_vendor: openai\n"
+            "schema_path: schema\n"
+        ),
     )
+    (root / "wf" / "agent_config").mkdir(parents=True)
+    (root / "wf" / "agent_io" / "staging").mkdir(parents=True)
+    (root / "templates").mkdir()
     action = (
         "  - name: summarize\n"
         "    intent: summarize the input\n"

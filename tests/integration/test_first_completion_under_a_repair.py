@@ -61,13 +61,6 @@ def _stamp(project, action):
     return json.loads(status_file.read_text()).get(action, {})
 
 
-def _write_stamp(project, action, stamp):
-    status_file = project / "agent_workflow" / WORKFLOW / "agent_io" / ".agent_status.json"
-    status = json.loads(status_file.read_text())
-    status[action] = stamp
-    status_file.write_text(json.dumps(status))
-
-
 def _stored_records(project, action):
     backend = _backend(project)
     try:
@@ -231,27 +224,6 @@ class TestARepairStillLeavesACompletedActionAlone:
 
         assert result.exit_code == 0, result.output
         assert _stamp(project, ACTION)["record_limit"] == 3
-
-    def test_a_stamp_using_the_retired_spelling_is_still_a_prior_completion(
-        self, project, monkeypatch
-    ):
-        """`max_records` is what a run before the rename wrote, so such a stamp
-        carries no `record_limit` key at all.
-
-        It is still an earlier completion, and the repair must leave it alone.
-        Deciding that per key instead — is `record_limit` stored? — reads this as
-        an action that has never completed and writes the repair's own cap,
-        which the next ordinary run reads as a change and re-runs truncated."""
-        _write_stamp(project, ACTION, {"status": "completed", "max_records": 3})
-        _fail(project, _guids(project)[0])
-        monkeypatch.setenv("AGAC_RECORD_LIMIT", "1")
-
-        result = CliRunner().invoke(cli, ["retry", "-a", WORKFLOW, "--record", _guids(project)[0]])
-
-        assert result.exit_code == 0, result.output
-        assert _stamp(project, ACTION)["record_limit"] is None, (
-            "the repair's own cap replaced a limit the action stored under the retired key"
-        )
 
 
 class TestAnUnlimitedFirstCompletionIsStillUnlimited:

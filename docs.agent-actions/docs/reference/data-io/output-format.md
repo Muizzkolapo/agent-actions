@@ -21,7 +21,7 @@ After a workflow runs, the action outputs are in a single SQLite database for ea
         └── <workflow>.db    # SQLite database — all source, target, disposition, and trace data
 ```
 
-There is exactly one `.db` file for each workflow. The framework creates and migrates it automatically on `agac run`.
+There is exactly one `.db` file for each workflow. The framework creates it automatically on the first `agac run`.
 
 ## Tables
 
@@ -45,8 +45,8 @@ CREATE TABLE target_data (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     action_name   TEXT NOT NULL,
     relative_path TEXT NOT NULL,
-    data          TEXT NOT NULL,          -- JSON array of records
-    record_count  INTEGER,
+    data          TEXT NOT NULL,          -- compressed JSON array of records
+    record_count  INTEGER NOT NULL,
     created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path)
 )
@@ -232,6 +232,8 @@ agac run -w my_workflow --fresh
 ```
 
 `--fresh` truncates the relevant tables (`source_data`, `target_data`, `record_disposition`, `prompt_trace`, `checkpoint_output`). It does not delete the database file. `agac clean --all` removes all the `agent_io` directories, including `staging/`, `target/` and the database in the store. It asks for confirmation unless `--force` is set. The store folder stays. It holds only the empty run lock file `<workflow>.db.lock`.
+
+If a command refuses the store because the store records a different storage format, `--fresh` does not help. Run `agac clean -a <workflow> --all` to remove the store. Refer to [Storage Format](./index.md#storage-format).
 
 ## See Also
 

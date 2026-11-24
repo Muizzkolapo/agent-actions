@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from rich.console import Console
 
+from agent_actions.config import sandbox
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import (
     AgentActionsError,
@@ -97,33 +98,27 @@ def _compute_action_config_hash(
     """Compute a deterministic hash of semantically-meaningful action config.
 
     Covers: prompt reference, schema reference, guard clause + behavior, and the
-    routing keys (``ROUTING_KEYS``) when set.
+    routing keys (``ROUTING_KEYS``) the action sets (an empty map when it sets none).
     Cosmetic fields (description, tags) are excluded.
 
-    NOT the model: the ``"model"`` key below is permanently ``""`` because
-    configs declare ``model_vendor``/``model_name``.  It is kept so the digest
-    does not rotate.  A model change is caught by comparing those two fields
-    against the stamps in ``_edits_since`` — do not delete that as redundant.
+    NOT the model: ``_edits_since`` compares ``model_name``/``model_vendor`` against
+    the stamps on their own, so a model change is named as a model edit.
     """
     raw_guard: Any = action_config.get("guard") or {}
     guard: dict[str, str] = (
         {"clause": raw_guard, "behavior": "skip"} if isinstance(raw_guard, str) else raw_guard
     )
 
+    config: dict[str, Any] = action_config  # type: ignore[assignment]
     prompt = action_config.get("prompt", "")
     hash_input = {
         # A cache point changes how a request reaches the provider, not the text sent.
         "prompt": without_cache_points(prompt) if isinstance(prompt, str) else prompt,
-        "model": action_config.get("model", ""),  # frozen empty — see docstring
         "schema": action_config.get("schema", ""),
         "guard_clause": guard.get("clause", ""),
         "guard_behavior": guard.get("behavior", ""),
+        "routing": {key: config[key] for key in ROUTING_KEYS if config.get(key)},
     }
-    # Only when set, so the digest of an action without them does not rotate.
-    config: dict[str, Any] = action_config  # type: ignore[assignment]
-    routing = {key: config[key] for key in ROUTING_KEYS if config.get(key)}
-    if routing:
-        hash_input["routing"] = routing
 
     serialized = json.dumps(hash_input, sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
@@ -141,7 +136,7 @@ def _digest(value: Any) -> str:
 def _compute_context_scope_hash(action_config: ActionConfigDict) -> str:
     """A digest of what ``context_scope`` lets the action read.
 
-    Apart from ``config_hash`` so that recording it changed no digest already stored.
+    Apart from ``config_hash`` so that an edit names which part changed.
     """
     scope: Any = action_config.get("context_scope") or {}
     if not isinstance(scope, dict):
@@ -267,8 +262,7 @@ def _as_record_count(value: Any) -> int | None:
 # Keys only a completion writes. An action whose stored details carry none of
 # them has never completed, whatever its status reads: `agac retry` resets every
 # action it re-runs to pending before the run starts, so a first completion and a
-# repeat are indistinguishable by status alone. ``max_records`` is the retired
-# spelling of ``record_limit`` and still marks a stamp left before the rename.
+# repeat are indistinguishable by status alone.
 _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
     {
         "record_limit",
@@ -282,7 +276,6 @@ _COMPLETION_STAMP_KEYS: frozenset[str] = frozenset(
         "udf_source_hash",
         "records_processed",
         "truncated",
-        "max_records",
         "staged_input",
     }
 )
@@ -308,8 +301,6 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     was recorded is left alone; nor does one the config cannot compute now.
     """
     edits: list[str] = []
-    # The hash reads a "model" key and configs write model_name/model_vendor; adding
-    # them would change every stored digest and name an edit at every completed action.
     if any(
         stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
         for key in ("model_name", "model_vendor")
@@ -627,8 +618,7 @@ class ActionExecutor:
         A first completion has nothing to preserve, and preserving nothing writes
         the limit a full uncapped run writes — the cap it ran under is then
         unreadable. Asked of the whole stamp rather than the one key being
-        written: the keys were introduced at different times, and per key a
-        repair would replace a limit stored under the retired spelling.
+        written: the keys were introduced at different times.
         """
         if not getattr(self.deps.action_runner, "retried_records", ()):
             return False
@@ -811,7 +801,6 @@ class ActionExecutor:
             and not _limit_cannot_reach_the_records(details, record_limit)
         )
         limits_changed = record_limit_changed or details.get("file_limit") != file_limit
-        was_truncated = self.deps.state_manager.adopt_truncation_marker(action_name)
         stored_input = details.get("staged_input")
         current_input = (
             self._staged_input(action_name, action_config) if stored_input is not None else None
@@ -834,21 +823,18 @@ class ActionExecutor:
                 ", ".join(removed) or "none",
                 ", ".join(changed) or "none",
                 "It and every action reading it run again over all input"
-                if limits_changed or was_truncated
+                if limits_changed
                 else "Records the change left alone keep their answers, here and at every "
                 "action reading it; records added or changed are answered, and records no "
                 f"longer staged are forgotten. Run again with --rerun {action_name} to answer "
                 "every record",
             )
 
-        if input_changed and not (limits_changed or was_truncated):
+        if input_changed and not limits_changed:
             self._reopen_keeping_answers(action_name)
             return ActionStatus.PENDING
-        if limits_changed or was_truncated:
-            reason = (
-                "limit config" if limits_changed else "a cap recorded by the run that completed it"
-            )
-            logger.info("%s changed for %s, resetting to pending", reason, action_name)
+        if limits_changed:
+            logger.info("limit config changed for %s, resetting to pending", action_name)
             mixed_before = bool(edits) or bool(details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG))
             if edits:
                 self._warn_of_output_beyond_a_file_limit(
@@ -2388,7 +2374,7 @@ class ActionExecutor:
         """Resolve the target output directory for a batch action."""
         workflow_name = self.deps.action_runner.workflow_name
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
-        return str(agent_io_path / "target" / action_name)
+        return str(sandbox.run_dir(agent_io_path) / "target" / action_name)
 
     def _failed_batch_jobs(self, action_name: str) -> list[tuple[str, int]]:
         """This action's not-completed batch jobs, one per input file.

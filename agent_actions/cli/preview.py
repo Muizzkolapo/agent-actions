@@ -13,10 +13,12 @@ from rich.table import Table
 from rich.text import Text
 
 from agent_actions.cli.cli_decorators import (
-    action_option,
     handles_user_errors,
     requires_project,
+    sandbox_option,
+    workflow_option,
 )
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.record.state import CASCADE_BLOCKING_STATES, RecordState
 from agent_actions.storage import get_storage_backend
@@ -55,10 +57,8 @@ class PreviewCommand:
             self.workflow_name, self.workflow, auto_create=False, project_root=project_root
         )
 
-        store_dir = paths.io_dir / "store"
         workflow_dir = paths.io_dir.parent
-
-        db_path = store_dir / f"{self.workflow_name}.db"
+        db_path = sandbox.store_file(paths.io_dir, self.workflow_name)
 
         if not db_path.exists():
             self.console.print(
@@ -264,8 +264,11 @@ class PreviewCommand:
 
 
 @click.command()
-@click.option("-w", "--workflow", "--agent", "workflow", required=True, help="Workflow name")
-@action_option(help="Action name to preview (lists all if not specified)")
+@workflow_option("workflow", help="Workflow name")
+@sandbox_option()
+@click.option(
+    "-A", "--action", default=None, help="Action name to preview (lists all if not specified)"
+)
 @click.option(
     "-n",
     "--limit",

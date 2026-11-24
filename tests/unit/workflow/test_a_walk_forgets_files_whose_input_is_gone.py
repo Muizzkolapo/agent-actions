@@ -12,7 +12,6 @@ is what the walk can name, not what it happened to rewrite.
 
 from __future__ import annotations
 
-import json
 import logging
 import sqlite3
 from unittest.mock import MagicMock
@@ -20,7 +19,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.errors import AgentActionsError, DependencyError, mark_action_fatal
-from agent_actions.storage.backend import batch_file_names_key
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow import runner_file_processing
 from agent_actions.workflow.runner import ActionRunner, FileProcessParams
@@ -39,7 +37,7 @@ UPSTREAM = "extract"
 
 @pytest.fixture(autouse=True)
 def _no_ambient_limit(monkeypatch):
-    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT", "AGAC_MAX_RECORDS"):
+    for name in ("AGAC_RECORD_LIMIT", "AGAC_FILE_LIMIT"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -251,61 +249,6 @@ class TestAStagingWalk:
 
         assert _held(backend) == ["gone.json", "pages.json"]
         assert "database is locked" in caplog.text
-
-
-class TestABatchInputFile:
-    def test_the_name_recorded_for_a_nested_file_is_kept(self, backend, tmp_path):
-        """A store from an older version holds `sub/pages.json` under its basename."""
-        backend.save_metadata(
-            batch_file_names_key(ACTION),
-            json.dumps({"sub/pages.json": "pages.json", "old/gone.json": "gone.json"}),
-        )
-        _store(backend, "gone.json", "pages.json")
-
-        process_files(_runner(backend), _params([_staged(tmp_path, "sub/pages.json")]))
-
-        assert _held(backend) == ["pages.json"]
-
-    def test_the_name_recorded_for_an_input_that_is_gone_is_forgotten(self, backend, tmp_path):
-        """It names rows that are gone; left, the input coming back would take a name
-        nothing holds any more."""
-        backend.save_metadata(
-            batch_file_names_key(ACTION),
-            json.dumps({"sub/pages.json": "pages.json", "old/gone.json": "gone.json"}),
-        )
-        _store(backend, "gone.json", "pages.json")
-
-        process_files(_runner(backend), _params([_staged(tmp_path, "sub/pages.json")]))
-
-        assert json.loads(backend.load_metadata(batch_file_names_key(ACTION))) == {
-            "sub/pages.json": "pages.json"
-        }
-
-    def test_the_name_recorded_for_a_nested_file_is_matched_as_the_store_lists_it(
-        self, backend, tmp_path
-    ):
-        """Its basename ` pages.json` was stored as `pages.json`."""
-        backend.save_metadata(
-            batch_file_names_key(ACTION), json.dumps({"sub/ pages.json": " pages.json"})
-        )
-        _store(backend, " pages.json", "gone.json")
-
-        process_files(_runner(backend), _params([_staged(tmp_path, "sub/ pages.json")]))
-
-        assert _held(backend) == ["pages.json"]
-
-    def test_the_name_recorded_for_a_nested_file_of_another_type_is_kept_as_json(
-        self, backend, tmp_path
-    ):
-        """`sub/notes.csv` recorded as `notes.csv` is stored as `notes.json`."""
-        backend.save_metadata(
-            batch_file_names_key(ACTION), json.dumps({"sub/notes.csv": "notes.csv"})
-        )
-        _store(backend, "gone.json", "notes.json")
-
-        process_files(_runner(backend), _params([_staged(tmp_path, "sub/notes.csv")]))
-
-        assert _held(backend) == ["notes.json"]
 
 
 class TestAStorageWalk:

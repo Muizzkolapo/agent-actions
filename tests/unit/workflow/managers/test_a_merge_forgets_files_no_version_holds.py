@@ -6,13 +6,11 @@ removed, nothing correlates it, and the merge's own rows for it were walked and
 sent on as though they were its input.
 """
 
-import json
 import logging
 import sqlite3
 
 import pytest
 
-from agent_actions.storage.backend import batch_file_names_key
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from agent_actions.workflow.managers import loop
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
@@ -82,21 +80,6 @@ def test_a_file_one_version_still_holds_stays(agent_folder, backend):
     _correlate(agent_folder, backend)
 
     assert backend.list_target_files(MERGE) == ["pages.json", "quiet.json"]
-
-
-def test_the_name_recorded_for_it_is_forgotten(agent_folder, backend):
-    _versions_hold(backend, "sub/pages.json")
-    _merge_holds(backend, "sub/gone.json", "sub/pages.json")
-    backend.save_metadata(
-        batch_file_names_key(MERGE),
-        json.dumps({"sub/gone.json": "sub/gone.json", "sub/pages.json": "sub/pages.json"}),
-    )
-
-    _correlate(agent_folder, backend)
-
-    assert json.loads(backend.load_metadata(batch_file_names_key(MERGE))) == {
-        "sub/pages.json": "sub/pages.json"
-    }
 
 
 def test_a_delete_that_fails_only_warns(agent_folder, backend, monkeypatch, caplog):

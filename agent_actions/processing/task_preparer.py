@@ -56,7 +56,7 @@ def write_trace_row(
             ensure_ascii=False,
             default=str,
         ),
-        model_name=context.agent_config.get("model_name") or context.agent_config.get("model"),
+        model_name=context.agent_config.get("model_name"),
         model_vendor=context.agent_config.get("model_vendor"),
         run_mode=context.mode.value if context.mode else None,
         attempt=attempt,

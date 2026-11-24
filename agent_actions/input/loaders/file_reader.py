@@ -62,25 +62,7 @@ class FileReader(ProcessorErrorHandlerMixin):
 
     def _read_json(self):
         with open(self.file_path, encoding="utf-8-sig") as file:
-            data = deep_json.loads(file.read())
-            is_batch_placeholder = (
-                isinstance(data, dict)
-                and "batch_job_id" in data
-                and data.get("status") == "submitted"
-            )
-            if is_batch_placeholder:
-                error_msg = (
-                    f"Cannot process batch placeholder file. "
-                    f"Batch job {data['batch_job_id']} is still pending."
-                )
-                error_context = {
-                    "file_path": self.file_path,
-                    "batch_job_id": data["batch_job_id"],
-                    "status": data.get("status"),
-                    "operation": "read_json",
-                }
-                raise AgentActionsError(error_msg, context=error_context)
-            return data
+            return deep_json.loads(file.read())
 
     def _read_text(self):
         with open(self.file_path, encoding="utf-8") as file:

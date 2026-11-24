@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agent_actions.utils.constants import SCHEMA_KEY, VERDICT_KEY
+from agent_actions.utils.constants import RECORD_ID_KEY, SCHEMA_KEY, VERDICT_KEY
 from agent_actions.utils.schema_echo import is_schema_echo as _is_schema_echo
 from agent_actions.utils.schema_echo import make_schema_echo_error as _make_schema_echo_error
 from agent_actions.utils.transformation import PassthroughTransformer
@@ -53,13 +53,14 @@ def run_dynamic_agent(
     dispatched: tuple[dict[str, Any], dict[str, Any], str | None] | None = None,
     rendered_prompt: str | None = None,
     cache_points: tuple[int, ...] = (),
+    record_id: str | None = None,
 ) -> tuple[Any, bool]:
     """Execute an agent, returning ``(response, was_executed)``.
 
     ``dispatched`` is the record's resolved schema, so a retry or repair call writes the
     schema the record was first given. ``rendered_prompt`` is the record's prepared prompt;
     a call whose prompt differs from it is a repair call. ``cache_points`` are that
-    prompt's.
+    prompt's. ``record_id`` names the record on the call's config (``RECORD_ID_KEY``).
     Every path here has already evaluated the guard, so ``was_executed`` is always
     ``True``; callers keep it because other producers set it ``False``. The LLM sees
     ``llm_context`` (``context`` with ``context_scope.drop`` applied) when it is given.
@@ -79,6 +80,8 @@ def run_dynamic_agent(
         from agent_actions.prompt.cache_scope import CACHE_POINTS_KEY
 
         record_config = {**record_config, CACHE_POINTS_KEY: cache_points}
+    if record_id is not None:
+        record_config = {**record_config, RECORD_ID_KEY: record_id}
 
     response = agent_builder.create_dynamic_agent(
         record_config,

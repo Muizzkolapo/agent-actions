@@ -18,14 +18,15 @@ Use `preview` to check quickly which records an action wrote. You do not have to
 
 | Option | Description |
 |--------|-------------|
-| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `--agent` names the same option. |
-| `-A, --action TEXT` | The name of the action to preview. If you do not specify it, the command lists all actions. `-a` also names the action in this command, and prints a warning on stderr. In the other commands, `-a` names the workflow. If you type `-a` and `-A` together, the command stops with exit code 2. |
+| `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` names the same option. |
+| `--sandbox` | Read the output of sandbox runs (`agac run --sandbox`) in place of the output of real runs. See [Sandbox Runs](../../guides/sandbox.md) |
+| `-A, --action TEXT` | The name of the action to preview. If you do not specify it, the command lists all actions. |
 | `-n, --limit INT` | The maximum number of records to show (default: 10) |
 | `--offset INT` | The number of records to skip (default: 0) |
 | `-f, --format` | The output format: `table`, `json` or `raw` (default: table) |
 | `--stats` | Show only the storage statistics |
 
-Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '--agent'.` The warning for `-a` comes before the error of an earlier option. It also comes before the help output if `-a` is in front of `--help`. See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
+Without `-w`, the command stops with exit code 2 and prints `Error: Missing option '-w' / '--workflow' / '-a'.` See [The Workflow and the Action](./index.md#the-workflow-and-the-action).
 
 ## Examples
 

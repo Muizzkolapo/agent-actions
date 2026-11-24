@@ -21,7 +21,7 @@ from click.testing import CliRunner
 
 from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from agent_actions.cli.main import cli
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, mark_action_fatal
 from agent_actions.llm.batch.services.processing import BatchProcessingService
 from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.providers.agac.client import AgacClient
@@ -245,7 +245,8 @@ def _collecting_fails_on(file_name):
 
     def failing(self, **kwargs):
         if kwargs["file_name"] == file_name:
-            raise RuntimeError("the provider dropped the connection")
+            # Declared fatal: an error that is only this file's fails its records instead.
+            raise mark_action_fatal(RuntimeError("the store stopped answering"))
         return collect(self, **kwargs)
 
     with pytest.MonkeyPatch.context() as patched:

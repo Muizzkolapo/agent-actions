@@ -483,9 +483,8 @@ class TestAPresentButNullContextScope:
     not help when the key is there and the value is null. The static analyser then crashed
     on `.items()` instead of letting the "action has no context_scope" check report it.
 
-    Not reachable through the modern `actions:` route, where the expander drops the key —
-    it needs the legacy `agents:` shape that `ConfigManager.get_user_agents` returns
-    verbatim, or a direct caller (#1193).
+    Not reachable through the `actions:` route, where the expander drops the key; a direct
+    caller can still pass it (#1193).
     """
 
     def setup_method(self):

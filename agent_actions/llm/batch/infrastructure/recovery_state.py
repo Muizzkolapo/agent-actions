@@ -9,6 +9,7 @@ from agent_actions.llm.batch.core.batch_constants import (
     OnExhaustedPolicy,
     RecoveryPhase,
     RecoveryType,
+    UnknownRecoveryState,
     coerce_recovery_phase,
 )
 from agent_actions.llm.batch.infrastructure.context import (
@@ -134,6 +135,10 @@ class RecoveryStateManager:
         try:
             data = json.loads(raw)
             return RecoveryState(**data)
+        except UnknownRecoveryState as e:
+            raise UnknownRecoveryState(
+                f"Recovery state of '{file_name}' for action '{action_name}' cannot be read. {e}"
+            ) from e
         except (json.JSONDecodeError, TypeError, ValueError) as e:
             logger.error("Corrupt recovery state for %s/%s: %s", action_name, file_name, e)
             return None

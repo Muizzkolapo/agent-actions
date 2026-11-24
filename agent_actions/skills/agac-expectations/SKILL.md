@@ -23,9 +23,9 @@ An action's schema says what shape its output takes. An expectation says what ma
 
 1. **Put type arguments under `params:`.** `id`, `type`, `field`, `severity` and `hint` stay at the top of the rule. A rule with `values:` at the top level is refused at preflight.
 2. **Use a code rule when code can decide.** An `llm_judge` costs one model call for each vote, each record and each repair round. A regex, a value list or a length check costs nothing.
-3. **Never let a judge vote on a missing or empty field.** Put `not_null` on the field before the `llm_judge` rule. A field that is missing fails the rule with its reason. A field that is present but empty goes to the judge, the judge votes FAIL, and each repair round repeats the same failure.
+3. **Give a missing or empty field its own rule.** Add `not_null` on each field that an `llm_judge` rule reads. Every rule runs, whatever its place in the list, so the judge still sees an empty value. `not_null` gives the record a clear reason (`value is an empty str`), and the repair round gets that reason as feedback. The judge's FAIL alone does not say that the field is empty.
 4. **Calibrate before a rule may block.** Run a new rule with `severity: warn` on known-good outputs first. Make it `error` only when the known-good outputs pass it. If they fail it, the rule is wrong, not the outputs.
-5. **Count the cost of repair.** `max_iterations: 3` with `votes: 5` can make 15 judge calls for one record. Set `judge_budget` to cap the judge calls of the action.
+5. **Count the cost of repair.** `max_iterations: 3` with `votes: 5` can make 15 model calls for one record. A value that does not change between rounds reuses its verdict. `judge_budget` caps the judged values of the action: one unit for each value, whatever `votes` is.
 
 ## The shape
 
@@ -99,12 +99,12 @@ expect:
         rule: >
           Every fact in the summary is stated in the ticket. A fact that the ticket
           does not state fails the rule, even if it is true.
-        context: [source.ticket_text]
+        context: [load_ticket.ticket_text]
       hint: "Remove or correct the facts that the ticket does not state."
 ```
 
 1. `votes: 3` runs 3 independent judge calls and takes a strict majority. A tie fails. The detail keeps the tally and the dissent, for example `2/3 judge votes passed: ...`.
-2. `context:` gives the judge other fields of the record. Name only what the rule needs.
+2. `context:` gives the judge fields of upstream actions, written as `action.field`. Name only what the rule needs. A staged input field (`source.ticket_text`) is refused ("names unknown action 'source'"), so let an upstream action write it first. Here `load_ticket` is that action; any upstream action that already holds the text works too.
 3. Judge calls follow the run mode of the action. Set `judge_mode: batch` or `judge_mode: online` under `expect:` to choose. `judge_mode: batch` needs `run_mode: batch`.
 4. Write the rule as a pass condition that a careful reader can check from the field and the context alone. Give one example that passes and one that fails, if the rule has a known trap.
 

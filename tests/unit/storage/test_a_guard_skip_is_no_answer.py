@@ -1,9 +1,9 @@
 """A guard skip is no answer, so the disposition gate never carries one as done (1348).
 
-Before 1348 an online run recorded a guard skip as ``passthrough``, which is terminal, and a
-store it wrote still holds those rows. The guard runs above the gate, so a record reaching
-the gate is one the guard passes now: carrying its stored tombstone would answer it with a
-skip. An empty answer kept as a tombstone (``on_empty: skip``) is an answer, and stays done.
+A guard skip is recorded as ``unprocessed``. The guard runs above the gate, so a record
+reaching the gate is one the guard passes now: carrying its stored tombstone would answer it
+with a skip. An empty answer kept as a tombstone (``on_empty: skip``) is an answer, and
+stays done.
 """
 
 import pytest
@@ -25,7 +25,6 @@ ACTION = "summarize"
 def backend(tmp_path):
     db = SQLiteBackend.create(db_path=str(tmp_path / "store.db"), workflow_name="wf")
     db.initialize()
-    db.set_disposition(ACTION, "skipped-before-1348", DISPOSITION_PASSTHROUGH, reason=GUARD_SKIP)
     db.set_disposition(ACTION, "skipped", DISPOSITION_UNPROCESSED, reason=GUARD_SKIP)
     db.set_disposition(ACTION, "empty", DISPOSITION_PASSTHROUGH, reason=EMPTY_OUTPUT)
     db.set_disposition(ACTION, "answered", DISPOSITION_SUCCESS)
@@ -41,11 +40,9 @@ def test_only_an_answer_is_terminal(backend):
 
 
 def test_the_gate_sends_on_a_record_the_guard_skipped_before_and_passes_now(backend):
-    records = [
-        {"source_guid": guid} for guid in ("skipped-before-1348", "skipped", "empty", "answered")
-    ]
+    records = [{"source_guid": guid} for guid in ("skipped", "empty", "answered")]
 
     to_process, carried = DispositionGate(backend).filter(records, ACTION)
 
-    assert [record["source_guid"] for record in to_process] == ["skipped-before-1348", "skipped"]
+    assert [record["source_guid"] for record in to_process] == ["skipped"]
     assert carried == {"empty", "answered"}

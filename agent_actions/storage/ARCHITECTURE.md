@@ -49,14 +49,14 @@ CREATE TABLE IF NOT EXISTS source_data (
     source_guid TEXT NOT NULL,
     data TEXT NOT NULL,               -- the full input record as JSON, stored compressed
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    repeat_of_source_guid TEXT DEFAULT NULL,  -- the guid this row repeats; '' when none
+    repeat_of_source_guid TEXT NOT NULL DEFAULT '',  -- the guid this row repeats; '' when none
     UNIQUE(relative_path, source_guid)
 )
 ```
 
 Indexes: `idx_source_path ON source_data(relative_path)`, `idx_source_repeat_of ON source_data(repeat_of_source_guid)`
 
-`repeat_of_source_guid` copies the row's own field out of `data`, which SQLite cannot read once compressed, so `records_share_a_repeat_chain` asks the index in both directions. NULL means the row was written before the column existed (or by a version that does not write it, or holds a value other than a non-empty string): only those rows have their payload read.
+`repeat_of_source_guid` copies the row's own field out of `data`, which SQLite cannot read once compressed, so `records_share_a_repeat_chain` asks the index in both directions and decodes no row. The column is never NULL: `write_source` stores `''` for a row that repeats nothing, and refuses a row whose `repeat_of_source_guid` is present but not a non-empty string (`DataValidationError`).
 
 Deduplication: `INSERT OR IGNORE` when `enable_deduplication=True` (default), `INSERT OR REPLACE` otherwise. Keyed on `(relative_path, source_guid)`.
 
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS target_data (
     action_name TEXT NOT NULL,
     relative_path TEXT NOT NULL,
     data TEXT NOT NULL,                -- list[dict] of ALL records for this path as JSON, stored compressed
-    record_count INTEGER,
+    record_count INTEGER NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(action_name, relative_path)
 )
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS target_data (
 
 No additional indexes — the UNIQUE constraint provides one.
 
-The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` reads it rather than the blob, and has to read it carefully: a store that gained the column by migration holds it as `TEXT`, where `'0' > 0` is true, and a row written before the column existed has it `NULL`. So it casts the count and, for a row still stored as text, falls back to `json_array_length(data)`; a compressed row always carries its count. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
+The `data` column stores the **entire list of records** as a single JSON blob, not one row per record. This is a blob model: `write_target()` serializes the full `list[dict]` with `json.dumps()`, and `_read_target_raw()` deserializes it back. `record_count` is a denormalized count stored alongside for efficient stats queries. `has_target_rows()` and `preview_target()` read it rather than the blob. The column is `NOT NULL`, so every stored file carries its count. An action with a file entry is not one holding rows — a guard that filters every record still stores its empty list.
 
 ### 3. record_disposition — per-record processing status
 
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS prompt_trace (
 `answered_under` holds the keys of the action's `answered_under` status stamp
 (`config_in_force` in `workflow/executor.py`). A config edit re-runs nothing, so one
 action can hold answers from more than one config; this column says which answered
-each record. An existing store gains it through `_enforce_schema`.
+each record.
 
 Indexes:
 - `idx_trace_action ON prompt_trace(action_name)`
@@ -209,10 +209,9 @@ Dictionary rows are insert-only and `AUTOINCREMENT` never reuses a committed id,
 the dictionary a row names cannot change under it. A rolled-back write does free its
 id, so the write path reads the dictionary from the store each time and only readers
 cache it. `clear_prompt_traces` deletes an
-action's dictionaries with its traces; retention pruning keeps them. A TEXT value is a
-row written before compression and reads back as it is, so older stores need no
-migration. Every backend reader decompresses (`decompress_trace_text`); a value that
-will not decompress raises `ValueError` rather than returning bytes. Outside the
+action's dictionaries with its traces; retention pruning keeps them. Every backend
+reader decompresses (`decompress_trace_text`); a value that will not decompress, a
+plain TEXT value included, raises `ValueError` rather than returning it. Outside the
 backend, read the text with `agac traces` — `sqlite3` shows these columns as blobs.
 
 **Payload compression.** `target_data.data`, `source_data.data`,
@@ -225,26 +224,20 @@ share one dictionary under an empty `action_name`. A write compresses inside its
 transaction, so a rolled-back write leaves no dictionary a reader could load.
 `delete_target(action)`, `clear_source_data()`, and `clear_checkpoint_records` or
 `clear_disposition` called for a whole action drop the dictionary with the last row
-it served; `clear_prompt_traces` drops only trace dictionaries (`prompt_trace.*`, and
-the bare column names a store written before the keys were qualified holds). The DDL column
-type stays `TEXT`: SQLite stores the blob as given, and a row written as text before
-compression still reads back. Unlike a trace, these columns are read on the resume
+it served; `clear_prompt_traces` drops only trace dictionaries (`prompt_trace.*`). The DDL column
+type stays `TEXT`: SQLite stores the blob as given. Unlike a trace, these columns are read on the resume
 and retry paths, where empty data would pass for an answer, so every reader goes
 through `decode_payload`, which raises `SerializationError` naming the table, action
-and row for a value it cannot read — a corrupt stream, or a dictionary id the store
-does not hold. The two places that count a stored file the walk could not read as a
+and row for a value it cannot read — a plain TEXT value, a corrupt stream, or a
+dictionary id the store does not hold. The two places that count a stored file the walk could not read as a
 lost file (`runner_file_processing.py`, `managers/output.py`) catch that error where
 they caught `json.JSONDecodeError`: the row is recorded and the action left incomplete,
 not read as empty. `get_disposition(snapshots=False)` leaves `input_snapshot` out and
 decodes nothing; every run path that reads only ids and dispositions asks for that,
 so a forensic column it never uses cannot fail it. SQL that looked inside these
 columns is gone or guarded:
-`has_target_rows` and `preview_target` fall back to `json_array_length(data)` only
-for a text row and measure a compressed row that lacks its count in Python (the
-writer always stores one; only a store edited from outside holds such a row),
-`records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes in Python only a compressed row whose column is NULL, and
-`checkpointed_without_row_count` names only text rows, since every compressed row
-holds a list. Outside the backend, `agac records` prints stored records and failed
+`has_target_rows` and `preview_target` read `record_count`, and
+`records_share_a_repeat_chain` reads `repeat_of_source_guid` and decodes nothing. Outside the backend, `agac records` prints stored records and failed
 records' inputs; `sqlite3` shows these columns as blobs.
 
 **Identity contract.** The table is a bounded historical log; `target_data`
@@ -254,8 +247,7 @@ two identifiers, answering two different questions:
 
 - `source_guid` — the **durable** identity of the record that was prompted,
   the same value `record_disposition.record_id` holds. This is the key for
-  auditing across tables and across runs. Before this column existed the two
-  tables shared no key and the join returned nothing.
+  auditing across tables and across runs.
 - `record_id` — the **prepare-time** `target_id`, minted afresh each run.
   This is the key for "which prompt produced this record on *this* run".
   A durable key cannot answer that: it also matches rows earlier runs left
@@ -266,8 +258,8 @@ A 1→N expansion writes one trace for the parent prompt and mints its children'
 ids only afterwards, so a child reaches that trace through its
 `parent_target_id`; a record prepared here in its own right always resolves to
 its own row first. Repair rounds re-prepare the same record at `attempt=N`,
-and the newest attempt wins. Rows written before the identity columns existed
-keep `NULL` in both and are excluded from durable-key joins.
+and the newest attempt wins. A row written without a `source_guid` holds `NULL`
+there and is excluded from durable-key joins.
 
 One known gap: an expansion's trace records the last child's output as its
 `response_text`, since the children of one prompt are written back
@@ -320,10 +312,9 @@ TERMINAL_DISPOSITIONS (not reprocessed on re-run):
   SUCCESS, FILTERED, SKIPPED, PASSTHROUGH, EXHAUSTED
 
   These records are "done" from the disposition gate's perspective.
-  The gate carries them forward without reprocessing.
-  get_terminal_record_ids() leaves out a PASSTHROUGH whose reason is
-  guard_skip: earlier versions recorded an online guard skip that way, and
-  a skip answers nothing (1348).
+  The gate carries them forward without reprocessing. A guard skip is
+  recorded as UNPROCESSED, so it is never carried: a skip answers
+  nothing (1348).
 
 RUNNING_CLEAR_DISPOSITIONS (cleared when resuming an action stopped partway):
   FAILED, EXHAUSTED, DEFERRED
@@ -389,7 +380,7 @@ On resume:
 The flow:
 
 1. **During processing**: `save_checkpoint_records()` upserts each processed record using `INSERT OR REPLACE` keyed on `(action_name, relative_path, source_guid)`, storing every row the record was answered with as one list. The rows of an expansion share their input's `source_guid` until enrichment mints one for each, so they are kept together under it: stored a row apiece, each would replace the one before.
-2. **On resume**: `read_checkpoint_records()` retrieves every checkpointed row for the action/path, its records ordered by insertion ID. A row an earlier version stored holds one record rather than a list, and is read as that record, but it may be only the last row of an expansion: that version kept one row per `source_guid`. `checkpointed_without_row_count()` names those records. The carry answers a record checkpointed with several rows again rather than carry them under the identity they share, and one an earlier version checkpointed rather than carry what may be one row of several (see `processing/ARCHITECTURE.md`).
+2. **On resume**: `read_checkpoint_records()` retrieves every checkpointed row for the action/path, its records ordered by insertion ID. Every row holds a list. The carry answers a record checkpointed with several rows again rather than carry them under the identity they share (see `processing/ARCHITECTURE.md`).
 3. **When a file is written**: `_write_target_raw` deletes that file's checkpoint rows in the transaction that stores it, whoever writes it (the online pipelines, or batch, which never reads them), and a write that fails keeps them. Checkpoint data is transient — it exists only between a record's answer and its file's write. A row left beside a stored file is therefore newer than the stored one: the online path carries it, enriched and collected with the run's own, in place of the stored row (`answered_since_stored`, `checkpointed_answers`), and batch submission sends that record again.
 
 Unlike target_data (which stores all records as one JSON blob), checkpoint_output stores **one row per record** with `source_guid` as the dedup key, holding what that record was answered with. This allows incremental appending without rewriting the entire blob on each checkpoint.
@@ -425,35 +416,34 @@ The lock is an `RLock` (reentrant) because the `connection` property may be call
 
 ---
 
-## Schema Migration (_enforce_schema)
+## Storage Format
 
-When the framework upgrades and adds columns to a table, existing databases need to be updated without losing data. `_enforce_schema()` runs at initialization, before `CREATE TABLE` statements:
+`StorageBackend._STORAGE_FORMAT_VERSION` (4) is the one storage format this version
+reads and writes. `SQLiteBackend.initialize()` only reads a store that has tables,
+so a read-only command never waits for the write lock a run holds. It takes
+`BEGIN IMMEDIATE` only to create a store, and checks for tables again inside that
+transaction, so another process never sees the tables without the format:
 
 ```
-For each table in _REQUIRED_COLUMNS:
-  1. PRAGMA table_info(table_name) → get existing columns
-  2. If table doesn't exist yet → skip (CREATE TABLE will handle it)
-  3. Compute: missing = required_columns - existing_columns
-  4. For each missing column:
-       ALTER TABLE "table" ADD COLUMN "column" TEXT DEFAULT NULL
+Any table in the file  → read storage_format_version; any other value, or none,
+                          raises StoreFormatError and closes the connection
+No table in the file   → BEGIN IMMEDIATE; if still no table, create every table
+                          and record storage_format_version = 4 in workflow_metadata
 ```
 
-Key design decisions:
-- **Never drops tables** — user data must survive framework upgrades.
-- **Only adds columns** — does not remove or rename existing columns.
-- **All new columns are TEXT DEFAULT NULL** — the most permissive type; application code handles typing.
-- **Table names in `_REQUIRED_COLUMNS` are hardcoded** — not user input, but the implementation still quotes identifiers as defense-in-depth.
+`create_readonly()` applies the same check to a file that has tables. A file with
+no tables is a store not yet created, so it is not refused.
 
-The `_REQUIRED_COLUMNS` dictionary lists the columns each table must have:
+`create_readonly()` applies the same check. The check comes before any read or write,
+so a store of another format is never changed. The error names the store file and tells
+the user to run `agac clean -a <workflow> --all`, which removes the store. `agac run
+--fresh` does not help: it deletes rows and keeps the file. Nothing deletes a store
+automatically. `agac clean --all` cannot read the batch registry of such a store, so it
+removes the store without reclaiming local batch records. The docs scanner skips it with
+a warning.
 
-| Table | Required columns |
-|-------|-----------------|
-| `source_data` | relative_path, source_guid, data, created_at, repeat_of_source_guid |
-| `target_data` | action_name, relative_path, data, record_count, created_at |
-| `record_disposition` | action_name, record_id, disposition, reason, relative_path, input_snapshot, detail, created_at |
-| `prompt_trace` | action_name, record_id, source_guid, run_id, attempt, compiled_prompt, llm_context, response_text, model_name, model_vendor, run_mode, prompt_length, context_length, response_length, answered_under, created_at |
-
-Note: `checkpoint_output` is not in `_REQUIRED_COLUMNS` because it was added after the migration system and has no legacy schemas to handle.
+A change to what the store holds — a column, a table, an encoding — raises the format.
+No code reads a store of an earlier format.
 
 ---
 
@@ -508,7 +498,7 @@ It also rewrites a path: surrounding whitespace is stripped and a backslash beco
 |------|------|
 | `__init__.py` | Factory: `get_storage_backend(workflow_path, workflow_name, backend_type)` and `BACKENDS` registry |
 | `backend.py` | Abstract base class: `StorageBackend`, disposition constants, `Disposition` enum, `NODE_LEVEL_RECORD_ID`, `FAILURE_DISPOSITIONS`, `RUNNING_CLEAR_DISPOSITIONS` |
-| `backends/sqlite_backend.py` | SQLite implementation: all 5 tables, schema migration, maintenance, thread-safe CRUD |
+| `backends/sqlite_backend.py` | SQLite implementation: table DDL, storage format check, connection, thread-safe CRUD |
 | `backends/sqlite/` | Mixins `SQLiteBackend` composes, one per concern: payload codec, metadata, source data, target data, dispositions, checkpoints, prompt traces, maintenance |
 
 ---
@@ -523,7 +513,7 @@ It also rewrites a path: surrounding whitespace is stripped and a backslash beco
 
 4. **delete_target vs clear_disposition are independent.** `delete_target()` removes rows from `target_data` but does NOT touch `record_disposition`. `clear_disposition()` removes rows from `record_disposition` but does NOT touch `target_data`. Callers must call both if they want a clean reset. The `--fresh` flag in the workflow layer coordinates this. `delete_target_files()`, which deletes some of an action's files, is likewise independent: the walk that deletes the file of an input that is gone leaves its records' dispositions and checkpoint rows. They name records whose input is gone, so they are read again only if it comes back, and the reset it then takes to be answered again clears them.
 
-5. **Schema migration only adds columns.** If a column is renamed or removed in a future version, `_enforce_schema()` will not handle it. The table will have both old and new columns. There is no `DROP COLUMN` or `ALTER COLUMN` path.
+5. **No store is migrated.** `initialize()` adds, renames or removes no column in an existing store. A schema change raises `_STORAGE_FORMAT_VERSION`, and a store of the earlier format is refused (see *Storage Format*).
 
 6. **input_snapshot truncation is lossy.** When `input_snapshot` exceeds 10KB, it is replaced with a JSON wrapper containing only the first 8KB. The original data is not recoverable from the truncated form.
 
