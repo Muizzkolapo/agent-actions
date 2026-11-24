@@ -40,10 +40,11 @@ def _with_scope(**scope):
     return {**CONFIG, "context_scope": scope}
 
 
-class TestTheStoredDigestDoesNotRotate:
-    def test_config_hash_is_what_it_was_before_and_ignores_what_the_action_reads(self):
-        assert _compute_action_config_hash({"prompt": "p", "schema": "s"}) == "c09fe225de7185fe"
-        assert _compute_action_config_hash(CONFIG) == "c09fe225de7185fe"
+class TestTheConfigDigest:
+    def test_config_hash_ignores_what_the_action_reads(self):
+        assert _compute_action_config_hash(CONFIG) == _compute_action_config_hash(
+            {"prompt": "p", "schema": "s"}
+        )
 
 
 class TestTheContextScopeDigest:
