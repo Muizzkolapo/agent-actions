@@ -64,7 +64,7 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
             ReferenceType.ACTION,
             ReferenceType.WORKFLOW,
             ReferenceType.SEED_FILE,
-        }:
+        } or (reference.type == ReferenceType.CONNECTION and index.connections is not None):
             resolved = resolve_reference(reference, index, file_path)
             if not resolved:
                 diagnostics.append(

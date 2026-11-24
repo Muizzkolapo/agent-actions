@@ -32,6 +32,7 @@ class MysqlConnector(DbApiConnector):
     """
 
     kind = "mysql"
+    driver = "pymysql"
 
     dialect = Dialect(
         quote="`",

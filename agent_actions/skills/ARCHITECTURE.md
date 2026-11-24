@@ -14,7 +14,7 @@ This document maps the moving parts of `agent_actions/skills/` — the module th
 agac-agent-skills/  agac-operations/   agac-expectations/   agac-blind-verification/
      │                  │                  │                  │
  SKILL.md           SKILL.md           SKILL.md           SKILL.md
- references/ (5)    references/        references/        references/
+ references/ (6)    references/        references/        references/
  scripts/ (2)         recovery.md        calibration.md     display-ids.md
                     scripts/                               consensus.md
                       run_health.py
@@ -112,7 +112,7 @@ When an AI assistant triggers on the skill, it reads `SKILL.md` as its primary c
 
 ## What the Skill Contains
 
-### references/ (5 guides)
+### references/ (6 guides)
 
 Deep-dive documentation that `SKILL.md` links to. Each file covers one topic in detail:
 
@@ -123,6 +123,7 @@ Deep-dive documentation that `SKILL.md` links to. Each file covers one topic in 
 | `loop-patterns.md` | Verify→rewrite, aggregate threshold patterns, sequential enrichment, contract check loops |
 | `pooling-approach.md` | Sequential vs parallel pooling, selection action design, pooling vs versioning |
 | `prompt-engineering.md` | One unit of outcome, distil before generating, seed data, output contracts, version diversity |
+| `database-io.md` | Connections, a `database` data source and its snapshot, `outputs:` tables, `--refresh-input`, `agac export` |
 
 ### scripts/ (2 helpers)
 
@@ -144,7 +145,7 @@ Both scripts self-locate the project root by walking up for `agent_actions.yml`,
 | `_MANIFEST.md` | Module manifest (AMP protocol) |
 | `ARCHITECTURE.md` | This file |
 | `agac-agent-skills/SKILL.md` | Skill descriptor + primary knowledge payload |
-| `agac-agent-skills/references/*.md` | 5 deep-dive reference guides |
+| `agac-agent-skills/references/*.md` | 6 deep-dive reference guides |
 | `agac-agent-skills/scripts/*.py` | 2 helper scripts (inspect, reset) |
 | `agac-operations/SKILL.md`, `references/recovery.md` | Running, recovering and checking large workflows |
 | `agac-operations/scripts/run_health.py` | Health check of the output counts (standard library only) |

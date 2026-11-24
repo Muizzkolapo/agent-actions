@@ -222,6 +222,11 @@ class RunCommand:
             report_quota_stop(stop)
             outcome = RunOutcome.QUOTA_STOP
         finally:
+            if self.args.refresh_input:
+                from agent_actions.input.loaders.database_source import forget_refresh_request
+
+                # The request is process-wide; a later run in this process did not ask.
+                forget_refresh_request()
             report_scenario(only_after_calls=not ended)
 
         if EXIT_CODES[outcome] != EXIT_SUCCESS:

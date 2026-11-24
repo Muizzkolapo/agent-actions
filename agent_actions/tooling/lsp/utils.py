@@ -1,5 +1,6 @@
 """Shared utilities for Agent Actions LSP."""
 
+import re
 import urllib.parse
 from pathlib import Path
 
@@ -62,4 +63,15 @@ def is_in_context_scope_list(lines: list[str], current_line: int) -> bool:
         if list_block_indent is not None and line_indent < list_block_indent:
             return line.strip().startswith("context_scope:")
 
+    return False
+
+
+def is_in_top_level_block(lines: list[str], current_line: int, key: str) -> bool:
+    """Whether *current_line* sits under the top-level `key:` of a YAML document."""
+    for i in range(current_line, -1, -1):
+        line = lines[i]
+        if line and not line[0].isspace() and not line.startswith("#"):
+            return (
+                i != current_line and re.match(rf"^{re.escape(key)}:\s*(?:#.*)?$", line) is not None
+            )
     return False
