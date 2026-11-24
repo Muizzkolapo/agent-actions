@@ -434,6 +434,13 @@ class StorageBackend(ABC):
         """Load a metadata value by key. Returns None if not found."""
         ...
 
+    def increment_metadata(self, key: str) -> int:
+        """Add one to an integer metadata value (absent is 0); returns the new value.
+
+        Atomic across processes that share the store.
+        """
+        raise NotImplementedError(f"{type(self).__name__} must implement increment_metadata()")
+
     def delete_metadata(self, key: str) -> bool:
         """Delete a metadata key. Returns True if deleted."""
         raise NotImplementedError(f"{type(self).__name__} must implement delete_metadata()")
