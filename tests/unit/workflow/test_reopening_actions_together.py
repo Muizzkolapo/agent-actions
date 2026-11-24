@@ -12,6 +12,7 @@ from agent_actions.workflow.executor import (
     ActionExecutor,
     ExecutorDependencies,
     _compute_action_config_hash,
+    config_in_force,
 )
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
@@ -86,9 +87,7 @@ def test_a_retry_says_so_for_the_edited_action_it_is_about_to_re_run(tmp_path, c
     and the records it did not name still hold what the old config wrote."""
     config = {"prompt": "X", "model": "m"}
     state = ActionStateManager(tmp_path / "status.json", ["split"])
-    state.update_status(
-        "split", ActionStatus.COMPLETED, config_hash=_compute_action_config_hash(config)
-    )
+    state.update_status("split", ActionStatus.COMPLETED, **config_in_force(config))
     state.update_status("split", ActionStatus.PENDING)
     runner = MagicMock()
     runner.retried_records = frozenset({"r1"})
@@ -129,8 +128,7 @@ def _executor(tmp_path, configs, retried=frozenset(), **stamp):
         state.update_status(
             name,
             ActionStatus.COMPLETED,
-            config_hash=_compute_action_config_hash(config),
-            **stamp,
+            **{**config_in_force(config), **stamp},
         )
     runner = MagicMock()
     runner.retried_records = retried

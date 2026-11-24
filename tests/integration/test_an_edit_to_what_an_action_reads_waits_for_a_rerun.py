@@ -158,8 +158,6 @@ def logged_bystander(data: dict[str, Any]) -> dict[str, Any]:
     return {{"seen": item}}
 """
 
-STAMP_KEYS = ("context_scope_hash", "dependencies_hash")
-
 
 def _workflow(root):
     return root / "agent_workflow" / WORKFLOW
@@ -310,20 +308,17 @@ def test_a_run_that_changes_nothing_the_action_reads_names_no_edit_and_runs_noth
     assert _ran(completed) == {}
 
 
-def test_a_store_stamped_before_these_edits_were_recorded_names_no_edit(completed):
-    """Stamps written before this release hold neither digest: reading their absence as an
-    edit would warn of an edit at every completed action of every workflow after the upgrade."""
+def test_a_stamp_without_a_digest_names_that_part_as_edited(completed):
+    """Every stamp writer records each digest, so one a status file lacks was edited out."""
     statuses = json.loads(_status_file(completed).read_text())
-    for details in statuses.values():
-        for stamp in (details, details.get("answered_under") or {}):
-            for key in STAMP_KEYS:
-                stamp.pop(key, None)
+    statuses["recap"].pop("context_scope_hash")
     _status_file(completed).write_text(json.dumps(statuses))
 
     result = _agac(completed, "run", "-a", WORKFLOW)
 
     assert result.returncode == 0, _output(result)
-    assert "was edited since" not in _output(result)
+    assert "recap was edited since it completed (context scope)" in _output(result)
+    assert "bystander was edited since" not in _output(result)
     assert "resetting to pending" not in _output(result)
     assert _ran(completed) == {}
 

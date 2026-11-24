@@ -861,10 +861,12 @@ Stamped beside it, each compared on its own (_edits_since):
     udf_source_hash      (_compute_udf_source_hash: the source_digest each
                           tool and UDF guard registered with; "" with
                           neither, None, never compared, if not loaded)
+    schema_options_hash  (_compute_schema_options_hash: "" with no options)
 
-Do not add a key to _compute_action_config_hash: every stored digest would
-change and every completed action of every workflow would be named as edited.
-Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
+Add a new part to _READS_STAMPS, not to _compute_action_config_hash, so that
+an edit names the part. Every stamp writer records each part, so a stamp
+without one names that part as edited.
+
 The model is not in the hash: _edits_since compares model_name and
 model_vendor on their own, so a model change is named as a model edit.
 
