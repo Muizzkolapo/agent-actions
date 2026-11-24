@@ -40,17 +40,19 @@ sed -i '' 's/model_vendor: openai/model_vendor: agac-provider/' \
 
 ## What the run produces
 
-Against the mock provider, with the three staged entries and `record_limit: 2`:
+Against the mock provider, with the four staged entries and `record_limit: 3` on
+`summarize_entry`:
 
 | Stage | Result |
 |---|---|
-| `summarize_entry` | 2 records |
-| `extract_field_marks_1/2/3` | 3 versions per record |
-| `canonicalize_marks` | 1 per record — the merge reduced the three |
-| `flatten_marks` | one record per canonical mark |
-| `dedupe_across_guides` | marks two entries worded identically collapse to one |
+| `summarize_entry` | 3 records: `e-001`, `e-002` and `e-004` |
+| `extract_field_marks_1/2/3` | 3 versions for each of 2 records — the guard filters the entry the mock rates `low` |
+| `canonicalize_marks` | 2 records — the merge reduced the three versions of each |
+| `flatten_marks` | 10 records — one for each canonical mark, 5 from each record |
+| `dedupe_across_guides` | 5 records — `e-004` reprints the text of `e-001` in another guide, so each of its marks is a duplicate |
 | `rank_diagnostic_value_1/2/3` | 3 votes per mark |
-| `aggregate_votes` | 1 per mark, `decision` by majority |
+| `aggregate_votes` | 5 records, `decision` by majority |
+| `select_approved_marks` | 1 record — the voters kept 1 mark of 5 |
 | `draft_id_note_1/2` | 2 drafts per surviving mark |
 | `locate_supporting_passage` | `passage_found` per note |
 | `describe_confusion_risk`, `auto_review_note` | **skipped — every record guard-filtered** |
@@ -69,6 +71,21 @@ If you change the grounding rule, this is where you will see it: the run summary
 moving off `16 completed, 2 skipped` means a guard stopped firing.
 
 ## Worth knowing
+
+**`e-004` repeats the text of `e-001`.** The mock makes the marks of a record
+from its prompt, so two records get the same marks only from the same entry
+text. `e-004` is the account of `e-001` reprinted in another guide, and its
+marks are what `dedupe_across_guides` merges. Against a real model, the reduce
+merges each mark that two guides give in the same words.
+
+**The mark count is a warning, not a repair.** `canonical_marks` has an
+`item_count` rule of 2 to 5 with `severity: warn`. When a real model gives a
+count outside that range, the record keeps its answer and its `expect` block
+records the warning. The mock reads the rule and gives each record 2 to 5 marks
+(5 in this run), so `flatten_marks` expands each record into several.
+
+**`record_limit` is on `summarize_entry` only.** As a default it caps every
+action, and then `dedupe_across_guides` and the vote see only the first marks.
 
 **`flatten_marks` synthesises its required fields.** `canonicalize_marks` emits
 `canonical_marks` as an array; `flatten_marks` reaches inside it and sets

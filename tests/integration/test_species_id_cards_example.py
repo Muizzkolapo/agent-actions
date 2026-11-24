@@ -21,8 +21,7 @@ WORKFLOW = "species_id_cards"
 
 
 @pytest.fixture(scope="module")
-def run(tmp_path_factory) -> str:
-    """Run the example offline in a copy, and hand back the CLI output."""
+def project(tmp_path_factory) -> Path:
     project = tmp_path_factory.mktemp("species") / WORKFLOW
     shutil.copytree(EXAMPLE, project)
 
@@ -31,11 +30,30 @@ def run(tmp_path_factory) -> str:
         config.read_text().replace("model_vendor: openai", "model_vendor: agac-provider")
     )
     (project / ".env").write_text("OPENAI_API_KEY=sk-not-used\n")
+    return project
 
+
+@pytest.fixture(scope="module")
+def run(project) -> str:
+    """Run the example offline in a copy, and hand back the CLI output."""
     result = run_agac(project, "run", "-a", WORKFLOW, "-u", "tools", "--fresh")
     output = result.stdout + result.stderr
     assert result.returncode == 0, f"run failed:\n{output[-3000:]}"
     return output
+
+
+def _records(project: Path, action: str) -> list[dict]:
+    result = run_agac(
+        project, "records", "-a", WORKFLOW, "-A", action, "--field", f"content.{action}"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return json.loads(result.stdout)
+
+
+def _count(run: str, action: str) -> int:
+    match = re.search(rf"✓ {action}\s+(\d+) records? in ", run)
+    assert match, f"{action} did not complete"
+    return int(match.group(1))
 
 
 def test_every_action_either_completes_or_is_guard_filtered(run):
@@ -68,6 +86,24 @@ def test_each_merge_consumer_runs(run, action):
 
 def test_the_file_granularity_reduce_runs(run):
     assert re.search(r"✓ dedupe_across_guides\b", run)
+
+
+def test_the_flatten_expands_a_record_into_several(run):
+    assert _count(run, "flatten_marks") > _count(run, "canonicalize_marks"), (
+        "no record expanded into several marks: the 1->N stage is not exercised"
+    )
+
+
+def test_the_file_reduce_merges_marks_of_separate_records(project, run):
+    """Each mark the reduce got is still there, and it holds fewer records than it got."""
+
+    def marks(records: list[dict]) -> set[tuple[str, str]]:
+        return {(r["species"], r["mark_text"]) for r in records}
+
+    flattened = _records(project, "flatten_marks")
+    deduped = _records(project, "dedupe_across_guides")
+    assert marks(deduped) == marks(flattened), "the reduce lost a mark rather than merged it"
+    assert len(deduped) < len(flattened), "no two records carried the same mark to merge"
 
 
 def test_the_grounding_guard_filters_what_the_mock_could_not_ground(run):
@@ -116,9 +152,9 @@ def test_the_run_is_rendered_as_one_line_per_action_under_its_step(run):
 
 def test_each_completed_action_reports_records_time_and_model(run):
     assert re.search(
-        r"✓ summarize_entry\s+2 records in \d+\.\d+s \(agac-provider/gpt-4o-mini\)", run
+        r"✓ summarize_entry\s+3 records in \d+\.\d+s \(agac-provider/gpt-4o-mini\)", run
     ), "an llm action lost its record count, duration or model"
-    assert re.search(r"✓ flatten_marks\s+1 record in \d+\.\d+s\s*$", run, re.M), (
+    assert re.search(r"✓ flatten_marks\s+10 records in \d+\.\d+s\s*$", run, re.M), (
         "a tool action reports records and time, and names no model"
     )
 
@@ -140,7 +176,7 @@ def test_the_run_is_summarised_once(run):
 
 @pytest.mark.parametrize(
     "action,records",
-    [("canonicalize_marks", 1), ("aggregate_votes", 1), ("consolidate_id_note", 1)],
+    [("canonicalize_marks", 2), ("aggregate_votes", 5), ("consolidate_id_note", 1)],
 )
 def test_a_version_merge_consumer_reports_the_records_it_produced(run, action, records):
     """Correlated input is written to the consumer's own target before it runs.
