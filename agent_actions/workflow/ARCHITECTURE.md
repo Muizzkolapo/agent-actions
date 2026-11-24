@@ -311,7 +311,13 @@ anything is collected. A file that failed to process was reached and keeps its r
 walk deletes nothing when a file limit stopped it with files left (a file it never opened
 keeps what the last run put there, on purpose), when it lost an entry (a directory it
 could not list, a file it could not stat, an upstream listing or stored file it could not
-read: it cannot say which inputs are gone), or under a repair. A version merge's walk is
+read: it cannot say which inputs are gone), or under a repair. A deleted file's batch
+state goes before its rows, each file on its own (`_forget_batch_state_of_files_gone`):
+its context map by its key's `#` prefix, recorded inputs, no-input mark and recovery
+state, then each registry entry once the provider's local record of its batch is
+released. A file whose batch state a failure keeps also keeps its rows, so the next run
+finds it gone and tries again; a file whose batch is still owed keeps its batch state
+for a collect pass. A version merge's walk is
 the merged input the correlator hands it (`FileProcessParams.correlated_input`), one entry
 per file a version source lists, a file every version holds empty among them as an empty
 one, so the merge writes that file empty as any reader would. The merge's other

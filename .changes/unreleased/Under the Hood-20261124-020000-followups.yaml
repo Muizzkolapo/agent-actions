@@ -5,10 +5,12 @@ body: >-
   generation settings, tool/guard code, schema options, output settings or provider
   endpoint) names that part as edited. An action without `schema_options` stamps an empty
   options digest, so options added to it are named as an edit.
-  When a run deletes what an action stores for an input that is gone, it also deletes that
-  file's batch state: its batch registry entries, context map, recorded inputs and
-  recovery state. A file whose batch is still owed keeps that state, with a warning, for a
-  collect pass to read.
+  When a run deletes what an action stores for an input that is gone, it first deletes that
+  file's batch state: its context map (every part), recorded inputs, recovery state and,
+  once the provider's local record of the batch is released, its registry entries. A file
+  whose batch state cannot be deleted keeps its rows, so the next run tries again; the
+  other files are cleaned. A file whose batch is still owed (a completed batch not
+  collected too) keeps that state, with a warning, for a collect pass to read.
   `agac dispositions` and `agac retry` (also with `--dry-run`, `--all` or `--filter`) refuse
   a workflow that has no store with "No store for workflow ...", exit 1 and create no store
   file. With `--sandbox` the store is `<workflow>.sandbox.db`. `agac dispositions` reads the

@@ -43,6 +43,8 @@ from agent_actions.utils.safe_format import safe_format_error
 from agent_actions.workflow.merge import merge_fan_in, merge_json_files, split_from
 
 if TYPE_CHECKING:
+    from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
     from agent_actions.workflow.runner import (
         ActionRunner,
         FileProcessParams,
@@ -1329,20 +1331,25 @@ def _process_stored_entry(
 def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: list[str]) -> None:
     """Delete *gone*, files an action stores from input that is gone, and their batch state.
 
-    Raises what the store raises.
+    The batch state goes first, each file on its own. A file whose batch state stays by a
+    failure keeps its rows too, so the next run finds its input gone and tries again.
+    Raises what the store raises when it deletes the rows.
     """
-    storage_backend.delete_target_files(action_name, gone)
-    _forget_batch_state_of_files_gone(storage_backend, action_name, set(gone))
-    more = len(gone) - _ERROR_SAMPLE_SIZE
+    kept = _forget_batch_state_of_files_gone(storage_backend, action_name, set(gone))
+    deleting = [name for name in gone if name not in kept]
+    if not deleting:
+        return
+    storage_backend.delete_target_files(action_name, deleting)
+    more = len(deleting) - _ERROR_SAMPLE_SIZE
     logger.warning(
         "'%s' has no input for %s%s any more, so what it stored for them is deleted. "
         "Restore the input and run with --fresh to rebuild it.",
         action_name,
-        ", ".join(gone[:_ERROR_SAMPLE_SIZE]),
+        ", ".join(deleting[:_ERROR_SAMPLE_SIZE]),
         f" (and {more} more)" if more > 0 else "",
     )
     if more > 0:
-        logger.debug("'%s' deleted what it stored for %s", action_name, ", ".join(gone))
+        logger.debug("'%s' deleted what it stored for %s", action_name, ", ".join(deleting))
 
 
 _BATCH_STATE_PREFIXES = ("batch_context", "batch_inputs", "batch_no_input", "recovery_state")
@@ -1350,61 +1357,117 @@ _BATCH_STATE_PREFIXES = ("batch_context", "batch_inputs", "batch_no_input", "rec
 
 def _forget_batch_state_of_files_gone(
     storage_backend: Any, action_name: str, gone: set[str]
-) -> None:
+) -> set[str]:
     """Delete the batch state of each batch input file whose stored file is in *gone*.
 
-    Its registry entries, context map, recorded inputs and recovery state go. A file whose
-    batch is still owed (sent, not collected and not ended by the provider) keeps all of
-    it, with a warning: its results are paid for, and a collect pass reads that state.
+    Returns the stored files whose batch state could not be deleted. A batch input file is
+    named by its registry entries and by its metadata keys, each read alone.
+    """
+    from agent_actions.llm.batch.infrastructure.context import batch_output_name
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    try:
+        registry = BatchRegistryManager(storage_backend, action_name)
+        jobs = registry.get_all_jobs()
+        names = {name for name, entry in jobs.items() if entry.parent_file_name is None}
+        for prefix in _BATCH_STATE_PREFIXES:
+            start = f"{prefix}:{action_name}:"
+            names |= {
+                key.removeprefix(start).split("#", 1)[0]
+                for key in storage_backend.list_metadata_prefix(start)
+            }
+    except Exception as e:
+        logger.warning(
+            "Could not read the batch state of '%s', so it keeps what it stored for "
+            "input that is gone. The next run tries again: %s",
+            action_name,
+            e,
+        )
+        return gone
+    failed: set[str] = set()
+    for name in sorted(name for name in names if name):
+        stored = storage_backend.stored_path(batch_output_name(name))
+        if stored not in gone:
+            continue
+        try:
+            forgotten = _forget_batch_state(storage_backend, registry, jobs, action_name, name)
+        except Exception as e:
+            logger.warning(
+                "Could not delete the batch state '%s' holds for %s, whose input is gone, "
+                "so it keeps what it stored for it. The next run tries again: %s",
+                action_name,
+                name,
+                e,
+            )
+            forgotten = False
+        if not forgotten:
+            failed.add(stored)
+    return failed
+
+
+def _forget_batch_state(
+    storage_backend: Any,
+    registry: BatchRegistryManager,
+    jobs: dict[str, BatchJobEntry],
+    action_name: str,
+    name: str,
+) -> bool:
+    """Delete one batch input file's batch state; False when it stays and the next run retries.
+
+    A batch still owed (sent, not collected and not ended by the provider) keeps all of it,
+    with a warning: its results are paid for, and a collect pass reads that state. Each
+    registry entry stays until the provider's local record of its batch is released.
     """
     from agent_actions.llm.batch.core.batch_constants import BatchStatus
     from agent_actions.llm.batch.infrastructure.context import (
         BatchContextManager,
-        batch_output_name,
+        checked_batch_file_name,
     )
     from agent_actions.llm.batch.infrastructure.recovery_state import RecoveryStateManager
-    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
     from agent_actions.llm.providers.local_batch_records import release_local_batch_record
 
-    registry = BatchRegistryManager(storage_backend, action_name)
-    jobs = registry.get_all_jobs()
-    names = {name for name, entry in jobs.items() if entry.parent_file_name is None}
-    for prefix in _BATCH_STATE_PREFIXES:
-        start = f"{prefix}:{action_name}:"
-        names |= {
-            key.removeprefix(start).split("#", 1)[0]
-            for key in storage_backend.list_metadata_prefix(start)
-        }
+    entries = {
+        key: entry for key, entry in jobs.items() if key == name or entry.parent_file_name == name
+    }
     ended = {BatchStatus.FAILED.value, BatchStatus.CANCELLED.value}
-    for name in sorted(names):
-        if storage_backend.stored_path(batch_output_name(name)) not in gone:
-            continue
-        entries = {
-            key: entry
-            for key, entry in jobs.items()
-            if key == name or entry.parent_file_name == name
-        }
-        owed = [
-            entry.batch_id
-            for entry in entries.values()
-            if entry.collected_at is None and entry.status not in ended
-        ]
-        if owed:
-            logger.warning(
-                "'%s' has no input for %s any more, but batch %s sent for it is not collected: "
-                "its batch state stays for a collect pass to read",
-                action_name,
-                name,
-                ", ".join(owed),
-            )
-            continue
-        for key, entry in entries.items():
-            registry.remove_batch_job(key)
-            if entry.batch_id:
-                release_local_batch_record(entry.batch_id)
-        BatchContextManager.delete_batch_context_map(storage_backend, action_name, name)
-        BatchContextManager.clear_batch_inputs(storage_backend, action_name, name)
-        RecoveryStateManager.delete(storage_backend, action_name, name)
+    owed = [
+        entry.batch_id
+        for entry in entries.values()
+        if entry.collected_at is None and entry.status not in ended
+    ]
+    if owed:
+        logger.warning(
+            "'%s' has no input for %s any more, but batch %s sent for it is not collected: "
+            "its batch state stays for a collect pass to read",
+            action_name,
+            name,
+            ", ".join(owed),
+        )
+        return True
+    unreleased = [
+        entry.batch_id
+        for entry in entries.values()
+        if entry.batch_id and not release_local_batch_record(entry.batch_id)
+    ]
+    if unreleased:
+        logger.warning(
+            "'%s' keeps the batch state of %s, whose input is gone: the local record of "
+            "batch %s is not released. The next run tries again",
+            action_name,
+            name,
+            ", ".join(unreleased),
+        )
+        return False
+    # By prefix, not by the parts its parts key names: an unreadable parts key, or parts
+    # an interrupted save left, go too. A name holds no "#", so no other file's key matches.
+    storage_backend.delete_metadata_prefix(
+        f"batch_context:{action_name}:{checked_batch_file_name(name)}#"
+    )
+    BatchContextManager.clear_batch_inputs(storage_backend, action_name, name)
+    RecoveryStateManager.delete(storage_backend, action_name, name)
+    for key in entries:
+        registry.remove_batch_job(key)
+    return True
 
 
 def _forget_files_no_input_maps_to(
