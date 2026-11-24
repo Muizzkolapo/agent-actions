@@ -103,7 +103,6 @@ def _run(project: Path, *, again: bool):
         "-u",
         "tools",
         *([] if again else ["--fresh"]),
-        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
 
 

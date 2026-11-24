@@ -188,7 +188,7 @@ def _agac(root, *args):
 
     The last run's result, with what every run printed and the console's wrapping undone.
     """
-    env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "sk-not-used"}
+    env = {"OPENAI_API_KEY": "sk-not-used"}
     result = run_agac(root, *args, env=env)
     printed = result.stdout + result.stderr
     for _ in range(3):

@@ -180,9 +180,7 @@ def _folding_version(root: Path) -> str:
 
 
 def _run(root: Path, *args: str):
-    return run_agac(
-        root, "run", "-a", WORKFLOW, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
-    )
+    return run_agac(root, "run", "-a", WORKFLOW, *args)
 
 
 def _settle(root: Path):

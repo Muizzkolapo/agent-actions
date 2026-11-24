@@ -131,7 +131,7 @@ def _configure(project: Path, mode: str, schema: str) -> None:
     config.write_text(_CONFIG.format(stamp=_STAMP[mode], schema=schema))
 
 
-_ENV = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+_ENV = {}
 
 
 def _run(project: Path, *first: str) -> None:

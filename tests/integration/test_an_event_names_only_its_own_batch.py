@@ -71,7 +71,7 @@ def _submit(root: Path) -> list[dict]:
         "-a",
         WORKFLOW,
         "--fresh",
-        env={"OLLAMA_API_KEY": "not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
+        env={"OLLAMA_API_KEY": "not-used"},
     )
     assert result.returncode == EXIT_PAUSED, result.stdout + result.stderr
     log = root / "agent_workflow" / WORKFLOW / "agent_io" / "logs" / "events.json"

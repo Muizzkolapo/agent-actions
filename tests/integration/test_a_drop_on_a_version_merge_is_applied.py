@@ -126,7 +126,7 @@ def _workflow(root):
 
 
 def _env():
-    return {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "sk-not-used"}
+    return {"OPENAI_API_KEY": "sk-not-used"}
 
 
 def _rows(root, action):
@@ -199,9 +199,8 @@ def test_a_retried_merge_is_not_given_the_fields_its_drop_names(project):
 
 def test_a_batch_merge_does_not_send_the_fields_its_drop_names(project):
     _configure(project, BATCH_MERGE)
-    env = {**_env(), "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "999"}
-
-    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh", env=env)
+    # Submitting does not check the batch, so the first run leaves it held.
+    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh", env=_env())
 
     held = list((project / ".agac" / "batch_state").glob("*.json"))
     assert len(held) == 1, result.stdout + result.stderr

@@ -119,7 +119,6 @@ def _run(project: Path, *args: str) -> tuple[int, str]:
         "-u",
         "tools",
         *args,
-        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
     return result.returncode, result.stdout + result.stderr
 

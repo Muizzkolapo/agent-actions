@@ -159,7 +159,6 @@ Restate this summary verbatim.
 @pytest.fixture
 def batch_below(two_mints, monkeypatch):
     """A batch LLM action reading split2, one row per row of split2."""
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     config = two_mints / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(config.read_text().rstrip("\n") + "\n" + PUBLISH_ACTION)

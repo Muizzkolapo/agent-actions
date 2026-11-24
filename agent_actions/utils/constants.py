@@ -19,6 +19,8 @@ VERDICT_KEY = "expect"
 CHUNK_CONFIG_KEY = "chunk_config"
 # The record a model call answers, set on that call's config. Only the mock reads it.
 RECORD_ID_KEY = "_record_id"
+# That record's source_guid, which every run derives alike. Only the mock reads it.
+RECORD_GUID_KEY = "_record_guid"
 
 # Reserved agent/action names that cannot be used in workflows.
 # These names are reserved for built-in functionality and config directives.

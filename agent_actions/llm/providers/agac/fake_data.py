@@ -1091,14 +1091,19 @@ class FakeDataGenerator:
             pos += len(" or ")
 
     @classmethod
-    def generate_offered_answer(cls, shapes: list[dict[str, Any]], prompt: str) -> str:
+    def generate_offered_answer(
+        cls, shapes: list[dict[str, Any]], prompt: str, passing: bool | None = None
+    ) -> str:
         """One of the offered shapes, chosen by an RNG seeded by *prompt* alone.
 
         Each string value becomes a generated sentence. One prompt always gets one answer.
+        With *passing* set, only a shape whose ``passed`` is that value is chosen, when one is.
         """
         seed = int(hashlib.md5(prompt.encode(), usedforsecurity=False).hexdigest()[:8], 16)
         cls.set_context(seed=seed, prompt=prompt)
         rng = cls._get_rng()
+        if passing is not None:
+            shapes = [shape for shape in shapes if shape.get("passed") is passing] or shapes
         shape = rng.choice(shapes)
         answer = {
             key: cls._generate_sentence(1, rng) if isinstance(value, str) else value

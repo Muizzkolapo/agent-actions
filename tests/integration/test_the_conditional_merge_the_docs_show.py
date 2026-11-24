@@ -120,7 +120,7 @@ class Project:
 
     def run_to_the_end(self) -> str:
         args = ["run", "-a", WORKFLOW, "--fresh"]
-        env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "sk-not-used"}
+        env = {"OPENAI_API_KEY": "sk-not-used"}
         transcript = ""
         for _ in range(6):
             result = run_agac(self.root, *args, env=env)

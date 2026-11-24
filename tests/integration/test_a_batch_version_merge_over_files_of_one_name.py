@@ -85,7 +85,6 @@ def project(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(root)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-not-used")
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     return root
 
 

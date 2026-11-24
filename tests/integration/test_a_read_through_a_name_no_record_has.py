@@ -128,7 +128,6 @@ def _run(project: Path, *extra: str):
         "-a",
         WORKFLOW,
         *extra,
-        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
 
 

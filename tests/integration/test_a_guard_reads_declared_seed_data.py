@@ -163,7 +163,7 @@ def _run_to_the_end(project: Path) -> str:
     outputs = []
     args = ["run", "-a", WORKFLOW, "--fresh"]
     for _ in range(4):
-        result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+        result = run_agac(project, *args)
         output = result.stdout + result.stderr
         outputs.append(output)
         assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), "\n".join(outputs)
@@ -296,7 +296,6 @@ def _parses_in_process(project: Path, monkeypatch) -> int:
 
     monkeypatch.setattr(StaticDataLoader, "_load_file", counting)
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     monkeypatch.chdir(project)
     reset_path_manager()
     args = ["run", "-a", WORKFLOW, "--fresh"]

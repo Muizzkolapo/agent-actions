@@ -521,7 +521,6 @@ providers/
 ├── generation_params.py    ← Shared param extraction
 ├── mixins.py               ← JSON parsing, error handling mixins
 ├── usage_tracker.py        ← Token usage accounting (per action, kind, pricing, model)
-├── failure_injection.py    ← Test chaos injection
 │
 ├── openai/
 │   ├── client.py           ← OpenAIClient (online)
@@ -555,7 +554,9 @@ providers/
 │
 └── agac/
     ├── client.py           ← AgacClient (deterministic mock)
-    └── batch_client.py     ← AgacBatchClient (auto-complete mock)
+    ├── batch_client.py     ← AgacBatchClient (auto-complete mock)
+    ├── scenario.py         ← Sandbox scenario: faults decided per record
+    └── faults.py           ← Each fault as a real vendor shows it
 ```
 
 ### How providers differ
@@ -571,7 +572,7 @@ providers/
 | Ollama Cloud | Schema injected into prompt text | Simulated (threads) | No structured output support |
 | HITL | N/A | N/A | Flask server, human approval |
 | Tool | N/A | N/A | Runs Python functions |
-| AGAC | Mock | Mock | Quality degrades by attempt (tests the repair loop) |
+| AGAC | Mock | Mock | Meets the schema and rules; a sandbox scenario adds faults per record |
 
 ### Error unification
 

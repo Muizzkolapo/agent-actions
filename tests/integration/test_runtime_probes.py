@@ -229,7 +229,7 @@ class TestHonestyProbe:
 
     def test_a_batch_run_names_the_guard_skip_on_the_run_that_completes_it(self, tmp_path):
         project = self._project(tmp_path, run_mode="batch")
-        env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+        env = {}
 
         outputs = []
         result = run_agac(project, "run", "-a", "honesty_probe", "--fresh", env=env)

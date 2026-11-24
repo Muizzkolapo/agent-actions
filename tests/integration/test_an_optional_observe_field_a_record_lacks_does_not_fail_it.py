@@ -189,7 +189,7 @@ def _agac(root: Path, *args: str):
     return run_agac(
         root,
         *args,
-        env={"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
+        env={"OPENAI_API_KEY": "sk-not-used"},
     )
 
 

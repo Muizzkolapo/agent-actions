@@ -52,7 +52,7 @@ def submitted_and_collected(tmp_path):
 
 
 def _agac(project, *args):
-    result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+    result = run_agac(project, *args)
     return result.returncode, result.stdout + result.stderr
 
 

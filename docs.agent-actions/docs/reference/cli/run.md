@@ -60,6 +60,7 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs, in whole seconds. The minimum is 1 (default: 60) |
 | `--wait-timeout SECONDS` | With `--wait`: stop the wait when this time after the start of the run is over, and exit 4. The batch jobs stay open for the next run (default: no limit) |
 | `--sandbox` | Run the workflow with no model call and no API key. The mock provider answers each LLM action, tool actions run their own code, and HITL actions approve each record. The run writes to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`, and does not read or change the output of real runs. It does not write the declared `outputs:`. See [Sandbox Runs](../../guides/sandbox.md) |
+| `--scenario happy\|chaos\|PATH` | With `--sandbox`: the scenario that the mock follows, a preset or the path of a scenario file. Without this option, the run uses `sandbox.yml` at the project root, else `happy`. Without `--sandbox`, the option is an error. See [The scenario file](../../guides/sandbox.md#scenario) |
 
 ## Exit Codes {/* #exit-codes */}
 
@@ -164,6 +165,12 @@ agac run -w my_workflow --sandbox
 ```
 
 The run writes its output to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`. It does not read or change the output of real runs, so a real run after it answers each action. Give `--sandbox` to `status`, `records`, `traces` and the other read commands to read this output. See [Sandbox Runs](../../guides/sandbox.md).
+
+A [scenario file](../../guides/sandbox.md#scenario) makes the mock fail, change or delay some calls on purpose, so the run tests retry, repair and the failure paths. Give a preset or a file with `--scenario`:
+
+```bash
+agac run -w my_workflow --sandbox --scenario chaos
+```
 
 ## Run a Smaller Version of a Project {/* #running-a-project-smaller-than-it-is */}
 

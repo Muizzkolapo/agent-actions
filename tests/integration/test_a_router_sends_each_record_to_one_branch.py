@@ -22,7 +22,7 @@ from tests._support.agac_cli import run_agac
 
 WORKFLOW = "router_flow"
 RUN_MODES = pytest.mark.parametrize("run_mode", ["online", "batch"])
-ENV = {"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+ENV = {"OPENAI_API_KEY": "sk-not-used"}
 FORMATS = ["multi_choice", "matching", "fill_blank", "true_false"]
 
 TOOLS = """\

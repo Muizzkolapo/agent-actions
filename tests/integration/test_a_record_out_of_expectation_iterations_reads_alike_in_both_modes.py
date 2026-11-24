@@ -142,7 +142,6 @@ def _run_to_the_end(project: Path) -> str:
             "-u",
             "tools",
             *args,
-            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
         output = result.stdout + result.stderr
         assert result.returncode in (EXIT_RECORD_FAILURES, EXIT_PAUSED), output

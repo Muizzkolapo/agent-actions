@@ -23,6 +23,7 @@ from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
     sandbox_option,
+    scenario_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -37,6 +38,7 @@ from agent_actions.cli.exit_codes import (
 )
 from agent_actions.cli.run import (
     check_declared_outputs,
+    report_scenario,
     start_tracked_run,
     write_declared_outputs,
 )
@@ -502,6 +504,7 @@ class RetryCommand:
         _delete_manifest(manifest_file)
 
         self._report(outcome, state_mgr, execution_order)
+        report_scenario()
         if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
             write_declared_outputs(workflow, project_root, self.args.agent)
         return outcome
@@ -520,12 +523,12 @@ class RetryCommand:
             waiting = state_mgr.get_batch_submitted_actions(execution_order)
             self.console.print(
                 f"\n[cyan]Retry paused - batch job(s) submitted for: {', '.join(waiting)}. "
-                f"Collect them with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
+                f"Collect them with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
             )
         elif outcome is RunOutcome.PAUSED:
             self.console.print(
                 f"\n[cyan]Retry paused before every action finished. "
-                f"Continue with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
+                f"Continue with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
             )
         else:
             self.console.print("\n[green]Retry complete.[/green]")
@@ -931,7 +934,7 @@ class RetryCommand:
         if not unfinished:
             return
 
-        flag = sandbox.flag()
+        flag = sandbox.run_flags()
         remedy = f"Run the workflow first — agac run -a {self.agent_name}{flag} — then retry."
         if halted:
             resume = (
@@ -1441,6 +1444,7 @@ def _open_pairs(failures: dict[str, list[dict]]) -> frozenset[tuple[str, str]]:
     help="Retry the records of sandbox runs (agac run --sandbox), with the offline mock",
     note="the offline mock answers every LLM action; only sandbox output is read and written",
 )
+@scenario_option()
 @click.option(
     "--from",
     "from_action",

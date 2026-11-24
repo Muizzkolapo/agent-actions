@@ -17,6 +17,7 @@ from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
     sandbox_option,
+    scenario_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -76,6 +77,13 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
         finally:
             backend.close()
     return sorted(open_actions)
+
+
+def report_scenario() -> None:
+    """The line that counts what the sandbox scenario did this pass."""
+    followed = sandbox.scenario()
+    if followed is not None:
+        click.echo(followed.summary())
 
 
 def check_declared_outputs(workflow: AgentWorkflow, project_root: Path | None) -> None:
@@ -248,7 +256,7 @@ class RunCommand:
         click.echo(
             f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
             f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
-            f"to check them and continue: agac run -w {self.args.agent}{sandbox.flag()} --wait"
+            f"to check them and continue: agac run -w {self.args.agent}{sandbox.run_flags()} --wait"
         )
 
     def _run_holding_the_lock(
@@ -287,6 +295,7 @@ class RunCommand:
             self._open_batches = state_mgr.get_batch_submitted_actions(workflow.execution_order)
             self._report(outcome, workflow)
             if sandbox.is_active():
+                report_scenario()
                 click.echo(
                     "SANDBOX run: no model was called. Read its results with --sandbox, "
                     f"such as agac records -w {self.args.agent} --sandbox"
@@ -366,7 +375,7 @@ class RunCommand:
                 f"Workflow finished with failed or exhausted records in: {', '.join(partial)}. "
                 f"See them with agac dispositions -w {self.args.agent} --quarantined"
                 f"{sandbox.flag()}; repair them with agac retry -w {self.args.agent}"
-                f"{sandbox.flag()}."
+                f"{sandbox.run_flags()}."
             )
         elif outcome is RunOutcome.SUCCESS:
             # All complete prints nothing more; guard-skipped actions get the sentence.
@@ -401,6 +410,7 @@ class RunCommand:
         "and agent_io/store/<workflow>.sandbox.db"
     ),
 )
+@scenario_option()
 @click.option(
     "-u",
     "--user-code",

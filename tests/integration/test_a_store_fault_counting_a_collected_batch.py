@@ -50,7 +50,7 @@ def _agac(project: Path, stand_in: Path, *args: str):
     result = run_agac(
         project,
         *args,
-        env={"PYTHONPATH": str(stand_in), "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
+        env={"PYTHONPATH": str(stand_in)},
     )
     return result.returncode, result.stdout + result.stderr
 

@@ -11,6 +11,8 @@ import time
 import uuid
 from typing import Any, ClassVar
 
+from agent_actions.config import sandbox
+from agent_actions.llm.providers.agac import faults
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.client_base import BaseClient, warn_schema_without_json_mode
 from agent_actions.llm.providers.generation_params import VendorParamSpec
@@ -20,7 +22,7 @@ from agent_actions.logging.events import (
 )
 from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.utils import deep_json
-from agent_actions.utils.constants import RECORD_ID_KEY
+from agent_actions.utils.constants import MODEL_NAME_KEY, RECORD_GUID_KEY, RECORD_ID_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +113,46 @@ class AgacClient(BaseClient):
         return identifier
 
     @staticmethod
+    def _record_of(agent_config: Any) -> str | None:
+        """The record a main call answers, named alike in every run; None for a side call."""
+        if isinstance(agent_config, dict):
+            for key in (RECORD_GUID_KEY, RECORD_ID_KEY):
+                value = agent_config.get(key)
+                if isinstance(value, str) and value:
+                    return value
+        return None
+
+    @staticmethod
+    def _fault(
+        agent_config: dict[str, Any], action: str, context_data: Any, attempt: int
+    ) -> tuple[Any, str | None, str | None]:
+        """The scenario's rules for this main call, the record, and the fault it fails with.
+
+        Waits the call's latency first. ``(None, None, None)`` outside a sandbox scenario
+        and for a side call, which ``judge.pass_rate`` alone governs.
+        """
+        followed = sandbox.scenario()
+        record = AgacClient._record_of(agent_config)
+        if followed is None or record is None:
+            return None, None, None
+        rules = followed.rules_for(action, context_data)
+        wait = followed.latency_ms(action, record, attempt, rules)
+        if wait:
+            time.sleep(wait / 1000)
+        fault = followed.error_for(action, record, attempt, rules)
+        if fault is not None:
+            followed.count("errors")
+            logger.info(
+                "Sandbox scenario %s: action '%s' fails attempt %d of record %s with %s",
+                followed.name,
+                action,
+                attempt,
+                record,
+                fault,
+            )
+        return rules, record, fault
+
+    @staticmethod
     def _extract_prompt(prompt_config: Any) -> str:
         """Extract prompt text from prompt config."""
         if isinstance(prompt_config, str):
@@ -180,13 +222,19 @@ class AgacClient(BaseClient):
             len(prompt),
         )
 
+        model = str(agent_config.get(MODEL_NAME_KEY) or "agac-mock")
+        rules, record, fault = AgacClient._fault(agent_config, action, context_data, attempt)
+        if fault is not None and fault not in faults.NEEDS_ANSWER:
+            return faults.json_answer(fault, None, model)
+
         FakeDataGenerator.set_context(prompt=seed_key)
 
+        # Imported here: every vendor loads this module, and only the mock reads rules.
+        from agent_actions.llm.providers.agac.contract import Contract
+
+        actual_schema: dict[str, Any] = {}
         if schema:
             actual_schema = FakeDataGenerator.unwrap_schema(schema)
-            # Imported here: every vendor loads this module, and only the mock reads rules.
-            from agent_actions.llm.providers.agac.contract import Contract
-
             contract = Contract.for_request(agent_config, action, context_data)
             fake_data = contract.generate(actual_schema, attempt)
             logger.debug(
@@ -201,6 +249,14 @@ class AgacClient(BaseClient):
                 "status": "success",
             }
             logger.debug("No schema provided, using generic response")
+
+        if fault is not None:
+            return faults.json_answer(fault, fake_data, model)
+        followed = sandbox.scenario()
+        if rules is not None and record is not None and followed is not None:
+            if not schema:
+                contract = Contract.for_request(agent_config, action, context_data)
+            contract.follow(followed, rules, fake_data, actual_schema, record, attempt)
 
         latency_ms = (time.perf_counter() - start_time) * 1000
 
@@ -263,12 +319,19 @@ class AgacClient(BaseClient):
             len(prompt),
         )
 
+        model = str(agent_config.get(MODEL_NAME_KEY) or "agac-mock")
+        _, _, fault = AgacClient._fault(agent_config, action, context_data, attempt)
+        if fault is not None:
+            return ResponseBuilder.wrap_non_json(faults.text_answer(fault, model), agent_config)
+
         # A prompt that ends by offering the answer's exact shapes gets one of them back.
         shapes = FakeDataGenerator.offered_answer_shapes(prompt)
+        followed = sandbox.scenario()
         if shapes:
             # Seeded without the attempt: every judge call of an action shares one attempt
             # counter, so a verdict seeded with it would depend on the calls before it.
-            content = FakeDataGenerator.generate_offered_answer(shapes, seed_key)
+            passing = followed.judge_passes(action, prompt) if followed is not None else None
+            content = FakeDataGenerator.generate_offered_answer(shapes, seed_key, passing)
         else:
             content = FakeDataGenerator.generate_text_response(seed_key, attempt)
 

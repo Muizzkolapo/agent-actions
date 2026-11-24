@@ -2,17 +2,22 @@
 
 A command given ``--sandbox`` sets the mode for the whole process with ``sandbox_mode``.
 Each path a run writes or a read command reads is derived here, so a sandbox run never
-writes where a real run reads.
+writes where a real run reads. A command that calls the mock (``run``, ``retry``) also
+follows a scenario, loaded once per workflow load and held here for the mock to read.
 """
 
 from __future__ import annotations
 
+import shlex
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND, MODEL_VENDOR_KEY
+
+if TYPE_CHECKING:
+    from agent_actions.llm.providers.agac.scenario import Scenario
 
 SANDBOX_VENDOR = "agac-provider"
 SANDBOX_DIR = "sandbox"
@@ -22,6 +27,10 @@ SANDBOX_STORE_SUFFIX = ".sandbox.db"
 AUTO_APPROVE_KEY = "_sandbox_auto_approve"
 
 _active = False
+_follows_scenario = False
+# What --scenario named; None is the project's sandbox.yml, else the happy preset.
+_scenario_flag: str | None = None
+_scenario: Scenario | None = None
 
 
 def is_active() -> bool:
@@ -39,9 +48,42 @@ def sandbox_mode(enabled: bool) -> Iterator[None]:
         _active = previous
 
 
+@contextmanager
+def scenario_choice(source: str | None) -> Iterator[None]:
+    """Have each workflow load in this block read the scenario *source* names."""
+    global _follows_scenario, _scenario_flag, _scenario
+    previous = (_follows_scenario, _scenario_flag, _scenario)
+    _follows_scenario, _scenario_flag, _scenario = True, source, None
+    try:
+        yield
+    finally:
+        _follows_scenario, _scenario_flag, _scenario = previous
+
+
+def load_scenario(project_root: Path | None, llm_actions: list[str]) -> None:
+    """Read and check the scenario, before any call; a command that calls no mock reads none."""
+    global _scenario
+    if not (_active and _follows_scenario):
+        return
+    from agent_actions.llm.providers.agac.scenario import load
+
+    _scenario = load(_scenario_flag, project_root or Path.cwd(), llm_actions)
+
+
+def scenario() -> Scenario | None:
+    return _scenario if _active else None
+
+
 def flag() -> str:
     """The flag a printed command needs to act on this run's output: ``" --sandbox"`` or ``""``."""
     return " --sandbox" if _active else ""
+
+
+def run_flags() -> str:
+    """``flag()``, and the ``--scenario`` given, for a printed ``agac run`` or ``agac retry``."""
+    if _active and _scenario_flag is not None:
+        return f"{flag()} --scenario {shlex.quote(_scenario_flag)}"
+    return flag()
 
 
 def run_dir(io_dir: Path) -> Path:

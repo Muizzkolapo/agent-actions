@@ -74,7 +74,6 @@ def project(tmp_path, monkeypatch):
     _stage(root, "more.json", MORE)
     monkeypatch.chdir(root)
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
 
     _run("--fresh")
     _run()
@@ -117,7 +116,6 @@ def merged(tmp_path, monkeypatch):
         )
     monkeypatch.chdir(root)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-not-used")
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     _run_merge("--fresh")
     _run_merge()
     assert _merge_holds(root)[0] == {"items.json": 2, "sub/items.json": 2}

@@ -26,7 +26,7 @@ from tests.integration.test_a_batch_the_provider_refuses import (
     _stored_rows,
 )
 
-_NOW = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+_NOW = {}
 
 
 def _agac(project: Path, *args: str) -> SimpleNamespace:

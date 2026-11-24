@@ -194,6 +194,7 @@ class OnlineStrategy(InvocationStrategy):
             rendered_prompt=task.formatted_prompt,
             cache_points=task.cache_points,
             record_id=task.target_id,
+            source_guid=task.source_guid,
         )
 
     def _track_retry_metadata(

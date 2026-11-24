@@ -44,7 +44,7 @@ def _agac_stopped_checking(project):
         capture_output=True,
         text=True,
         timeout=300,
-        env={**os.environ, "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "PYTHONPATH": str(REPO)},
+        env={**os.environ, "PYTHONPATH": str(REPO)},
     )
     status_file = project / "agent_workflow" / WORKFLOW / "agent_io" / ".agent_status.json"
     return json.loads(status_file.read_text())[CLI_ACTION]["status"]

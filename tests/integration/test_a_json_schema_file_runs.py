@@ -109,7 +109,7 @@ def _run(root: Path, *args: str) -> tuple[int, str]:
         WORKFLOW,
         "--fresh",
         *args,
-        env={"COLUMNS": "240", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
+        env={"COLUMNS": "240"},
     )
     return result.returncode, result.stdout + result.stderr
 

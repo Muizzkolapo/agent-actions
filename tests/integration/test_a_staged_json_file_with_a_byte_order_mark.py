@@ -82,7 +82,7 @@ actions:
 
 
 def _run(root: Path, run_mode: str):
-    env = {"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+    env = {"OPENAI_API_KEY": "sk-not-used"}
     result = run_agac(root, "run", "-a", WORKFLOW, "--fresh", env=env)
     if run_mode == "batch" and result.returncode == EXIT_PAUSED:
         # The first run submits the batch; the next collects it.

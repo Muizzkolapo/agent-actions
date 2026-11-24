@@ -37,20 +37,10 @@ def project(tmp_path):
 def _run_workflow(project, workflow, *args, env=None):
     """One `agac run`, in its own process — the boundary under test.
 
-    The mock completes a batch after a delay, which is a separate question from
-    whether it still knows about one. Set to zero so a paused run is a run that
-    lost its batch, not one that asked too early.
+    The mock completes a batch at its first status check, so a paused run is a run
+    that lost its batch, not one that asked too early.
     """
-    result = run_agac(
-        project,
-        "run",
-        "-a",
-        workflow,
-        "-u",
-        "tools",
-        *args,
-        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", **(env or {})},
-    )
+    result = run_agac(project, "run", "-a", workflow, "-u", "tools", *args, env=env)
     return result.returncode, result.stdout + result.stderr
 
 
@@ -114,15 +104,18 @@ class TestASubmittedBatchIsCollectableByTheNextRun:
 
         Submitting does not poll, so the count runs from the second run on: with
         a threshold of two, the second run reaches one and the third reaches two.
-        A count that restarted each run would sit at one forever.
+        A count that restarted each run would sit at one forever. The sandbox
+        scenario sets the threshold.
         """
-        env = {"AGAC_BATCH_POLLS_UNTIL_COMPLETE": "2", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "999"}
-        assert _run(project, "--fresh", env=env)[0] == EXIT_PAUSED
-        second_code, second = _run(project, env=env)
+        (project / "sandbox.yml").write_text(
+            "batch: {polls_until_complete: 2, complete_after_seconds: 999}\n"
+        )
+        assert _run(project, "--fresh", "--sandbox")[0] == EXIT_PAUSED
+        second_code, second = _run(project, "--sandbox")
         assert second_code == EXIT_PAUSED, second
         assert "paused" in second, "a threshold of two cannot be met by one poll"
 
-        code, output = _run(project, env=env)
+        code, output = _run(project, "--sandbox")
 
         assert code == 0, output
         assert "paused" not in output, output

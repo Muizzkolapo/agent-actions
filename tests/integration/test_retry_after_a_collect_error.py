@@ -79,7 +79,6 @@ def project(tmp_path, monkeypatch):
         json.dumps([{"page_id": f"p{i}", "page_content": f"page {i}"} for i in range(RECORDS)])
     )
     monkeypatch.chdir(root)
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-not-used")
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)

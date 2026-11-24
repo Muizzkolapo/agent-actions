@@ -126,9 +126,6 @@ def run(tmp_path_factory):
             "-u",
             "tools",
             *([] if again else ["--fresh"]),
-            # The fake batch provider completes after a delay by default; a
-            # collect run that asked too early would look like a lost batch.
-            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
         run_result = Run(workflow, project, result.returncode, result.stdout + result.stderr)
         if not again:

@@ -147,7 +147,6 @@ def _run_to_completion(root: Path):
     """``agac run``, again while a batch the run sent is still to be collected."""
     env = {
         "OPENAI_API_KEY": "sk-not-used",
-        "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0",
         "AGAC_HITL_AUTO_APPROVE": "",
     }
     result = run_agac(root, "run", "-a", WORKFLOW, "--fresh", env=env)

@@ -119,7 +119,6 @@ def project(tmp_path, monkeypatch):
     for name, pages in PAGES.items():
         (staging / name).write_text(json.dumps([{"page_content": page} for page in pages]))
     monkeypatch.chdir(root)
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
     # A run installs a global path manager; left behind, it sends later tests' writes here.

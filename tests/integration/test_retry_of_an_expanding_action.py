@@ -513,7 +513,6 @@ def _invoke(*args):
 def split_of_a_split(expanding, monkeypatch):
     """`split2` turns each `split` row into two more, and `after`, a batch action,
     answers each of those: 6 records, 12 `split` rows, 24 `split2` and `after` rows."""
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     config = expanding / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
     config.write_text(config.read_text().rstrip("\n") + "\n" + SPLIT_AGAIN_ACTION + AFTER_ACTION)

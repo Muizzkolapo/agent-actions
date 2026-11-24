@@ -253,7 +253,6 @@ def _project(key: str, tmp_path: Path, monkeypatch) -> _Project:
     (root / "tools" / f"{SHAPE}.py").write_text(SHAPE_TOOL)
     (root / "tag").write_text("v1")
     monkeypatch.chdir(root)
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
     # A run installs a global path manager; left behind, it sends later tests' writes here.

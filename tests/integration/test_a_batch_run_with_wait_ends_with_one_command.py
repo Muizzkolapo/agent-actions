@@ -1,8 +1,9 @@
 """`agac run --wait` takes a batch workflow from submission to its end in one command.
 
 A run that submits a batch pauses and exits 4; a wrapper had to match the paused
-sentence and call `agac run` again in a loop. Every run here is one `agac run` through
-the CLI against the provider mock, whose batch needs a set number of status checks.
+sentence and call `agac run` again in a loop. Every run here is one `agac run --sandbox`
+through the CLI against the provider mock, whose batch needs the number of status checks
+the sandbox scenario sets.
 """
 
 import shutil
@@ -31,19 +32,10 @@ def project(tmp_path):
 
 
 def _run(project, *args, checks_until_complete: int):
-    result = run_agac(
-        project,
-        "run",
-        "-a",
-        WORKFLOW,
-        "-u",
-        "tools",
-        *args,
-        env={
-            "AGAC_BATCH_POLLS_UNTIL_COMPLETE": str(checks_until_complete),
-            "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "999",
-        },
+    (project / "sandbox.yml").write_text(
+        f"batch: {{polls_until_complete: {checks_until_complete}, complete_after_seconds: 999}}\n"
     )
+    result = run_agac(project, "run", "-a", WORKFLOW, "--sandbox", "-u", "tools", *args)
     return result.returncode, result.stdout + result.stderr
 
 
@@ -74,7 +66,7 @@ def test_at_the_wait_timeout_it_exits_4_and_a_later_run_collects_the_batch(proje
 
     assert code == PAUSED, output
     assert "still open for: summarize" in output, output
-    assert f"agac run -w {WORKFLOW} --wait" in output, output
+    assert f"agac run -w {WORKFLOW} --sandbox --wait" in output, output
 
     code, output = _run(project, *WAIT, checks_until_complete=2)
 
