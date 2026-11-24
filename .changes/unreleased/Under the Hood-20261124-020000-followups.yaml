@@ -5,4 +5,8 @@ body: >-
   generation settings, tool/guard code, schema options, output settings or provider
   endpoint) names that part as edited. An action without `schema_options` stamps an empty
   options digest, so options added to it are named as an edit.
+  When a run deletes what an action stores for an input that is gone, it also deletes that
+  file's batch state: its batch registry entries, context map, recorded inputs and
+  recovery state. A file whose batch is still owed keeps that state, with a warning, for a
+  collect pass to read.
 time: 2026-11-24T02:00:00.000000+00:00

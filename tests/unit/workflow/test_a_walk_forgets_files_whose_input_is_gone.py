@@ -249,6 +249,73 @@ class TestAStagingWalk:
         assert "database is locked" in caplog.text
 
 
+def _sent(backend, name, *, status="completed", collected=True, parent=None, key=None):
+    """A registry entry for *name*, its context map and its recorded inputs."""
+    from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+    from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    BatchRegistryManager(backend, ACTION).save_batch_job(
+        key or name,
+        BatchJobEntry(
+            batch_id=f"batch-{key or name}",
+            status=status,
+            timestamp="2026-11-24T00:00:00+00:00",
+            provider="openai",
+            file_name=key or name,
+            parent_file_name=parent,
+            recovery_type="retry" if parent else None,
+            collected_at="2026-11-24T00:01:00+00:00" if collected else None,
+        ),
+    )
+    if parent is None:
+        BatchContextManager.save_batch_context_map(backend, ACTION, {"c1": {}}, name)
+        BatchContextManager.save_batch_inputs(backend, ACTION, ["g1"], name)
+
+
+def _batch_state(backend):
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+
+    keys = {
+        key.split(":", 2)[2].split("#", 1)[0]
+        for prefix in ("batch_context", "batch_inputs")
+        for key in backend.list_metadata_prefix(f"{prefix}:{ACTION}:")
+    }
+    return sorted(keys), sorted(BatchRegistryManager(backend, ACTION).get_all_jobs())
+
+
+class TestTheBatchStateOfAFileWhoseInputIsGone:
+    def test_it_goes_with_the_file_and_the_other_file_keeps_its_own(self, backend, tmp_path):
+        _store(backend, "gone.json", "pages.json")
+        for name in ("gone.json", "pages.json"):
+            _sent(backend, name)
+        _sent(backend, "", parent="gone.json", key="gone.json_retry_1")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert _held(backend) == ["pages.json"]
+        assert _batch_state(backend) == (["pages.json"], ["pages.json"])
+
+    def test_a_batch_still_owed_keeps_it_with_a_warning(self, backend, tmp_path, caplog):
+        """Its results are paid for, and a collect pass reads the state to write them."""
+        _store(backend, "gone.json", "pages.json")
+        _sent(backend, "gone.json", status="submitted", collected=False)
+
+        with caplog.at_level(logging.WARNING, logger=runner_file_processing.__name__):
+            process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert _batch_state(backend) == (["gone.json"], ["gone.json"])
+        assert "batch batch-gone.json sent for it is not collected" in caplog.text
+
+    def test_a_batch_the_provider_ended_is_not_owed(self, backend, tmp_path):
+        _store(backend, "gone.json", "pages.json")
+        _sent(backend, "gone.json", status="failed", collected=False)
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert _batch_state(backend) == ([], [])
+
+
 class TestAStorageWalk:
     def test_a_reader_lets_go_of_a_file_its_upstream_no_longer_holds(self, backend, tmp_path):
         _store(backend, "pages.json", action=UPSTREAM)
