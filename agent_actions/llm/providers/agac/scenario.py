@@ -221,8 +221,8 @@ class Scenario:
         """This call's attempt for *record* at *action*, from 1.
 
         In the sandbox store once one is attached, so a repair round, a retry, a later
-        ``--wait`` pass and ``agac retry`` continue the count. The store adds one in a
-        single statement, which two processes cannot interleave.
+        ``--wait`` pass and ``agac retry`` continue the count. The store adds one under
+        its write lock, so two processes cannot both read the old count.
         """
         key = attempts_key(action, record)
         if self._store is not None:

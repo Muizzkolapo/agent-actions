@@ -27,20 +27,31 @@ class SQLiteMetadataMixin(SQLiteHost):
     def increment_metadata(self, key: str) -> int:
         """Add one to an integer metadata value (absent is 0); returns the new value.
 
-        One statement, so two processes on one store cannot both read the old value.
+        The write lock is taken before the value is read, so two processes on one store
+        cannot both read the old value. No upsert and no RETURNING, which SQLite before
+        3.24 and 3.35 cannot read.
         """
         with self._lock:
+            connection = self.connection
             try:
-                row = self.connection.execute(
-                    "INSERT INTO workflow_metadata (key, value, updated_at) "
-                    "VALUES (?, '1', CURRENT_TIMESTAMP) "
-                    "ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1, "
-                    "updated_at = CURRENT_TIMESTAMP RETURNING value",
+                connection.execute("BEGIN IMMEDIATE")
+                updated = connection.execute(
+                    "UPDATE workflow_metadata SET value = CAST(value AS INTEGER) + 1, "
+                    "updated_at = CURRENT_TIMESTAMP WHERE key = ?",
                     (key,),
+                )
+                if updated.rowcount == 0:
+                    connection.execute(
+                        "INSERT INTO workflow_metadata (key, value, updated_at) "
+                        "VALUES (?, '1', CURRENT_TIMESTAMP)",
+                        (key,),
+                    )
+                row = connection.execute(
+                    "SELECT value FROM workflow_metadata WHERE key = ?", (key,)
                 ).fetchone()
-                self.connection.commit()
+                connection.commit()
             except BaseException:
-                self.connection.rollback()
+                connection.rollback()
                 raise
         return int(row[0])
 

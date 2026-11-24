@@ -1,7 +1,8 @@
 """A sandbox scenario counts each record's attempts at an action in the sandbox store.
 
 A repair round, a retry, a later ``--wait`` pass and ``agac retry`` run in other calls or
-other processes, so the count lives in the store's metadata, where one statement adds one.
+other processes, so the count lives in the store's metadata, where one transaction that
+holds the write lock adds one, in SQL that every SQLite reads.
 Each action and record counts on its own. With no store the count is the scenario's own;
 with no scenario the mock counts per run, in memory, and writes nothing.
 """
@@ -52,27 +53,70 @@ def test_a_later_process_continues_the_count_of_each_action_and_record(tmp_path)
     assert later.next_attempt("classify", "r1") == 1
 
 
-def _count_in_another_process(path: str, times: int, out) -> None:
+def _count_in_another_process(path: str, times: int, ready, start, out) -> None:
     store = SQLiteBackend.create(db_path=path, workflow_name="wf")
     store.initialize()
-    out.put([store.increment_metadata("sandbox_attempts:extract:r1") for _ in range(times)])
+    ready.release()
+    start.wait(timeout=120)
+    try:
+        out.put([store.increment_metadata("sandbox_attempts:extract:r1") for _ in range(times)])
+    except Exception as error:
+        out.put([repr(error)])
 
 
 def test_two_processes_counting_one_record_never_read_the_same_count(tmp_path):
     path = str(tmp_path / "wf.sandbox.db")
     _store(Path(path))
     context = multiprocessing.get_context("spawn")
-    out = context.Queue()
+    out, ready, start = context.Queue(), context.Semaphore(0), context.Event()
     workers = [
-        context.Process(target=_count_in_another_process, args=(path, 40, out)) for _ in range(2)
+        context.Process(target=_count_in_another_process, args=(path, 300, ready, start, out))
+        for _ in range(2)
     ]
     for worker in workers:
         worker.start()
+    # Both count at the same time: neither starts before the other has opened the store.
+    for _ in workers:
+        assert ready.acquire(timeout=120)
+    start.set()
     seen = out.get(timeout=120) + out.get(timeout=120)
     for worker in workers:
         worker.join(timeout=120)
 
-    assert sorted(seen) == list(range(1, 81))
+    assert all(isinstance(count, int) for count in seen), [c for c in seen if isinstance(c, str)]
+    assert sorted(seen) == list(range(1, 601))
+
+
+def test_the_count_is_added_in_sql_that_an_old_sqlite_reads(tmp_path):
+    store = _store(tmp_path / "wf.sandbox.db")
+    statements: list[str] = []
+    store.connection.set_trace_callback(statements.append)
+
+    counted = [store.increment_metadata("sandbox_attempts:extract:r1") for _ in range(3)]
+
+    assert counted == [1, 2, 3]
+    assert store.load_metadata("sandbox_attempts:extract:r1") == "3"
+    # RETURNING needs SQLite 3.35 and an upsert 3.24; RHEL 9 and Debian 11 ship 3.34.
+    sql = " ".join(statements).upper()
+    assert "RETURNING" not in sql and "ON CONFLICT" not in sql, statements
+    # The write lock is taken before the count is read.
+    assert statements[0] == "BEGIN IMMEDIATE", statements
+    assert not store.connection.in_transaction
+
+
+def test_a_count_that_fails_leaves_no_transaction_open(tmp_path):
+    store = _store(tmp_path / "wf.sandbox.db")
+    store._save_metadata_raw("sandbox_attempts:extract:r1", "not a number")
+    store.connection.execute(
+        "CREATE TRIGGER refuse BEFORE UPDATE ON workflow_metadata "
+        "BEGIN SELECT RAISE(ABORT, 'refused'); END"
+    )
+
+    with pytest.raises(Exception, match="refused"):
+        store.increment_metadata("sandbox_attempts:extract:r1")
+
+    assert not store.connection.in_transaction
+    assert store.load_metadata("sandbox_attempts:extract:r1") == "not a number"
 
 
 def test_with_no_store_the_scenario_counts_in_memory(tmp_path):
