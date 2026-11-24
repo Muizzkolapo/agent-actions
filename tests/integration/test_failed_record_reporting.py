@@ -84,14 +84,21 @@ class TestAFailedRecordIsReportedOnce:
         assert CAUSE in output, "the tool's own message never reached the user"
 
     def test_each_failing_record_is_reported_once(self, crashed):
-        """Two records failed; the strategy and the collector each logged both."""
+        """The strategy and the collector each logged every record the tool failed on."""
         output, _ = crashed
+        reached = re.search(r"✓ canonicalize_marks\s+(\d+) records? in ", output)
+        assert reached, "the step above the failing tool did not complete"
+        failing = int(reached.group(1))
+        assert failing >= 2, (
+            f"{failing} record reached {TOOL}: one record cannot tell a report per record "
+            "from a report per action"
+        )
         per_record = [
             ln for ln in output.splitlines() if CAUSE in ln and re.search(r"\(record \w+\)", ln)
         ]
-        assert len(per_record) == 2, (
-            f"2 failing records should give 2 per-record reports, got {len(per_record)}:\n  "
-            + "\n  ".join(per_record)
+        assert len(per_record) == failing, (
+            f"{failing} failing records should give {failing} per-record reports, "
+            f"got {len(per_record)}:\n  " + "\n  ".join(per_record)
         )
 
     def test_the_failing_action_block_stays_small(self, crashed):

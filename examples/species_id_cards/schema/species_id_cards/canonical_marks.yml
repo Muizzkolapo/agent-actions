@@ -11,6 +11,12 @@ fields:
         species: {type: string}
         merged_count: {type: integer}
     description: "Merged marks; each carries mark_text, mark_kind, species and merged_count"
+    expectations:
+      - id: a_handful_of_marks
+        type: item_count
+        severity: warn
+        params: {min: 2, max: 5}
+        hint: "Most entries name two to five marks a reader could use in the field"
   - id: reconcile_notes
     type: string
     description: "What was merged and why"

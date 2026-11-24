@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from rich.console import Console
 
+from agent_actions.config import sandbox
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import (
     AgentActionsError,
@@ -2356,7 +2357,7 @@ class ActionExecutor:
         """Resolve the target output directory for a batch action."""
         workflow_name = self.deps.action_runner.workflow_name
         agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
-        return str(agent_io_path / "target" / action_name)
+        return str(sandbox.run_dir(agent_io_path) / "target" / action_name)
 
     def _failed_batch_jobs(self, action_name: str) -> list[tuple[str, int]]:
         """This action's not-completed batch jobs, one per input file.

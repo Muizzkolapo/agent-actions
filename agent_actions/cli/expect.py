@@ -21,10 +21,12 @@ from rich.text import Text
 from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
+    sandbox_option,
     workflow_option,
 )
 from agent_actions.cli.inspect_base import render_title_row
 from agent_actions.cli.renderers.whole_table import print_whole
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.expectations.report import (
     ActionTally,
@@ -217,7 +219,7 @@ class ExpectReportCommand:
         )
         # Reading must not write: initializing a backend creates the database, so a
         # question about a workflow that never ran would leave a store behind.
-        store = paths.io_dir / "store" / f"{self.agent_name}.db"
+        store = sandbox.store_file(paths.io_dir, self.agent_name)
         tallies: list[ActionTally] = []
         produced: dict[str, int] = {}
         stored: dict[str, int] = {}
@@ -596,6 +598,7 @@ def list_rules(
 
 @expect.command("report")
 @workflow_option("agent_opt")
+@sandbox_option()
 @click.option("-A", "--action", default=None, help="Limit the report to one action.")
 @click.option("--json", "as_json", is_flag=True, help="Emit the report as JSON.")
 @click.option(

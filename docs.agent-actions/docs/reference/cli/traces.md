@@ -19,6 +19,7 @@ The store keeps this text compressed. Thus `sqlite3` shows the `compiled_prompt`
 | Option | Description |
 |--------|-------------|
 | `-w, --workflow TEXT` | The workflow name: the name of its configuration file (required). `-a` names the same option. |
+| `--sandbox` | Read the output of sandbox runs (`agac run --sandbox`) in place of the output of real runs. See [Sandbox Runs](../../guides/sandbox.md) |
 | `-A, --action TEXT` | The action whose traces the command prints (required). |
 | `--record TEXT` | Only the traces of this record. Give its `target_id`, or its `parent_target_id` if an expansion produced the record |
 | `--json` | Print the traces as a JSON list |

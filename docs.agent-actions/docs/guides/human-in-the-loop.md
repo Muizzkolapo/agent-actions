@@ -513,6 +513,8 @@ runs do not wait for a person.
 AGAC_HITL_AUTO_APPROVE=true agac run -w my_workflow --fresh
 ```
 
+A [sandbox run](./sandbox.md) (`agac run --sandbox`) also approves each record of each HITL action, with the comment `auto-approved (sandbox)`. It writes to the sandbox output only.
+
 :::danger[WARNING]
 **This variable makes an approval that no person gave.** While the variable is
 set, **every approval gate in every workflow approves all records with no

@@ -11,6 +11,7 @@ from rich.console import Console
 from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.retry import RetryCommand, _manifest_path, _read_manifest
 from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.processing.repair_lineage import actions_below
 from agent_actions.storage import get_storage_backend
@@ -58,7 +59,9 @@ class RetryFilterCommand:
             workflow_path=str(paths.io_dir.parent), workflow_name=self.agent_name
         )
         backend.initialize()
-        manifest_file = _manifest_path(paths.io_dir / "store" / self.agent_name)
+        manifest_file = _manifest_path(
+            sandbox.store_file(paths.io_dir, self.agent_name).with_suffix("")
+        )
         manifest = _read_manifest(manifest_file)
 
         workflow = load_workflow(
@@ -184,7 +187,10 @@ class RetryFilterCommand:
         self, target: tuple[str, str], held: dict[str, Any] | None, execution_order: list[str]
     ) -> str | None:
         action, record_id = target
-        listed = f"agac dispositions -a {self.agent_name} --action {action} --quarantined"
+        listed = (
+            f"agac dispositions -a {self.agent_name} --action {action} --quarantined"
+            f"{sandbox.flag()}"
+        )
         if action not in execution_order:
             return (
                 f"Action '{action}' is not in workflow '{self.agent_name}'; its actions are "

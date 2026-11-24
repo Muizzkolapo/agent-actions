@@ -63,6 +63,7 @@ _MAX_RUNS = 16
 class _RunState:
     reported: set[tuple[str, str]] = field(default_factory=set)
     rules: dict[tuple[str, str], list[Expectation]] = field(default_factory=dict)
+    attempts: dict[str, int] = field(default_factory=dict)
 
 
 _runs: OrderedDict[str, _RunState] = OrderedDict()
@@ -70,7 +71,7 @@ _runs_lock = threading.Lock()
 
 
 def reset_runs() -> None:
-    """Forget every run: the unmet constraints it logged and the rules it read."""
+    """Forget every run: the unmet constraints it logged, the rules it read, its attempts."""
     with _runs_lock:
         _runs.clear()
 
@@ -83,6 +84,17 @@ def run_key(workflow_session_id: Any) -> str:
     from agent_actions.logging.core.manager import get_manager
 
     return f"{workflow_session_id or ''}:{get_manager().get_context('correlation_id') or ''}"
+
+
+def next_attempt(workflow_session_id: Any, identifier: str) -> int:
+    """The attempt this call is for *identifier* in the current run, from 1.
+
+    Locked: a workflow runs actions in parallel, and two calls must not read one count.
+    """
+    with _runs_lock:
+        attempts = _run_state(run_key(workflow_session_id)).attempts
+        attempts[identifier] = attempts.get(identifier, 0) + 1
+        return attempts[identifier]
 
 
 def _run_state(run: str) -> _RunState:

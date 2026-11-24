@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from agent_actions.config.defaults import DocsDefaults
+from agent_actions.config.sandbox import is_sandbox_store
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.errors.configuration import StoreFormatError
 from agent_actions.output.response.loader import SchemaLoader
@@ -121,6 +122,8 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
             continue
 
         for db_file in store_dir.glob("*.db"):
+            if is_sandbox_store(db_file):
+                continue
             workflow_name = db_file.stem
 
             try:

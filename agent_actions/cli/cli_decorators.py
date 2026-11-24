@@ -58,6 +58,33 @@ def workflow_option(
     return click.option("-w", "--workflow", "-a", name, required=required, help=help)
 
 
+SANDBOX_READ_HELP = "Read what sandbox runs (agac run --sandbox) stored, not what real runs stored"
+
+
+def sandbox_option(
+    help: str = SANDBOX_READ_HELP, note: str = "reading the sandbox output"
+) -> Callable:
+    """``--sandbox``: the command runs in sandbox mode and says so on stderr.
+
+    The mode is held on the Click context, so a group's subcommand runs in it too.
+    """
+
+    def decorator(func: Callable) -> Callable:
+        @click.option("--sandbox", is_flag=True, default=False, help=help)
+        @functools.wraps(func)
+        def wrapper(*args: Any, sandbox: bool = False, **kwargs: Any) -> Any:
+            if sandbox:
+                from agent_actions.config.sandbox import sandbox_mode
+
+                click.get_current_context().with_resource(sandbox_mode(True))
+                click.echo(f"{click.style('SANDBOX', fg='yellow', bold=True)}: {note}", err=True)
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 def requires_project(func):
     """Inject ``project_root`` kwarg. Banner only when cwd ≠ project_root
     (``📁 Project root: .`` from inside the project is just noise)."""

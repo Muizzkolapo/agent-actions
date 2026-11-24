@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
     from agent_actions.workflow.managers.manifest import ManifestManager
+from agent_actions.config import sandbox
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
@@ -166,7 +167,7 @@ class ActionRunner:
         """
         from agent_actions.errors import DependencyError
 
-        target_dir = agent_folder / "target"
+        target_dir = sandbox.run_dir(agent_folder) / "target"
 
         # Resolve all input source directories
         resolved_dirs = []
@@ -278,7 +279,7 @@ class ActionRunner:
     def _resolve_linear_directory(self, agent_folder: Path, previous_action_type: str) -> Path:
         """Resolve upstream directory for linear workflow (default behavior)."""
         # Use simple name without index prefix
-        return agent_folder / "target" / previous_action_type
+        return sandbox.run_dir(agent_folder) / "target" / previous_action_type
 
     def staged_input_fingerprint(
         self, action_name: str, action_config: ActionConfigDict
@@ -322,7 +323,7 @@ class ActionRunner:
         else:
             upstream_data_dirs = [agent_folder_path / "staging"]
 
-        output_directory = agent_folder_path / "target" / agent_type
+        output_directory = sandbox.run_dir(agent_folder_path) / "target" / agent_type
         if self.storage_backend is None:
             output_directory.mkdir(parents=True, exist_ok=True)
         return ([str(d) for d in upstream_data_dirs], str(output_directory))
@@ -366,7 +367,7 @@ class ActionRunner:
 
         if params.correlated_input is not None:
             agent_type = params.action_config["agent_type"]
-            output_directory = str(Path(agent_folder) / "target" / agent_type)
+            output_directory = str(sandbox.run_dir(Path(agent_folder)) / "target" / agent_type)
             input_directories = [output_directory] + [
                 str(d)
                 for d in self._resolve_dependencies_besides_versions(
