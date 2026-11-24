@@ -520,12 +520,12 @@ class RetryCommand:
             waiting = state_mgr.get_batch_submitted_actions(execution_order)
             self.console.print(
                 f"\n[cyan]Retry paused - batch job(s) submitted for: {', '.join(waiting)}. "
-                f"Collect them with: agac run -a {self.agent_name}[/cyan]"
+                f"Collect them with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
             )
         elif outcome is RunOutcome.PAUSED:
             self.console.print(
                 f"\n[cyan]Retry paused before every action finished. "
-                f"Continue with: agac run -a {self.agent_name}[/cyan]"
+                f"Continue with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
             )
         else:
             self.console.print("\n[green]Retry complete.[/green]")

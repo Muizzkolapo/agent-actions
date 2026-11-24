@@ -248,7 +248,7 @@ class RunCommand:
         click.echo(
             f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
             f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
-            f"to check them and continue: agac run -w {self.args.agent} --wait"
+            f"to check them and continue: agac run -w {self.args.agent}{sandbox.flag()} --wait"
         )
 
     def _run_holding_the_lock(

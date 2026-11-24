@@ -86,6 +86,8 @@ records the warning. The mock reads the rule and gives each record 2 to 5 marks
 
 **`record_limit` is on `summarize_entry` only.** As a default it caps every
 action, and then `dedupe_across_guides` and the vote see only the first marks.
+With a limit of 3, `summarize_entry` reads `e-001`, `e-002` and `e-004`; `e-003`
+is staged but not read. Remove the limit to run every entry.
 
 **`flatten_marks` synthesises its required fields.** `canonicalize_marks` emits
 `canonical_marks` as an array; `flatten_marks` reaches inside it and sets
