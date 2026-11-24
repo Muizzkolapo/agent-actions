@@ -93,7 +93,6 @@ def project(tmp_path, monkeypatch):
     monkeypatch.chdir(root)
     # The in-process CLI does not read the project's .env, and the batch client asks.
     monkeypatch.setenv("OLLAMA_API_KEY", "not-used")
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "0")
     return root
 
 

@@ -296,7 +296,7 @@ def _project(
 
 
 def _env(project: Path) -> dict[str, str]:
-    return {"ROLL_DIR": str(project), "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+    return {"ROLL_DIR": str(project)}
 
 
 def _run(project: Path, *args: str, ends_with: int) -> str:

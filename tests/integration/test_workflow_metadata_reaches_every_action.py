@@ -175,7 +175,6 @@ def _run_to_the_end(project: Path, *, ends_with: int) -> str:
             "-u",
             "tools",
             *args,
-            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
         output = result.stdout + result.stderr
         outputs.append(output)

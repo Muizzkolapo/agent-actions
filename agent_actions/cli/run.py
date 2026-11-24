@@ -17,6 +17,7 @@ from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
     sandbox_option,
+    scenario_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -78,6 +79,17 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
         finally:
             backend.close()
     return sorted(open_actions)
+
+
+def report_scenario(*, only_after_calls: bool = False) -> None:
+    """The one line that counts what the sandbox scenario did over the whole command.
+
+    With *only_after_calls*, for a command that an error stopped: no line when the mock
+    answered no call.
+    """
+    line = sandbox.scenario_summary(only_after_calls)
+    if line is not None:
+        click.echo(line)
 
 
 def check_declared_outputs(workflow: AgentWorkflow, project_root: Path | None) -> None:
@@ -196,6 +208,7 @@ class RunCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, project_root=project_root
         )
+        ended = False
         # Before anything loads, clears or submits: `--fresh` clears the store inside
         # load_workflow, so a later lock would wipe a run in progress before refusing.
         try:
@@ -206,6 +219,7 @@ class RunCommand:
                 outcome = self._run_holding_the_lock(paths, project_root)
                 if self.args.wait:
                     outcome = self._wait_for_batches(outcome, paths, project_root, started)
+                ended = True
         except ProviderQuotaStop as stop:
             report_quota_stop(stop)
             outcome = RunOutcome.QUOTA_STOP
@@ -215,6 +229,7 @@ class RunCommand:
 
                 # The request is process-wide; a later run in this process did not ask.
                 forget_refresh_request()
+            report_scenario(only_after_calls=not ended)
 
         if EXIT_CODES[outcome] != EXIT_SUCCESS:
             raise SystemExit(EXIT_CODES[outcome])
@@ -233,15 +248,18 @@ class RunCommand:
         timeout = self.args.wait_timeout
         deadline = None if timeout is None else started + timeout
         while outcome is RunOutcome.PAUSED_FOR_BATCH:
-            pause: float = self.args.poll
+            pause = self._poll_seconds()
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     self._stop_waiting(started)
                     break
                 pause = min(pause, remaining)
-            click.echo(f"Waiting {pause:g}s before checking the batch job(s) again...")
-            self._sleep(pause)
+            if pause > 0:
+                click.echo(f"Waiting {pause:g}s before checking the batch job(s) again...")
+                self._sleep(pause)
+            else:
+                click.echo("Checking the batch job(s) again...")
             if deadline is not None and time.monotonic() >= deadline:
                 self._stop_waiting(started)
                 break
@@ -252,11 +270,18 @@ class RunCommand:
             )
         return outcome
 
+    def _poll_seconds(self) -> float:
+        """Seconds between two passes: ``--poll`` when given, else the default of the run."""
+        if self.args.poll is not None:
+            return self.args.poll
+        return sandbox.wait_between_passes() if sandbox.is_active() else DEFAULT_POLL_SECONDS
+
     def _stop_waiting(self, started: float) -> None:
         click.echo(
             f"Stopped waiting after {time.monotonic() - started:.0f}s: batch "
             f"job(s) still open for: {', '.join(self._open_batches)}. Run again "
-            f"to check them and continue: agac run -w {self.args.agent}{sandbox.flag()} --wait"
+            "to check them and continue: "
+            f"agac run -w {self.args.agent}{sandbox.run_flags()} --wait"
         )
 
     def _run_holding_the_lock(
@@ -374,7 +399,7 @@ class RunCommand:
                 f"Workflow finished with failed or exhausted records in: {', '.join(partial)}. "
                 f"See them with agac dispositions -w {self.args.agent} --quarantined"
                 f"{sandbox.flag()}; repair them with agac retry -w {self.args.agent}"
-                f"{sandbox.flag()}."
+                f"{sandbox.run_flags()}."
             )
         elif outcome is RunOutcome.SUCCESS:
             # All complete prints nothing more; guard-skipped actions get the sentence.
@@ -409,6 +434,7 @@ class RunCommand:
         "and agent_io/store/<workflow>.sandbox.db"
     ),
 )
+@scenario_option()
 @click.option(
     "-u",
     "--user-code",
@@ -497,7 +523,8 @@ class RunCommand:
     metavar="SECONDS",
     help=(
         "With --wait: whole seconds between two checks of the batch job(s), at least 1 "
-        f"(default: {DEFAULT_POLL_SECONDS})"
+        f"(default: {DEFAULT_POLL_SECONDS}; with --sandbox: no wait, or up to 1 second "
+        "while the scenario holds a batch for complete_after_seconds)"
     ),
 )
 @click.option(
@@ -565,7 +592,7 @@ def run(
         rerun=rerun,
         verify_keys=verify_keys,
         wait=wait,
-        poll=DEFAULT_POLL_SECONDS if poll is None else poll,
+        poll=poll,
         wait_timeout=wait_timeout,
     )
     command = RunCommand(args)

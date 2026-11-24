@@ -168,7 +168,7 @@ def _agac(root, *args, before_collect=None):
 
     *before_collect* is called on the project before each run that collects.
     """
-    env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "sk-not-used"}
+    env = {"OPENAI_API_KEY": "sk-not-used"}
     result = run_agac(root, *args, env=env)
     for _ in range(3):
         if "run again" not in result.stdout + result.stderr:

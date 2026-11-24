@@ -903,7 +903,8 @@ and every completed reader back to pending with their answers kept
 (note_staged_records, before a repair or record limit narrows them), and
 once a complete walk ends (no file lost, no file limit, not a repair) a
 record the action holds that some run staged and this one did not loses
-its dispositions and checkpoints there and at every reader
+its dispositions, checkpoints and sandbox scenario attempt counts there and
+at every reader
 (_forget_records_no_longer_staged). A stamp without the key never differs;
 an API data source is not fingerprinted, since resolving it can fetch.
 

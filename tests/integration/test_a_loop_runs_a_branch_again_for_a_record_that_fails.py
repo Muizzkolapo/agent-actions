@@ -24,7 +24,7 @@ from tests._support.agac_cli import run_agac
 
 WORKFLOW = "loop_flow"
 RUN_MODES = pytest.mark.parametrize("run_mode", ["online", "batch"])
-ENV = {"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
+ENV = {"OPENAI_API_KEY": "sk-not-used"}
 CALLS = "calls.log"
 FAULT = "fault.json"
 

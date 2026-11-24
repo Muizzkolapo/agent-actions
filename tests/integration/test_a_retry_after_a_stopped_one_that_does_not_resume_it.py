@@ -48,9 +48,7 @@ def _stopped(tmp_path: Path, finalize: str) -> Path:
 
 
 def _try(project: Path, *args: str) -> tuple[int, str]:
-    result = run_agac(
-        project, "retry", "-a", WORKFLOW, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
-    )
+    result = run_agac(project, "retry", "-a", WORKFLOW, *args)
     return result.returncode, result.stdout + result.stderr
 
 

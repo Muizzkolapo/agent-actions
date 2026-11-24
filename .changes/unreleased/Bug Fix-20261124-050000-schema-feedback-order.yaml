@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: "The schema feedback that a repair prompt carries (`Missing required fields: ...`, the optional fields not given, `Extra fields not allowed ...`) now lists the fields in sorted order. Before, the order came from a Python set and changed in each process, so the same failed answer got a different repair prompt in each run."
+time: 2026-11-24T05:00:00Z

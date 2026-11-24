@@ -2,6 +2,10 @@
 
 Each pass is the pass a second `agac run` makes, so the batch is checked and collected by
 the code that does it today. The sleep between passes is handed in, so no test waits.
+
+Without `--poll` a real run waits the default between two passes. A sandbox run does not
+wait, since the mock answers at once; while its scenario holds each batch for a time, it
+waits that time, at most one second. A `--poll` given is used as given in both.
 """
 
 from unittest.mock import MagicMock, patch
@@ -9,9 +13,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from agent_actions.cli.args import RunCommandArgs
+from agent_actions.cli.args import DEFAULT_POLL_SECONDS, RunCommandArgs
 from agent_actions.cli.exit_codes import EXIT_PAUSED, EXIT_RECORD_FAILURES
 from agent_actions.cli.run import RunCommand, run
+from agent_actions.config import sandbox
 from agent_actions.utils.path_utils import reset_path_manager
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
@@ -240,3 +245,100 @@ def test_a_pause_with_no_open_batch_exits_4_and_says_wait_has_nothing_to_wait_fo
         "--wait has no batch to wait for: the run stopped before every action ended."
         in capsys.readouterr().out
     )
+
+
+def test_without_a_poll_a_real_run_waits_the_default_between_passes(tmp_path, capsys):
+    passes = Passes(tmp_path, OPEN, OPEN, DONE)
+
+    code = passes.run(wait=True)
+
+    assert code == 0
+    assert passes.slept == [DEFAULT_POLL_SECONDS, DEFAULT_POLL_SECONDS]
+    assert f"Waiting {DEFAULT_POLL_SECONDS}s before" in capsys.readouterr().out
+
+
+@pytest.fixture
+def in_a_sandbox(tmp_path):
+    """A sandbox run that follows the scenario written to *tmp_path*, the happy preset if none."""
+
+    def follow(scenario: str | None = None):
+        if scenario is not None:
+            (tmp_path / "sandbox.yml").write_text(scenario)
+        sandbox.load_scenario(tmp_path, {"classify": None})
+
+    with sandbox.sandbox_mode(True), sandbox.scenario_choice(None):
+        yield follow
+
+
+def test_without_a_poll_a_sandbox_run_checks_again_with_no_wait(tmp_path, capsys, in_a_sandbox):
+    in_a_sandbox()
+    passes = Passes(tmp_path, OPEN, OPEN, DONE)
+
+    code = passes.run(wait=True)
+
+    assert code == 0
+    assert len(passes.loads) == 3
+    assert passes.slept == []
+    out = capsys.readouterr().out
+    assert out.count("Checking the batch job(s) again...") == 2
+    assert "Waiting" not in out
+
+
+def test_a_poll_given_to_a_sandbox_run_is_used_as_given(tmp_path, capsys, in_a_sandbox):
+    in_a_sandbox()
+    passes = Passes(tmp_path, OPEN, OPEN, DONE)
+
+    passes.run(wait=True, poll=7)
+
+    assert passes.slept == [7, 7]
+    assert "Waiting 7s before" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("held", "waited"), [(5, 1), (1, 1), (0.25, 0.25)])
+def test_while_the_scenario_holds_a_batch_by_time_a_sandbox_run_waits_at_most_a_second(
+    tmp_path, capsys, in_a_sandbox, held, waited
+):
+    in_a_sandbox(f"batch: {{complete_after_seconds: {held}}}\n")
+    passes = Passes(tmp_path, OPEN, OPEN, OPEN, DONE)
+
+    code = passes.run(wait=True)
+
+    assert code == 0
+    assert passes.slept == [waited] * 3
+    assert capsys.readouterr().out.count(f"Waiting {waited:g}s before checking") == 3
+
+
+def test_a_scenario_that_holds_a_batch_by_status_checks_alone_adds_no_wait(tmp_path, in_a_sandbox):
+    in_a_sandbox("batch: {polls_until_complete: 3}\n")
+    passes = Passes(tmp_path, OPEN, OPEN, OPEN, DONE)
+
+    passes.run(wait=True)
+
+    assert passes.slept == []
+    assert len(passes.loads) == 4
+
+
+def test_a_sandbox_wait_with_no_pause_still_stops_at_the_timeout(tmp_path, capsys, in_a_sandbox):
+    in_a_sandbox()
+    passes = Passes(tmp_path, OPEN, OPEN, OPEN, OPEN)
+    clock = _Clock(passes, each_pass=30)
+
+    with patch("agent_actions.cli.run.time.monotonic", side_effect=lambda: clock.now):
+        code = passes.run(sleep=clock.sleep(passes), wait=True, wait_timeout=50)
+
+    assert code == EXIT_PAUSED
+    assert len(passes.loads) == 2
+    assert passes.slept == []
+    assert "Stopped waiting after 60s:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("flags", "poll"), [([], None), (["--poll", "3"], 3)])
+def test_the_command_keeps_whether_a_poll_was_given(tmp_path, monkeypatch, flags, poll):
+    (tmp_path / "agent_actions.yml").write_text("project_name: p\n")
+    monkeypatch.chdir(tmp_path)
+
+    with patch("agent_actions.cli.run.RunCommand") as command:
+        result = CliRunner().invoke(run, ["-w", "wf", "--sandbox", "--wait", *flags])
+
+    assert result.exit_code == 0, result.output
+    assert command.call_args[0][0].poll == poll

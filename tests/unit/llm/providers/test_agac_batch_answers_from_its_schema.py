@@ -60,13 +60,13 @@ def answer():
     answering, not one hand-built in its shape.
     """
 
-    def _answer(schema, prompt="Summarise the page in one sentence.", target_id="p1"):
+    def _answer(schema, prompt="Summarise the page in one sentence.", target_id="p1", page="..."):
         client = AgacBatchClient()
         tasks = client.prepare_tasks(
             [
                 {
                     "target_id": target_id,
-                    "content": {"source": {"page_content": "..."}},
+                    "content": {"source": {"page_content": page}},
                     "prompt": prompt,
                 }
             ],
@@ -117,11 +117,11 @@ class TestTheRecordCarriesTheSchemasFields:
         assert {field: type(value) for field, value in content.items()} == OTHER_TYPES
 
     def test_two_records_of_one_schema_are_answered_separately(self, answer):
-        """Seeded per record, so a batch is not one answer repeated down the file."""
-        first, _ = answer(ENVELOPE, target_id="p1")
+        """Seeded by what each record is asked, so a batch is not one answer repeated."""
+        first, _ = answer(ENVELOPE, target_id="p1", page="The tide turns twice a day.")
         AgacBatchClient._batches.clear()
         AgacBatchClient._tasks_by_batch.clear()
-        second, _ = answer(ENVELOPE, target_id="p2")
+        second, _ = answer(ENVELOPE, target_id="p2", page="A neap tide has the smallest range.")
 
         assert set(first) == set(second) == DECLARED
         assert first != second

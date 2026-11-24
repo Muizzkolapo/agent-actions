@@ -1029,8 +1029,13 @@ class FakeDataGenerator:
         prompt: str | None = None,
         attempt: int = 1,
         contract: "Contract | None" = None,
+        seed_key: str | None = None,
     ) -> dict[str, Any]:
         """An OpenAI-shaped response carrying data generated from *schema* and *contract*.
+
+        *seed_key* is what the record is asked. An answer seeded with it is the same in
+        every run; *custom_id* is a new one in each run, so it seeds only a task that
+        asks nothing.
 
         Takes the schema and prompt rather than a request to read them out of:
         the only caller is the fake batch provider answering a task it wrote
@@ -1039,11 +1044,8 @@ class FakeDataGenerator:
         """
         schema = cls.unwrap_schema(schema) if schema else None
 
-        # Set context with prompt for reproducible, prompt-aware generation
-        seed = int(
-            hashlib.md5(f"{custom_id}:{attempt}".encode(), usedforsecurity=False).hexdigest()[:8],
-            16,
-        )
+        seeded_by = seed_key or f"{custom_id}:{attempt}"
+        seed = int(hashlib.md5(seeded_by.encode(), usedforsecurity=False).hexdigest()[:8], 16)
         cls.set_context(seed=seed, prompt=prompt)
 
         if schema and contract is not None:
@@ -1108,14 +1110,19 @@ class FakeDataGenerator:
             pos += len(" or ")
 
     @classmethod
-    def generate_offered_answer(cls, shapes: list[dict[str, Any]], prompt: str) -> str:
+    def generate_offered_answer(
+        cls, shapes: list[dict[str, Any]], prompt: str, passing: bool | None = None
+    ) -> str:
         """One of the offered shapes, chosen by an RNG seeded by *prompt* alone.
 
         Each string value becomes a generated sentence. One prompt always gets one answer.
+        With *passing* set, only a shape whose ``passed`` is that value is chosen, when one is.
         """
         seed = int(hashlib.md5(prompt.encode(), usedforsecurity=False).hexdigest()[:8], 16)
         cls.set_context(seed=seed, prompt=prompt)
         rng = cls._get_rng()
+        if passing is not None:
+            shapes = [shape for shape in shapes if shape.get("passed") is passing] or shapes
         shape = rng.choice(shapes)
         answer = {
             key: cls._generate_sentence(1, rng) if isinstance(value, str) else value

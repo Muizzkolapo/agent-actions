@@ -25,7 +25,6 @@ FIXTURE = REPO / "tests" / "integration" / "fixtures" / "expectation_authors"
 DEPTH = 20_000
 LEAF = "leaf at the bottom"
 ENV = {
-    "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0",
     "OLLAMA_API_KEY": "not-used",
     "OPENAI_API_KEY": "sk-not-used",
     "AGAC_RECORD_LIMIT": "",

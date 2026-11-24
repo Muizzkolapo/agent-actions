@@ -41,7 +41,7 @@ from agent_actions.record.envelope import RecordEnvelope
 from agent_actions.record.reasons import GUARD_SKIP, SENT_ELSEWHERE
 from agent_actions.record.state import RecordState
 from agent_actions.storage.backend import DISPOSITION_FAILED
-from agent_actions.utils.constants import SCHEMA_KEY
+from agent_actions.utils.constants import RECORD_GUID_KEY, SCHEMA_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
@@ -444,6 +444,7 @@ class BatchTaskPreparator:
             "target_id": custom_id,
             "content": prepared.llm_context,
             "prompt": prepared.formatted_prompt,
+            RECORD_GUID_KEY: prepared.source_guid,
         }
         if prepared.cache_points:
             task[CACHE_POINTS_KEY] = prepared.cache_points

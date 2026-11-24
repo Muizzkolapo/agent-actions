@@ -97,7 +97,7 @@ class Project:
         return run_agac(
             self.root,
             *args,
-            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "COLUMNS": "240"},
+            env={"COLUMNS": "240"},
         )
 
     def run_to_the_end(self) -> None:

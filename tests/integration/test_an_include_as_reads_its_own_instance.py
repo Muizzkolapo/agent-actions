@@ -170,7 +170,7 @@ def _run(root: Path, *extra: str) -> str:
         "-a",
         WORKFLOW,
         *extra,
-        env={"OPENAI_API_KEY": "sk-not-used", "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
+        env={"OPENAI_API_KEY": "sk-not-used"},
     )
     output = result.stdout + result.stderr
     if result.returncode == EXIT_PAUSED:

@@ -32,7 +32,7 @@ REPO = Path(__file__).resolve().parents[2]
 EXAMPLE = REPO / "examples" / "map_reduce_fanin_check"
 WORKFLOW = "map_reduce_fanin_check"
 LOST = "gamma"
-_ENV = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "not-used"}
+_ENV = {"OPENAI_API_KEY": "not-used"}
 
 _RECAP = """
 

@@ -123,12 +123,12 @@ first stage.
 
 ### Not ported
 
-The real project also carried a batch retry-exhaustion probe. It drives failures
-through `OLLAMA_FAIL_FIRST_N`, which only the `ollama` client implements, so it
-needs a live Ollama and cannot run here. `agac-provider`'s batch client has no
-failure path at all. Porting it means giving that provider count-based injection
-mirroring the ollama one — worth doing, but it is a change to a shipped provider
-rather than a test addition.
+The real project also carried a batch retry-exhaustion probe, which drove failures
+through an Ollama-only environment variable that no longer exists. A sandbox
+scenario (`agac run --sandbox` with a `sandbox.yml`) now fails, drops or delays the
+mock batch's results per record, and
+`test_a_sandbox_scenario_scripts_the_mock.py` covers a batch retry through it; the
+probe itself is not ported.
 
 ## Running `agac` from a test
 

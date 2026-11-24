@@ -155,7 +155,6 @@ def _run_to_the_end(project: Path) -> tuple[int, str]:
             "-a",
             WORKFLOW,
             *args,
-            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
         code = result.returncode
         output += result.stdout + result.stderr

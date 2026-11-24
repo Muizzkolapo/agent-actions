@@ -235,7 +235,6 @@ class Project:
             *args,
             env={
                 "PYTHONPATH": str(self.stand_in),
-                "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0",
                 "COLUMNS": "240",
             },
         )

@@ -36,11 +36,6 @@ from agent_actions.llm.providers.ollama.client import (
     _extract_ollama_schema,
     read_json_reply,
 )
-from agent_actions.llm.providers.ollama.failure_injection import (
-    failed_batch_id_for,
-    is_injected_failed_batch,
-    should_fail_batch_record,
-)
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import BaseBatchClient, BatchResult, BatchTask
@@ -201,10 +196,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             return self._MAX_WORKERS_LIMIT
         return val
 
-    def _process_single_task(
-        self, task: dict[str, Any], idx: int, total: int
-    ) -> dict[str, Any] | None:
-        """Process one batch task. Returns result dict, or None if injection-dropped."""
+    def _process_single_task(self, task: dict[str, Any], idx: int, total: int) -> dict[str, Any]:
+        """Process one batch task into its result line."""
         custom_id = task["custom_id"]
         logger.debug("Processing request %d/%d: %s", idx + 1, total, custom_id)
 
@@ -241,10 +234,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 "format": format_param,
             }
             ollama_response = self.client.chat(**_VENDOR_PARAMS.apply(chat_kwargs, body))
-
-            if should_fail_batch_record(custom_id, idx):
-                logger.debug("[INJECTION] Simulating missing result for %s", custom_id)
-                return None
 
             return self._transform_ollama_response(
                 ollama_response,
@@ -298,10 +287,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Process batch with concurrent workers (default: 1 = sequential)."""
-        injected_failed_id = failed_batch_id_for(batch_name)
-        if injected_failed_id is not None:
-            return (injected_failed_id, "submitted")
-
         batch_id = f"batch_{uuid.uuid4().hex}"
 
         tasks: list[dict[str, Any]] = []
@@ -317,7 +302,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         with ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix="ollama_batch"
         ) as pool:
-            futures: dict[Future[dict[str, Any] | None], str] = {
+            futures: dict[Future[dict[str, Any]], str] = {
                 pool.submit(
                     contextvars.copy_context().run, self._process_single_task, task, idx, total
                 ): task["custom_id"]
@@ -326,9 +311,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             for future in as_completed(futures):
                 custom_id = futures[future]
                 try:
-                    result = future.result()
-                    if result is not None:
-                        results.append(result)
+                    results.append(future.result())
                 except Exception as e:
                     logger.error("Unexpected error processing %s: %s", custom_id, e)
 
@@ -353,8 +336,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return (batch_id, "submitted")
 
     def _fetch_status(self, batch_id: str) -> str:
-        if is_injected_failed_batch(batch_id):
-            return "failed"
         return "completed"
 
     def _normalize_status(self, raw_status: str) -> str:

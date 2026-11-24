@@ -181,7 +181,7 @@ def _project(tmp_path: Path, finalize: str) -> Path:
 
 
 def _agac(project: Path, *args: str, code: int) -> str:
-    result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+    result = run_agac(project, *args)
     output = result.stdout + result.stderr
     assert result.returncode == code, output
     return output
@@ -189,9 +189,7 @@ def _agac(project: Path, *args: str, code: int) -> str:
 
 def _run(project: Path, *args: str, ends_with: int) -> str:
     """A run, and a second one when the first paused for a batch; the last exits *ends_with*."""
-    result = run_agac(
-        project, "run", "-a", WORKFLOW, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
-    )
+    result = run_agac(project, "run", "-a", WORKFLOW, *args)
     output = result.stdout + result.stderr
     if "run again" not in output.lower():
         assert result.returncode == ends_with, output

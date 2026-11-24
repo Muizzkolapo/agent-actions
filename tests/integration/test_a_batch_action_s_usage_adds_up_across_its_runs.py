@@ -98,9 +98,7 @@ def _project(tmp_path: Path) -> Path:
 def _run_to_the_end(project: Path) -> int:
     for attempt in range(8):
         args = ("--fresh",) if attempt == 0 else ()
-        result = run_agac(
-            project, "run", "-a", WORKFLOW, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
-        )
+        result = run_agac(project, "run", "-a", WORKFLOW, *args)
         output = result.stdout + result.stderr
         if result.returncode == EXIT_PAUSED:
             assert "run again" in output, output

@@ -17,8 +17,9 @@ import logging
 import re
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import jsonschema  # type: ignore[import-untyped]
 
@@ -30,6 +31,9 @@ from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.utils import deep_json
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.jsonschema_cache import checked_validator
+
+if TYPE_CHECKING:
+    from agent_actions.llm.providers.agac.scenario import CallRules, Scenario
 
 logger = logging.getLogger(__name__)
 
@@ -429,6 +433,123 @@ class Contract:
             for _ in range(rng.randint(low, high))
         ]
 
+    def follow(
+        self,
+        scenario: Scenario,
+        rules: CallRules,
+        record: Any,
+        schema: dict[str, Any],
+        record_id: str,
+        attempt: int,
+    ) -> None:
+        """Break the rules and pin the fields the scenario asks for, on the honest *record*."""
+        if not isinstance(record, dict):
+            return
+        if scenario.breaks(self.action, record_id, attempt, rules):
+            broken = self.break_rules(
+                record,
+                schema,
+                rules.break_rules.rules,
+                lambda count: scenario.pick_rule(self.action, record_id, attempt, count),
+            )
+            scenario.count("rules_broken", broken)
+        if rules.pin:
+            self.pin(record, schema, rules.pin)
+
+    def break_rules(
+        self,
+        record: dict[str, Any],
+        schema: dict[str, Any],
+        wanted: Literal["all"] | list[str],
+        pick: Callable[[int], int],
+    ) -> int:
+        """Make the rules of the *wanted* types fail on *record*; returns how many now fail.
+
+        ``all`` is one rule, the one *pick* chooses among the error-severity rules; an
+        action with none has nothing to break. A value is kept only when the real check
+        fails on it, and one the schema accepts is preferred. A named rule type the action
+        lacks, and a rule no value breaks, is logged once per run, action and rule.
+        """
+        fields = _field_schemas(schema)
+        breakable = [
+            rule
+            for rule in self.rules
+            if rule.severity == "error" and _unmeetable(rule, fields) is None
+        ]
+        if wanted == "all":
+            # No rule to break is no fault to report: the action has none.
+            targets = [breakable[pick(len(breakable))]] if breakable else []
+            missing = []
+        else:
+            targets = [rule for rule in breakable if rule.type in wanted]
+            missing = [name for name in wanted if not any(rule.type == name for rule in targets)]
+        broken = 0
+        for rule in targets:
+            if self._break(record, rule, fields):
+                broken += 1
+            else:
+                missing.append(rule.resolved_id)
+        for name in missing:
+            self._warn_once(
+                f"break:{name}",
+                "agac-provider could not break rule '%s' on action '%s': the action has no "
+                "such error-severity rule the mock can check, or no value fails it",
+                name,
+            )
+        return broken
+
+    def _break(self, record: dict[str, Any], rule: Expectation, fields: dict[str, Any]) -> bool:
+        suite = Suite(name=f"{self.action}:break", expectations=[rule])
+        context = self.context or None
+        fallback: tuple[str, Any] | None = None
+        for name in _break_targets(rule, fields):
+            had, original = name in record, record.get(name)
+            schema = fields.get(name, {})
+            for value in _breaking_values(rule, schema, original, name):
+                record[name] = value
+                outcomes = run_suite(suite, record, context_source=context).outcomes
+                if any(not o.passed and not o.skipped for o in outcomes):
+                    if _conforms(value, schema):
+                        return True
+                    if fallback is None:
+                        fallback = (name, value)
+            if had:
+                record[name] = original
+            else:
+                record.pop(name, None)
+        if fallback is None:
+            return False
+        record[fallback[0]] = fallback[1]
+        return True
+
+    def pin(self, record: dict[str, Any], schema: dict[str, Any], values: dict[str, Any]) -> None:
+        """Set each pinned field; a value the schema or a rule refuses is kept and logged once."""
+        fields = _field_schemas(schema)
+        record.update(copy.deepcopy(values))
+        suite = Suite(name=f"{self.action}:pin", expectations=self.rules)
+        failed = run_suite(suite, record).failed if self.rules else []
+        by_id = {rule.resolved_id: rule for rule in self.rules}
+        for name, value in values.items():
+            refused = (
+                [f"schema refuses {value!r}"] if not _conforms(value, fields.get(name, {})) else []
+            )
+            refused += [o.id for o in failed if _target(by_id.get(o.id)) == name]
+            if refused:
+                self._warn_once(
+                    f"pin:{name}",
+                    "Sandbox scenario pins field '%s' of action '%s' to a value that fails: "
+                    + "; ".join(refused).replace("%", "%%"),
+                    name,
+                )
+
+    def _warn_once(self, key: str, message: str, name: str) -> None:
+        with _runs_lock:
+            reported = _run_state(run_key(self.workflow_session_id)).reported
+            if (self.action, key) in reported:
+                return
+            reported.add((self.action, key))
+        logger.warning(message, name, self.action)
+
     def _report(self, failed: list[tuple[str, str]], fields: dict[str, dict[str, Any]]) -> None:
         grouped: dict[str, list[str]] = {}
         for target, detail in failed:
@@ -468,6 +589,49 @@ def _target(rule: Expectation | None) -> str:
     if isinstance(rule.field, list):
         return ", ".join(rule.field)
     return rule.field.removesuffix(WILDCARD_SUFFIX)
+
+
+def _break_targets(rule: Expectation, fields: dict[str, dict[str, Any]]) -> list[str]:
+    """The fields whose value a rule reads: its own, or every declared one for a record rule."""
+    if isinstance(rule.field, str):
+        return [rule.field.removesuffix(WILDCARD_SUFFIX)]
+    if isinstance(rule.field, list):
+        return [name.removesuffix(WILDCARD_SUFFIX) for name in rule.field]
+    return [name for name in fields if not name.startswith("_")]
+
+
+def _breaking_values(
+    rule: Expectation, schema: dict[str, Any], current: Any, name: str
+) -> list[Any]:
+    """Values to try in a field until one fails *rule*: led by the rule's own params."""
+    rng = FakeDataGenerator._get_rng()
+    values: list[Any] = []
+    params = rule.params
+    if isinstance(params.get("pattern"), str):
+        values.append(FakeDataGenerator.from_pattern(params["pattern"]))
+    for key in ("phrases", "terms", "values"):
+        if isinstance(params.get(key), list | tuple) and params[key]:
+            values.append(" ".join(str(item) for item in params[key]))
+    for key in ("min", "max", "equals"):
+        bound = params.get(key)
+        if isinstance(bound, int | float) and not isinstance(bound, bool):
+            words = max(int(bound) + (1 if key != "min" else -1), 0)
+            values.append(FakeDataGenerator.sentence_of(words, rng) if words else "")
+            if isinstance(current, list) and current:
+                values.append((current * (words + 1))[:words])
+    if isinstance(current, str):
+        values += [f"{current} !", current.upper(), current[::-1]]
+    if isinstance(current, list):
+        values += [[], current[:1], current * 10]
+    values += ["", "x", "!!!", "zzzz zzzz", 0, -1, 10**9, 0.5, None, True, [], {}]
+    values += [
+        FakeDataGenerator.generate_from_schema(schema, 3, field_name=name) for _ in range(3)
+    ]
+    if isinstance(rule.field, str) and rule.field.endswith(WILDCARD_SUFFIX):
+        values = [[value] for value in values] + [
+            list(current or []) + [value] for value in values
+        ]
+    return values
 
 
 def _field_schemas(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:

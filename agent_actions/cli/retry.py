@@ -23,6 +23,7 @@ from agent_actions.cli.cli_decorators import (
     handles_user_errors,
     requires_project,
     sandbox_option,
+    scenario_option,
     workflow_option,
 )
 from agent_actions.cli.exit_codes import (
@@ -37,6 +38,7 @@ from agent_actions.cli.exit_codes import (
 )
 from agent_actions.cli.run import (
     check_declared_outputs,
+    report_scenario,
     start_tracked_run,
     write_declared_outputs,
 )
@@ -178,6 +180,8 @@ class RetryCommand:
         # What the last pass planned over: the workflow's actions, and its open failures.
         self._execution_order: list[str] = []
         self._open_before: frozenset[tuple[str, str]] = frozenset()
+        # Whether a pass ran the workflow to its end.
+        self._reran = False
 
     def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
@@ -197,6 +201,10 @@ class RetryCommand:
                 # Its manifest stays, as after an interrupt, so the next retry resumes it.
                 report_quota_stop(stop)
                 code = EXIT_CODES[RunOutcome.QUOTA_STOP]
+            finally:
+                # One line counts every pass. When no pass ended, it is printed only
+                # after the mock answered a call.
+                report_scenario(only_after_calls=not self._reran)
         if code != EXIT_SUCCESS:
             raise SystemExit(code)
 
@@ -519,6 +527,7 @@ class RetryCommand:
         _delete_manifest(manifest_file)
 
         self._report(outcome, state_mgr, execution_order)
+        self._reran = True
         if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
             write_declared_outputs(workflow, project_root, self.args.agent)
         return outcome
@@ -537,12 +546,12 @@ class RetryCommand:
             waiting = state_mgr.get_batch_submitted_actions(execution_order)
             self.console.print(
                 f"\n[cyan]Retry paused - batch job(s) submitted for: {', '.join(waiting)}. "
-                f"Collect them with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
+                f"Collect them with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
             )
         elif outcome is RunOutcome.PAUSED:
             self.console.print(
                 f"\n[cyan]Retry paused before every action finished. "
-                f"Continue with: agac run -a {self.agent_name}{sandbox.flag()}[/cyan]"
+                f"Continue with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
             )
         else:
             self.console.print("\n[green]Retry complete.[/green]")
@@ -954,7 +963,7 @@ class RetryCommand:
         if not unfinished:
             return
 
-        flag = sandbox.flag()
+        flag = sandbox.run_flags()
         remedy = f"Run the workflow first — agac run -a {self.agent_name}{flag} — then retry."
         if halted:
             resume = (
@@ -1464,6 +1473,7 @@ def _open_pairs(failures: dict[str, list[dict]]) -> frozenset[tuple[str, str]]:
     help="Retry the records of sandbox runs (agac run --sandbox), with the offline mock",
     note="the offline mock answers every LLM action; only sandbox output is read and written",
 )
+@scenario_option()
 @click.option(
     "--from",
     "from_action",

@@ -144,7 +144,7 @@ def _run_to_the_end(project: Path) -> str:
     outputs = []
     args = ["run", "-a", WORKFLOW, "--fresh"]
     for _ in range(4):
-        result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+        result = run_agac(project, *args)
         output = result.stdout + result.stderr
         outputs.append(output)
         assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), "\n".join(outputs)
@@ -167,9 +167,7 @@ def _dispositions(project: Path, action: str) -> list[str]:
 
 
 def _refused(project: Path, mode: str = "online") -> str:
-    result = run_agac(
-        project, "run", "-a", WORKFLOW, "--fresh", env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
-    )
+    result = run_agac(project, "run", "-a", WORKFLOW, "--fresh")
     output = result.stdout + result.stderr
     assert result.returncode != 0, output
     assert "PreFlightValidationError" in output, output

@@ -131,7 +131,7 @@ def _project(tmp_path: Path, mode: str, empty: str) -> Path:
 
 
 def _agac(project: Path, *args: str) -> tuple[int, str]:
-    result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+    result = run_agac(project, *args)
     return result.returncode, result.stdout + result.stderr
 
 

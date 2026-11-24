@@ -245,7 +245,9 @@ A `context:` reference names an upstream action and a field of its declared outp
 
 ### Testing a judge offline
 
-On `model_vendor: agac-provider`, the judge receives a verdict object. Thus you can test a judged rule with no network and no key. The mock selects `passed: true` or `passed: false` with its seeded generator. It writes a generated sentence as the `reason`. The same rule and value give the same verdict on each run. Different values get the two verdicts, so the pass path and the fail path both run. The verdict does not judge the value. It tests the connections, not the rule. Under `run_mode: batch`, the mock batch provider answers each judge request of a [judge batch](#judging-in-batch) in the same way. Its seed is not the seed of the online mock, so one value can get a different verdict in the two run modes.
+On `model_vendor: agac-provider`, the judge receives a verdict object. Thus you can test a judged rule with no network and no key. The mock selects `passed: true` or `passed: false` with its seeded generator. It writes a generated sentence as the `reason`. The same rule and value give the same verdict on each run. Different values get the two verdicts, so the pass path and the fail path both run. The verdict does not judge the value. It tests the connections, not the rule. Under `run_mode: batch`, the mock batch provider answers each judge request of a [judge batch](#judging-in-batch) in the same way, with the same seed. Thus one value gets the same verdict in the two run modes.
+
+In a [sandbox run](../../guides/sandbox.md), the scenario decides the verdict: the judge passes with the probability `judge.pass_rate`, 1.0 by default. Thus a sandbox run with no scenario file gets `passed: true` for each judged value. See [The scenario file](../../guides/sandbox.md#scenario).
 
 ### `context:` auto-injection
 

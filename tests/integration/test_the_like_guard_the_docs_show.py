@@ -92,7 +92,7 @@ def _sent(run_mode: str, condition: str, base: Path) -> list[str]:
     )
     (root / "tools" / "lookup.py").write_text(TOOL)
     args = ["run", "-a", WORKFLOW, "--fresh"]
-    env = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", "OPENAI_API_KEY": "sk-not-used"}
+    env = {"OPENAI_API_KEY": "sk-not-used"}
     for _ in range(6):
         result = run_agac(root, *args, env=env)
         output = result.stdout + result.stderr

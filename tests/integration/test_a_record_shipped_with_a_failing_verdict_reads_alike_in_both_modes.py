@@ -121,7 +121,6 @@ def _run_to_the_end(project: Path) -> str:
             "-a",
             WORKFLOW,
             *args,
-            env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
         )
         output = result.stdout + result.stderr
         assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), output

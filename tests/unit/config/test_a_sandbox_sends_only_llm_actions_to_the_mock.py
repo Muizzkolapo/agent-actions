@@ -29,13 +29,27 @@ def test_each_llm_action_goes_to_the_mock_and_keeps_its_model():
 
     mocked = sandbox.point_at_mock(configs)
 
-    assert mocked == ["extract", "untyped", "as_enum"]
+    assert mocked == {"extract": None, "untyped": None, "as_enum": None}
     assert {configs[name]["model_vendor"] for name in mocked} == {"agac-provider"}
     assert [configs[name]["model_name"] for name in mocked] == [
         "gpt-4o-mini",
         "claude-sonnet",
         "llama",
     ]
+
+
+def test_each_version_is_returned_with_its_group_s_base_name():
+    configs = {
+        "score_1": {"kind": "llm", "is_versioned_agent": True, "version_base_name": "score"},
+        "score_2": {"kind": "llm", "is_versioned_agent": True, "version_base_name": "score"},
+        "foo_2": {"kind": "llm"},
+    }
+
+    assert sandbox.point_at_mock(configs) == {
+        "score_1": "score",
+        "score_2": "score",
+        "foo_2": None,
+    }
 
 
 def test_tool_and_other_actions_are_unchanged():

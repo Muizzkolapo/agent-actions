@@ -31,7 +31,6 @@ def _agac(project: Path, *args: str) -> tuple[int, str]:
         "-a",
         WORKFLOW,
         *tools,
-        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"},
     )
     return result.returncode, " ".join((result.stdout + result.stderr).split())
 

@@ -73,6 +73,10 @@ class AgentWorkflow:
         self.metadata = load_workflow_configs(config, self.console)
         self._check_rerun_names_an_action()
         self._run_static_validation()
+        schema_service = getattr(self, "schema_service", None)
+        sandbox.check_scenario_outputs(
+            schema_service.get_all_schemas() if schema_service else {}, self.action_configs
+        )
         strip_unreachable_drops(self.action_configs)
 
         # Storage & services
@@ -82,6 +86,7 @@ class AgentWorkflow:
                 "storage_backend could not be initialized — check storage configuration.",
                 context={"component": "WorkflowCoordinator", "operation": "initialize_storage"},
             )
+        sandbox.attach_store(self.storage_backend)
         self.services, self._agent_folder = initialize_services(
             self.metadata, config, self.storage_backend, self.console
         )
@@ -227,6 +232,11 @@ class AgentWorkflow:
             self.storage_backend.clear_source_data()
         except Exception as e:
             logger.warning("Failed to clear source data: %s", e)
+
+        try:
+            sandbox.forget_attempts(self.storage_backend)
+        except Exception as e:
+            logger.warning("Failed to clear the sandbox scenario's attempt counts: %s", e)
 
         # What the cleared results cost goes with them; artefact/runs.json keeps each run's.
         try:

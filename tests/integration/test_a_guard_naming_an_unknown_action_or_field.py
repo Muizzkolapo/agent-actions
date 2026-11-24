@@ -116,7 +116,7 @@ def _run_to_the_end(project: Path) -> str:
     outputs = []
     args = ["run", "-a", WORKFLOW, "--fresh"]
     for _ in range(4):
-        result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+        result = run_agac(project, *args)
         output = result.stdout + result.stderr
         outputs.append(output)
         assert result.returncode in (EXIT_SUCCESS, EXIT_PAUSED), "\n".join(outputs)
@@ -139,7 +139,7 @@ def _consumer_dispositions(project: Path) -> list[str]:
 
 
 def _refused(project: Path, *args: str) -> str:
-    result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+    result = run_agac(project, *args)
     output = result.stdout + result.stderr
     assert result.returncode != 0, output
     store = project / "agent_workflow" / WORKFLOW / "agent_io" / "store"

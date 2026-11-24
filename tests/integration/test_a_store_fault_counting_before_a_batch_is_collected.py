@@ -52,7 +52,6 @@ def _agac(project: Path, *args: str):
         *args,
         env={
             "PYTHONPATH": str(project.parent / "pre_count_site"),
-            "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0",
         },
     )
     return result.returncode, result.stdout + result.stderr

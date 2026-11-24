@@ -181,7 +181,6 @@ def _agac(project: Path, *args: str, **faults: str) -> SimpleNamespace:
         timeout=300,
         env={
             **os.environ,
-            "AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0",
             # The checkout under test, not whichever one the interpreter has installed.
             "PYTHONPATH": str(REPO),
             **faults,

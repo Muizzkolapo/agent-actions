@@ -130,7 +130,12 @@ def test_a_batch_action_gives_its_turn_back_once_its_batch_is_sent(project, monk
     from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
     from agent_actions.storage import get_storage_backend
 
-    monkeypatch.setenv("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "3600")
+    init = AgacBatchClient.__init__
+
+    def held_open(self, polls_until_complete=None, **kwargs):
+        init(self, polls_until_complete, complete_after_seconds=3600)
+
+    monkeypatch.setattr(AgacBatchClient, "__init__", held_open)
     sent: list[str] = []
     submit = AgacBatchClient._submit_to_provider_api
 

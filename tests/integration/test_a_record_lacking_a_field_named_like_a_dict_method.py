@@ -120,7 +120,7 @@ def _run_to_the_end(project: Path, *, ends_with: int) -> str:
     outputs = []
     args = ["run", "-a", WORKFLOW, "--fresh"]
     for _ in range(4):
-        result = run_agac(project, *args, env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"})
+        result = run_agac(project, *args)
         output = result.stdout + result.stderr
         outputs.append(output)
         if "run again" not in output:

@@ -4,7 +4,8 @@ Mock Batch Client for Testing.
 Provides a simple mock batch client for testing batch processing
 without hitting real APIs. Uses schema-based fake data generation.
 
-Auto-completes after configurable time (default 5 seconds).
+A batch completes at its first status check, unless the sandbox scenario's ``batch``
+block holds it for status checks or seconds.
 """
 
 import glob
@@ -17,13 +18,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config import sandbox
 from agent_actions.config.paths import PathManagerError
+from agent_actions.llm.providers.agac import faults
 from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
     BatchTask,
 )
+from agent_actions.llm.providers.mixins import OpenAICompatibleResponseMixin
+from agent_actions.utils.constants import RECORD_GUID_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +36,12 @@ logger = logging.getLogger(__name__)
 # short enough that a record abandoned by a killed process is reclaimed by
 # the next run rather than the one after it.
 _ABANDONED_WRITE_SECONDS = 60.0
+
+
+def _task_action(task: dict[str, Any]) -> str:
+    """The action a task was prepared for, from the rules it carries."""
+    spec = task.get("contract")
+    return str(spec.get("action") or "action") if isinstance(spec, dict) else "action"
 
 
 def _shared_contracts(tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -56,24 +67,19 @@ class MockBatchState:
     poll_count: int = 0
     polls_until_complete: int = 0
     created_at: float = field(default_factory=time.time)
-    complete_after_seconds: float = 5.0  # Auto-complete after 5 seconds
+    complete_after_seconds: float = 0.0
 
 
-class AgacBatchClient(BaseBatchClient):
+class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
+    """Mock batch client for testing batch processing without real APIs.
+
+    A batch completes at its first status check. Under ``agac run --sandbox`` the
+    scenario's ``batch`` block can hold it for its first ``polls_until_complete`` status
+    checks and until ``complete_after_seconds`` have passed, drop results, or fail the
+    batch of an action it names.
     """
-    Mock batch client for testing batch processing without real APIs.
 
-    Auto-completes batches after a configurable time (default 5 seconds).
-
-    Configuration:
-    - AGAC_BATCH_COMPLETE_AFTER_SECONDS: Time before auto-complete (default: 5)
-    - AGAC_BATCH_POLLS_UNTIL_COMPLETE: Poll count before complete (default: 0, disabled)
-
-    Example:
-        # Complete after 10 seconds
-        export AGAC_BATCH_COMPLETE_AFTER_SECONDS=10
-        agac run my_workflow.yaml --run-mode batch
-    """
+    _vendor_label = faults.VENDOR
 
     # In-process cache. The durable copy is on disk, because a batch workflow
     # spans two runs by design: submitting pauses and asks to be run again, and
@@ -89,28 +95,18 @@ class AgacBatchClient(BaseBatchClient):
         complete_after_seconds: float | None = None,
         **kwargs,
     ):
-        """
-        Initialize mock client.
-
-        Args:
-            polls_until_complete: Status checks before completing (default: 0, disabled)
-            complete_after_seconds: Seconds before auto-complete (default: 5)
-            **kwargs: Ignored for backward compatibility
-        """
-        import os
-
-        # Poll-based completion (default disabled)
-        self.polls_until_complete = polls_until_complete
-        if self.polls_until_complete is None:
-            env_polls = os.environ.get("AGAC_BATCH_POLLS_UNTIL_COMPLETE", "0")
-            self.polls_until_complete = int(env_polls)
-
-        # Time-based completion (default 5 seconds)
-        self.complete_after_seconds = complete_after_seconds
-        if self.complete_after_seconds is None:
-            env_seconds = os.environ.get("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "5")
-            self.complete_after_seconds = float(env_seconds)
-
+        followed = sandbox.scenario()
+        timing = followed.batch if followed is not None else None
+        self.polls_until_complete: int = (
+            polls_until_complete
+            if polls_until_complete is not None
+            else (timing.polls_until_complete if timing else 0)
+        )
+        self.complete_after_seconds: float = (
+            complete_after_seconds
+            if complete_after_seconds is not None
+            else (timing.complete_after_seconds if timing else 0.0)
+        )
         logger.info(
             "AgacBatchClient initialized: polls=%d, complete_after=%.1fs",
             self.polls_until_complete,
@@ -126,9 +122,22 @@ class AgacBatchClient(BaseBatchClient):
     def prepare_tasks(
         self, data: list[dict[str, Any]], agent_config: dict[str, Any]
     ) -> list[dict[str, Any]]:
-        """Each task also carries the action's rules, which the answer must meet as online."""
+        """Each task also carries the action's rules, which the answer must meet as online.
+
+        Under a sandbox scenario a record's task also names the record (its ``source_guid``)
+        and holds its whole input, which the scenario reads at collect time.
+        """
         from agent_actions.llm.providers.agac.contract import Contract, observed_refs, rules_for
 
+        # Read before the base class takes keys off each row.
+        records = {
+            str(row.get("target_id", row.get("id", ""))): (
+                row.get(RECORD_GUID_KEY),
+                row.get("content"),
+            )
+            for row in data
+        }
+        followed = sandbox.scenario()
         tasks = super().prepare_tasks(data, agent_config)
         action = AgacClient._action_name(agent_config)
         spec = Contract(
@@ -140,6 +149,10 @@ class AgacBatchClient(BaseBatchClient):
         ).to_task()
         for task in tasks:
             task["contract"] = spec
+            guid, record_input = records.get(str(task.get("custom_id")), (None, None))
+            if followed is not None and isinstance(guid, str) and guid:
+                task["record"] = guid
+                task["input"] = record_input
         return tasks
 
     def format_task_for_provider(
@@ -295,28 +308,28 @@ class AgacBatchClient(BaseBatchClient):
         state.poll_count += 1
 
         elapsed = time.time() - state.created_at
-        if elapsed >= state.complete_after_seconds:
+        if state.status == "failed":
+            logger.debug("Mock batch %s failed at the provider, as the scenario asks", batch_id)
+        elif (
+            state.poll_count > state.polls_until_complete
+            and elapsed >= state.complete_after_seconds
+        ):
             state.status = "completed"
             logger.debug(
-                "Mock batch %s auto-completed after %.1fs",
-                batch_id,
-                elapsed,
-            )
-        elif state.polls_until_complete > 0 and state.poll_count >= state.polls_until_complete:
-            state.status = "completed"
-            logger.debug(
-                "Mock batch %s completed after %d polls",
+                "Mock batch %s completed at status check %d, after %.1fs",
                 batch_id,
                 state.poll_count,
+                elapsed,
             )
         else:
-            remaining = state.complete_after_seconds - elapsed
             logger.debug(
-                "Mock batch %s status: %s (poll %d, %.1fs remaining)",
+                "Mock batch %s status: %s (status check %d of %d held, %.1fs of %.1fs)",
                 batch_id,
                 state.status,
                 state.poll_count,
-                remaining,
+                state.polls_until_complete,
+                elapsed,
+                state.complete_after_seconds,
             )
 
         # A poll is state: `polls_until_complete` counts them, and a run that
@@ -347,11 +360,15 @@ class AgacBatchClient(BaseBatchClient):
         contracts = self._contracts_by_batch.get(batch_id) or {}
         lines = []
 
+        followed = sandbox.scenario()
         for task in tasks:
             custom_id = task.get("custom_id", "unknown")
 
-            # Track attempt for this custom_id (for recovery testing)
-            attempt = self._get_attempt_for_custom_id(custom_id)
+            # Stamped at submit under a scenario; any other task counts in memory.
+            stamped = task.get("attempt")
+            attempt = (
+                stamped if isinstance(stamped, int) else self._get_attempt_for_custom_id(custom_id)
+            )
 
             # A submitted task names its batch's rules by key; a prepared one holds them.
             spec = task.get("contract")
@@ -365,23 +382,50 @@ class AgacBatchClient(BaseBatchClient):
                         custom_id,
                         key,
                     )
-            # Straight off the task this client wrote, which holds both.
+            contract = Contract.from_task(spec, task.get("user_content"))
+            # A text-mode prompt that ends by offering its answer's shapes, as a side call's
+            # may (a judge's does), gets one of them, chosen as online chooses it.
+            prompt = task.get("prompt") or ""
+            text_mode = not (task.get("model_config") or {}).get("json_mode", True)
+            shapes = FakeDataGenerator.offered_answer_shapes(prompt) if text_mode else None
+
+            # A side call's task names no record; only judge.pass_rate governs it.
+            guid = task.get("record")
+            record = rules = fault = None
+            if followed is not None and contract is not None and isinstance(guid, str):
+                record_input = task.get("input")
+                record = followed.record_key(record_input, guid)
+                if followed.drops(contract.action, record, attempt):
+                    followed.count("dropped")
+                    continue
+                rules = followed.rules_for(contract.action, record_input)
+                fault = followed.error_for(contract.action, record, attempt, rules)
+
+            # Straight off the task this client wrote, which holds both. Seeded as online
+            # seeds it: by the action and what the record is asked, never by the task id.
+            asked = f"{prompt}\n{task.get('user_content') or ''}".strip()
+            action = contract.action if contract is not None else "action"
             openai_response = FakeDataGenerator.generate_openai_response(
                 custom_id,
                 task.get("schema"),
                 task.get("prompt"),
                 attempt,
-                contract=Contract.from_task(spec, task.get("user_content")),
+                contract=contract,
+                seed_key=f"{action}:{asked}" if asked else None,
             )
-            # A text-mode request that ends by offering its answer's shapes, as a side
-            # call's may (a judge's does), gets one of them, seeded by the request alone.
-            request = task.get("user_content") or ""
-            text_mode = not (task.get("model_config") or {}).get("json_mode", True)
-            shapes = FakeDataGenerator.offered_answer_shapes(request) if text_mode else None
+            message = openai_response["choices"][0]["message"]
             if shapes:
-                openai_response["choices"][0]["message"]["content"] = (
-                    FakeDataGenerator.generate_offered_answer(shapes, request)
+                passing = followed.judge_passes(action, prompt) if followed is not None else None
+                message["content"] = FakeDataGenerator.generate_offered_answer(
+                    shapes, f"{action}:{prompt}", passing
                 )
+            elif rules is not None and fault is None and followed is not None:
+                assert contract is not None and isinstance(record, str)
+                answer = json.loads(message["content"])
+                schema = task.get("schema")
+                unwrapped = FakeDataGenerator.unwrap_schema(schema) if schema else {}
+                contract.follow(followed, rules, answer, unwrapped, record, attempt)
+                message["content"] = json.dumps(answer)
 
             # Wrap in batch result format
             result = {
@@ -393,6 +437,9 @@ class AgacBatchClient(BaseBatchClient):
                 },
                 "error": None,
             }
+            if fault is not None and followed is not None:
+                followed.count("errors")
+                result = faults.batch_line(fault, result)
 
             lines.append(json.dumps(result))
 
@@ -445,13 +492,19 @@ class AgacBatchClient(BaseBatchClient):
                 if line.strip():
                     tasks.append(json.loads(line))
 
-        # Store state
+        actions = {_task_action(task) for task in tasks}
+        followed = sandbox.scenario()
+        failing = followed is not None and any(followed.fails_batch(name) for name in actions)
         state = MockBatchState(
             batch_id=batch_id,
-            status="in_progress",
-            polls_until_complete=self.polls_until_complete,  # type: ignore[arg-type]
-            complete_after_seconds=self.complete_after_seconds,  # type: ignore[arg-type]
+            status="failed" if failing else "in_progress",
+            polls_until_complete=self.polls_until_complete,
+            complete_after_seconds=self.complete_after_seconds,
         )
+        if followed is not None:
+            for task in tasks:
+                if isinstance(task.get("record"), str):
+                    task["attempt"] = followed.next_attempt(_task_action(task), task["record"])
         contracts = _shared_contracts(tasks)
         self._batches[batch_id] = state
         self._tasks_by_batch[batch_id] = tasks
@@ -466,44 +519,12 @@ class AgacBatchClient(BaseBatchClient):
 
         return batch_id, "in_progress"
 
-    def _extract_error_from_response(self, raw_response: Any) -> str | None:
-        """Check for error in response."""
-        if isinstance(raw_response, dict):
-            error = raw_response.get("error")
-            if error:
-                return str(error.get("message", error))
-        return None
-
-    def _extract_content_from_response(self, raw_response: Any) -> Any:
-        """Extract content from mock response."""
-        if isinstance(raw_response, dict):
-            response = raw_response.get("response", {})
-            body = response.get("body", {})
-            choices = body.get("choices", [])
-            if choices:
-                message = choices[0].get("message", {})
-                return message.get("content", "")
-        return ""
-
-    def _extract_metadata_from_response(self, raw_response: Any) -> dict[str, Any]:
-        """Extract metadata from response."""
-        metadata = {}
-        if isinstance(raw_response, dict):
-            response = raw_response.get("response", {})
-            body = response.get("body", {})
-            metadata["model"] = body.get("model", "agac-model")
-            choices = body.get("choices", [])
-            if choices:
-                metadata["finish_reason"] = choices[0].get("finish_reason", "stop")
-        return metadata
-
-    def _extract_usage_from_response(self, raw_response: Any) -> dict[str, Any] | None:
-        """Extract usage info from response."""
-        if isinstance(raw_response, dict):
-            response = raw_response.get("response", {})
-            body = response.get("body", {})
-            return body.get("usage")  # type: ignore[no-any-return]
-        return None
+    def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
+        """A failed line's own message, as online raises it; else the status the line holds."""
+        error = raw_response.get("error") if isinstance(raw_response, dict) else None
+        if isinstance(error, dict) and error.get("message"):
+            return str(error["message"])
+        return super()._extract_error_from_response(raw_response)
 
     # ========== Test utilities ==========
 

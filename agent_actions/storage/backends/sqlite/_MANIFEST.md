@@ -10,7 +10,7 @@ Plain mixin classes, one per concern, that `SQLiteBackend` (in `../sqlite_backen
 | `common.py` | Module | `logger` (named `agent_actions.storage.backends.sqlite_backend`, so log records keep the logger name they had before the split), `_SQL_MAX_PARAMS` (IN-list chunk size under SQLite's 999-parameter default), and `SQLiteHost`, the attributes the mixins use from `SQLiteBackend` — a `StorageBackend` subclass for the type checker only, `object` at runtime. | `logging`, `storage.backend` |
 | `codec.py` | Module | `SQLitePayloadCodecMixin`: zlib payload columns against per-`(scope, "<table>.<column>")` dictionaries in `prompt_trace_dictionary` (`_compress`, `_forget_dictionary`, `_dictionary`, `_inflate`), and their readers (`decompress_trace_text`, `payload_text`, `decode_payload` — the last two raise `SerializationError` naming the row). Base of every mixin below except metadata. | `zlib`, `utils.deep_json`, `errors.processing` |
 | `SQLitePayloadCodecMixin` | Class | Payload compression and decoding; also holds the dictionary-key constants (`_TARGET_DATA`, `_SOURCE_DATA`, `_CHECKPOINT_DATA`, `_SNAPSHOT`, `_SOURCE_SCOPE`, `_TRACE_TEXT_COLUMNS`). | — |
-| `metadata.py` | Module | `SQLiteMetadataMixin`: `workflow_metadata` key/value reads, writes and listing and deletion by a prefix matched exactly and with case (`substr`, not `LIKE`, which ignores ASCII case). | — |
+| `metadata.py` | Module | `SQLiteMetadataMixin`: `workflow_metadata` key/value reads, writes and listing and deletion by a prefix matched exactly and with case (`substr`, not `LIKE`, which ignores ASCII case). `increment_metadata(key)` adds one to an integer value (absent is 0) and returns it, in one `BEGIN IMMEDIATE` transaction (`UPDATE`, an `INSERT` when no row was there, `SELECT`), so two processes on one store never read the same count; it uses no upsert and no `RETURNING`, which SQLite before 3.24 and 3.35 does not have. | — |
 | `SQLiteMetadataMixin` | Class | `workflow_metadata` access. | — |
 | `source_data.py` | Module | `SQLiteSourceDataMixin`: `write_source` (fails loud on a blank `source_guid`, fills `repeat_of_source_guid`, `''` when the row repeats nothing, and fails loud on a value that is not a non-empty string), `read_source`, `claim_source_guid_for_run`, `list_source_files`, `source_files_for_records`, `source_guids_among`, `records_share_a_repeat_chain`, `clear_source_data`. | `errors.validation`, `utils.deep_json` |
 | `SQLiteSourceDataMixin` | Class | `source_data` access. | — |
@@ -34,6 +34,7 @@ Plain mixin classes, one per concern, that `SQLiteBackend` (in `../sqlite_backen
 | `SQLiteTargetDataMixin._write_target_raw()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `SQLiteTargetDataMixin._read_target_raw()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `SQLiteMetadataMixin._save_metadata_raw()` | `agent_io/store/{workflow_name}.db` | Writes | — |
+| `SQLiteMetadataMixin.increment_metadata()` | `agent_io/store/{workflow_name}.sandbox.db` | Reads and writes (the sandbox scenario's attempt counts) | — |
 | `SQLiteDispositionMixin.set_disposition()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `SQLiteCheckpointMixin.save_checkpoint_records()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `SQLitePromptTraceMixin.write_prompt_trace()` | `agent_io/store/{workflow_name}.db` | Writes | — |

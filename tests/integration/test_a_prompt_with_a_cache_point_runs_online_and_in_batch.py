@@ -16,7 +16,6 @@ PAGES = [
     {"page_id": "p1", "page_content": "alpha text"},
     {"page_id": "p2", "page_content": "beta text"},
 ]
-_BATCH_NOW = {"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0"}
 
 _PROJECT = """\
 default_agent_config:
@@ -118,9 +117,8 @@ def _stored_records(root: Path) -> int:
 
 @pytest.mark.parametrize("run_mode", ["online", "batch"])
 def test_the_workflow_runs_and_sends_the_prompts_it_sends_without_the_tag(tmp_path, run_mode):
-    env = _BATCH_NOW if run_mode == "batch" else None
-    marked = _run_to_the_end(_project(tmp_path / "marked", run_mode=run_mode), env)
-    plain = _run_to_the_end(_project(tmp_path / "plain", tag="", run_mode=run_mode), env)
+    marked = _run_to_the_end(_project(tmp_path / "marked", run_mode=run_mode))
+    plain = _run_to_the_end(_project(tmp_path / "plain", tag="", run_mode=run_mode))
 
     assert _stored_records(tmp_path / "marked" / "project") == len(PAGES)
     prompts = _prompts_printed(marked)

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from agent_actions.config import sandbox
 from agent_actions.errors import (
     NetworkError,
     RateLimitError,
@@ -144,7 +145,7 @@ class RetryService:
                 if is_retriable_error(e):
                     log_context = f" ({context})" if context else ""
                     if attempt < self.max_attempts:
-                        time.sleep(self._wait_before_retry(e, attempt, log_context, reason))
+                        self._wait_before_retry(e, attempt, log_context, reason)
                         continue
                     else:
                         logger.warning(
@@ -180,28 +181,32 @@ class RetryService:
 
     def _wait_before_retry(
         self, error: Exception, attempt: int, log_context: str, reason: str
-    ) -> float:
-        """The provider's Retry-After when the error carries one, capped at max_delay; else
-        backoff."""
+    ) -> None:
+        """Wait the provider's Retry-After, capped at max_delay; with none, the backoff.
+
+        A sandbox run does not wait, since its mock needs no time to recover; the log
+        names the wait that was skipped.
+        """
         prefix = f"Retry attempt {attempt}/{self.max_attempts}{log_context}: {reason} - {error}"
         context = getattr(error, "context", None)
         retry_after = context.get("retry_after") if isinstance(context, dict) else None
+        level = logging.INFO
         if retry_after is None or math.isnan(retry_after):
-            delay = min(self.base_delay * (2 ** (attempt - 1)), self.max_delay)
-            jittered = random.uniform(0, delay)
-            logger.info("%s (backoff %.2fs)", prefix, jittered)
-            return jittered
-        asked = max(float(retry_after), 0.0)
-        if asked > self.max_delay:
-            logger.warning(
-                "%s (provider asked for %.2fs; waiting max_delay %.2fs)",
-                prefix,
-                asked,
-                self.max_delay,
-            )
-            return self.max_delay
-        logger.info("%s (waiting %.2fs, as the provider's Retry-After asked)", prefix, asked)
-        return asked
+            wait = random.uniform(0, min(self.base_delay * (2 ** (attempt - 1)), self.max_delay))
+            plan = f"backoff {wait:.2f}s"
+        else:
+            asked = max(float(retry_after), 0.0)
+            wait = min(asked, self.max_delay)
+            if asked > self.max_delay:
+                level = logging.WARNING
+                plan = f"provider asked for {asked:.2f}s; waiting max_delay {wait:.2f}s"
+            else:
+                plan = f"waiting {wait:.2f}s, as the provider's Retry-After asked"
+        if sandbox.is_active():
+            logger.info("%s (%s; skipped in sandbox)", prefix, plan)
+            return
+        logger.log(level, "%s (%s)", prefix, plan)
+        time.sleep(wait)
 
 
 def create_retry_service_from_config(

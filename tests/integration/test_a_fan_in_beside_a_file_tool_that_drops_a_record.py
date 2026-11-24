@@ -261,7 +261,7 @@ def _run(root: Path, *args: str, env: dict[str, str] | None = None):
         "-a",
         WORKFLOW,
         *args,
-        env={"AGAC_BATCH_COMPLETE_AFTER_SECONDS": "0", **(env or {})},
+        env={**(env or {})},
     )
 
 

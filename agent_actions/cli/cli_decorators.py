@@ -85,6 +85,33 @@ def sandbox_option(
     return decorator
 
 
+def scenario_option() -> Callable:
+    """``--scenario``: the faults the sandbox mock follows; it needs ``--sandbox`` above it."""
+
+    def decorator(func: Callable) -> Callable:
+        @click.option(
+            "--scenario",
+            default=None,
+            metavar="happy|chaos|PATH",
+            help=(
+                "With --sandbox: the scenario the mock follows, a preset or a scenario file. "
+                "Default: sandbox.yml at the project root, else happy"
+            ),
+        )
+        @functools.wraps(func)
+        def wrapper(*args: Any, scenario: str | None = None, **kwargs: Any) -> Any:
+            from agent_actions.config import sandbox
+
+            if scenario is not None and not sandbox.is_active():
+                raise click.UsageError("--scenario needs --sandbox")
+            click.get_current_context().with_resource(sandbox.scenario_choice(scenario))
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 def requires_project(func):
     """Inject ``project_root`` kwarg. Banner only when cwd ≠ project_root
     (``📁 Project root: .`` from inside the project is just noise)."""
