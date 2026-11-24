@@ -215,12 +215,10 @@ def _resolve_api(
 
     cache_file = cache_dir / f"{agent_name}.json"
 
-    if not cache_file.exists():
-        _fetch_api_data(config, cache_file)
-    else:
+    if _holds_a_staging_document(cache_file):
         logger.info("Using cached API data: %s (from %s)", cache_file, config.url)
-
-    _bring_cache_to_the_document_rule(cache_dir)
+    else:
+        _fetch_api_data(config, cache_file)
 
     return DataSourceResolutionResult(directories=[cache_dir])
 
@@ -235,63 +233,23 @@ def _as_staging_document(payload: Any) -> list[Any]:
     return payload if isinstance(payload, list) else [payload]
 
 
-def _would_be_staged(item: Path, cache_dir: Path) -> bool:
-    """Whether a cache entry is one the walk would stage, so rewriting it is worth it.
-
-    Deliberately NOT the runner's `should_skip_item`, which this once claimed to mirror and
-    has diverged from since #1026. That one answers every exclusion before touching the
-    filesystem and lets `is_file()` raise, because a stat failure there is a lost record the
-    run must report. Here it is a cache file: one that cannot be stat-ed is simply not worth
-    rewriting, and raising would fail a run over an entry that was never going to be staged.
-    `processed_paths` and `file_type_filter` are the runner's too, and do not apply to a
-    cache directory.
-    """
-    return (
-        item.is_file()
-        and not item.name.startswith(".")
-        and "batch" not in item.relative_to(cache_dir).parts
-    )
-
-
-def _bring_cache_to_the_document_rule(cache_dir: Path) -> None:
-    """Rewrite cache entries written before a response was stored as a document.
-
-    The walk stages more than the entry this action fetched — a renamed action or
-    a sibling start node leaves others beside it — and it stages less than every
-    file here. Reading one it skips would fail a run over something that was never
-    going to be staged.
-    """
-    for cache_file in sorted(cache_dir.rglob("*.json")):
-        if not _would_be_staged(cache_file, cache_dir):
-            continue
-        try:
-            cached = deep_json.loads(cache_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as e:
-            raise ConfigurationError(
-                f"Cached API data at {cache_file} cannot be read: {e}. "
-                "Delete the _remote_cache/api/ directory to fetch it again.",
-                context={"cache_file": str(cache_file), "operation": "read_api_cache"},
-                cause=e,
-            ) from e
-
-        if isinstance(cached, list):
-            continue
-
-        logger.info(
-            "Rewriting cached API data as a staging document: %s (held %s)",
+def _holds_a_staging_document(cache_file: Path) -> bool:
+    """Whether *cache_file* holds what a fetch writes; a file that does not is fetched again."""
+    if not cache_file.is_file():
+        return False
+    try:
+        cached = deep_json.loads(cache_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        logger.warning("Cached API data at %s cannot be read, fetching it again: %s", cache_file, e)
+        return False
+    if not isinstance(cached, list):
+        logger.warning(
+            "Cached API data at %s holds a %s, not a list, fetching it again",
             cache_file,
             type(cached).__name__,
         )
-        try:
-            atomic_json_write(cache_file, _as_staging_document(cached), fsync=False)
-        except OSError as e:
-            raise ConfigurationError(
-                f"Cached API data at {cache_file} predates the staging document rule "
-                f"and cannot be rewritten: {e}. "
-                "Delete the _remote_cache/api/ directory to fetch it again.",
-                context={"cache_file": str(cache_file), "operation": "rewrite_api_cache"},
-                cause=e,
-            ) from e
+        return False
+    return True
 
 
 def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
