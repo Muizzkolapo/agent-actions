@@ -2,7 +2,8 @@
 
 The attempt changes what the mock writes, and a repair round is the next attempt of the
 same record. Two records of one action each start at the first attempt, and the first
-repair of each is its second attempt, whatever the order of the calls.
+repair of each is its second attempt, whatever the order of the calls. Each run counts
+again from the first attempt.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from agent_actions.config.types import RunMode
 from agent_actions.expectations.service import ExpectationService
 from agent_actions.expectations.types import Suite
 from agent_actions.llm.providers.agac.client import AgacClient
+from agent_actions.logging.core.manager import get_manager
 from agent_actions.processing.invocation.online import OnlineStrategy
 
 SCHEMA = {
@@ -43,8 +45,8 @@ def attempts(monkeypatch):
     seen: list[int] = []
     original = AgacClient._get_attempt_count.__func__
 
-    def spy(cls, identifier):
-        attempt = original(cls, identifier)
+    def spy(cls, *args):
+        attempt = original(cls, *args)
         seen.append(attempt)
         return attempt
 
@@ -102,3 +104,23 @@ def test_a_record_answered_again_goes_on_from_its_own_count(attempts):
     _answer("r1")
 
     assert attempts == [1, 2, 1, 2, 3, 4]
+
+
+@pytest.fixture
+def new_run():
+    """Start a run as the coordinator does: a new event id for the run."""
+    manager = get_manager()
+    previous = manager.get_context("correlation_id")
+    yield lambda run_id: manager.set_context(correlation_id=run_id)
+    manager.set_context(correlation_id=previous)
+
+
+def test_each_run_starts_every_record_at_the_first_attempt(attempts, new_run):
+    new_run("run-1")
+    _answer("r1")
+    _answer("r2")
+    new_run("run-2")
+    _answer("r1")
+    _answer("r2")
+
+    assert attempts == [1, 2, 1, 2, 1, 2, 1, 2]

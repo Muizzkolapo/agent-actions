@@ -34,7 +34,7 @@ A workflow that declares `outputs:` does not write its database tables in a sand
 
 The mock makes each record from the schema of the action. It also reads the expectation rules of the action, so a record usually passes them. See [Testing rules with the mock provider](../reference/validation/expectations.md#testing-rules-with-the-mock-provider) for the rules that the mock meets. An `llm_judge` rule gets a verdict as [Testing a judge offline](../reference/validation/expectations.md#testing-a-judge-offline) tells.
 
-The mock counts the attempts of each record separately. A repair round is the next attempt of its record.
+The mock counts the attempts of each record separately. A repair round is the next attempt of its record. Each run, a retry included, starts each record at the first attempt.
 
 ## Separate Output
 

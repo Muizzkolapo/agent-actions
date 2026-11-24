@@ -7,7 +7,6 @@ without real API calls. Generates realistic data based on schema and prompts.
 
 import json
 import logging
-import threading
 import time
 import uuid
 from typing import Any, ClassVar
@@ -53,14 +52,9 @@ class AgacClient(BaseClient):
         "optional_fields": [],
     }
 
-    # Class-level tracking of attempts per ID
-    _attempt_counts: dict[str, int] = {}
-    _attempt_lock = threading.Lock()
-
     @classmethod
     def reset(cls):
         """Reset attempt tracking (useful between tests)."""
-        cls._attempt_counts.clear()
         FakeDataGenerator.set_context()  # Reset generator context too
         from agent_actions.llm.providers.agac.contract import reset_runs
 
@@ -68,15 +62,17 @@ class AgacClient(BaseClient):
         logger.debug("AgacClient state reset")
 
     @classmethod
-    def _get_attempt_count(cls, identifier: str) -> int:
-        """How many times this action has been called for this record.
+    def _get_attempt_count(cls, identifier: str, agent_config: Any = None) -> int:
+        """How many times this action has been called for this record in this run.
 
-        Locked because a workflow runs actions in parallel: without it two
-        concurrent calls read the same count and one attempt is lost.
+        Each run counts from 1 again: the run, not the process, is what a repair belongs to.
         """
-        with cls._attempt_lock:
-            cls._attempt_counts[identifier] = cls._attempt_counts.get(identifier, 0) + 1
-            return cls._attempt_counts[identifier]
+        from agent_actions.llm.providers.agac.contract import next_attempt
+
+        session = (
+            agent_config.get("workflow_session_id") if isinstance(agent_config, dict) else None
+        )
+        return next_attempt(session, identifier)
 
     @staticmethod
     def get_api_key(agent_config: dict[str, Any]) -> str | None:
@@ -154,7 +150,7 @@ class AgacClient(BaseClient):
         # for one record, and a shared counter would hand them attempt 1, 2 and
         # 3 in whatever order they happened to arrive.
         identifier = f"{action}:{AgacClient._extract_identifier(agent_config, context_data)}"
-        attempt = AgacClient._get_attempt_count(identifier)
+        attempt = AgacClient._get_attempt_count(identifier, agent_config)
         prompt = AgacClient._extract_prompt(prompt_config)
         # Seeds the generator. The action name makes sibling versions of one
         # prompt answer differently, as a vote needs; the record's guid is left
@@ -238,7 +234,7 @@ class AgacClient(BaseClient):
         # for one record, and a shared counter would hand them attempt 1, 2 and
         # 3 in whatever order they happened to arrive.
         identifier = f"{action}:{AgacClient._extract_identifier(agent_config, context_data)}"
-        attempt = AgacClient._get_attempt_count(identifier)
+        attempt = AgacClient._get_attempt_count(identifier, agent_config)
         prompt = AgacClient._extract_prompt(prompt_config)
         # Seeds the generator. The action name makes sibling versions of one
         # prompt answer differently, as a vote needs; the record's guid is left
