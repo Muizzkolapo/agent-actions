@@ -452,7 +452,9 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
         backend.save_metadata(f"batch_context:{ACTION}:gone.json#0123456789ab:000000", "{}")
         backend.save_metadata(f"batch_context:{ACTION}:gone.json.bak#parts", "{}")
 
-        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json", "gone.json.bak")]))
+        process_files(
+            _runner(backend), _params([_staged(tmp_path, "pages.json", "gone.json.bak")])
+        )
 
         assert _metadata(backend) == ([f"batch_context:{ACTION}:gone.json.bak#parts"], [])
         assert _held(backend) == ["gone.json.bak", "pages.json"]
