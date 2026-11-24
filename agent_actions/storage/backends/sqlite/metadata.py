@@ -43,34 +43,29 @@ class SQLiteMetadataMixin(SQLiteHost):
             self.connection.commit()
             return cursor.rowcount > 0
 
-    @staticmethod
-    def _escape_like(prefix: str) -> str:
-        """Escape SQL LIKE wildcards (`%`, `_`, `\\`) so the prefix is literal."""
-        return prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
     def delete_metadata_prefix(self, prefix: str) -> int:
-        """Delete all metadata keys starting with `prefix`. Returns count deleted.
+        """Delete all metadata keys that start with `prefix`. Returns count deleted.
 
-        `prefix` is treated literally — SQL LIKE wildcards (`%`, `_`) are escaped.
+        The match is exact and case-sensitive: no character of `prefix` is a wildcard.
         """
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "DELETE FROM workflow_metadata WHERE key LIKE ? ESCAPE '\\'",
-                (self._escape_like(prefix) + "%",),
+                "DELETE FROM workflow_metadata WHERE substr(key, 1, ?) = ?",
+                (len(prefix), prefix),
             )
             self.connection.commit()
             return cursor.rowcount
 
     def list_metadata_prefix(self, prefix: str) -> list[str]:
-        """Return all metadata keys starting with `prefix`, sorted lexically.
+        """Return all metadata keys that start with `prefix`, sorted lexically.
 
-        `prefix` is treated literally — SQL LIKE wildcards (`%`, `_`) are escaped.
+        The match is exact and case-sensitive: no character of `prefix` is a wildcard.
         """
         with self._lock:
             cursor = self.connection.cursor()
             cursor.execute(
-                "SELECT key FROM workflow_metadata WHERE key LIKE ? ESCAPE '\\' ORDER BY key",
-                (self._escape_like(prefix) + "%",),
+                "SELECT key FROM workflow_metadata WHERE substr(key, 1, ?) = ? ORDER BY key",
+                (len(prefix), prefix),
             )
             return [row["key"] for row in cursor.fetchall()]

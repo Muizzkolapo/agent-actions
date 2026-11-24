@@ -23,6 +23,8 @@ from agent_actions.cli.exit_codes import (
 from agent_actions.cli.retry import RetryCommand
 from agent_actions.errors import ProviderQuotaStop
 
+pytestmark = pytest.mark.usefixtures("a_store_exists")
+
 CLEAN, PARTIAL = RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES
 
 

@@ -188,6 +188,13 @@ reason that no answer reached it. The reason tells you where to look. The reason
 
 When no record is stuck, the command reports `No quarantined records found.`
 
+## Errors
+
+| Message | Cause |
+|---------|-------|
+| `No store for workflow '<name>' at <path>. Has it been run?` | The workflow did not run. Thus it has no store. The command exits 1 and creates no store. With `--json`, stdout is empty: the message goes to stderr. With `--sandbox`, `<path>` is the sandbox store, `agent_io/store/<name>.sandbox.db`. |
+| `--json prints the counts, so it takes no --quarantined. ...` | You gave `--json` with `--quarantined`. The command exits 2. |
+
 :::note[Run from Anywhere]
 You can run this command from any subdirectory in your project.
 :::

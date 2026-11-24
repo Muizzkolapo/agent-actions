@@ -311,7 +311,17 @@ anything is collected. A file that failed to process was reached and keeps its r
 walk deletes nothing when a file limit stopped it with files left (a file it never opened
 keeps what the last run put there, on purpose), when it lost an entry (a directory it
 could not list, a file it could not stat, an upstream listing or stored file it could not
-read: it cannot say which inputs are gone), or under a repair. A version merge's walk is
+read: it cannot say which inputs are gone), or under a repair. A deleted file's batch
+state goes before its rows, each file on its own (`_forget_batch_state_of_files_gone`):
+its context map by its key's `#` prefix, recorded inputs, no-input mark and recovery
+state, then each registry entry once the provider's local record of its batch is
+released. The rows always go: a walk does not come back to a file it deleted, and rows
+left behind would feed the actions below while the action reads as complete. Batch state
+that a failure (or a release that fails) keeps stays, with a warning that names it and
+says that `agac clean --all` or `--fresh` removes it; a file whose batch is still owed
+keeps its batch state for a collect pass. The prefix match (`list_metadata_prefix`,
+`delete_metadata_prefix`) is exact and case-sensitive, so `item.json`'s cleanup takes
+nothing of `Item.json`. A version merge's walk is
 the merged input the correlator hands it (`FileProcessParams.correlated_input`), one entry
 per file a version source lists, a file every version holds empty among them as an empty
 one, so the merge writes that file empty as any reader would. The merge's other
@@ -861,10 +871,16 @@ Stamped beside it, each compared on its own (_edits_since):
     udf_source_hash      (_compute_udf_source_hash: the source_digest each
                           tool and UDF guard registered with; "" with
                           neither, None, never compared, if not loaded)
+    schema_options_hash  (_compute_schema_options_hash: "" with no options)
 
-Do not add a key to _compute_action_config_hash: every stored digest would
-change and every completed action of every workflow would be named as edited.
-Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
+Add a new part to _READS_STAMPS, not to _compute_action_config_hash, so that
+an edit names the part. Every stamp writer records each part, so a stamp
+without one names that part as edited. Adding a part therefore also needs a
+bump of StorageBackend._STORAGE_FORMAT_VERSION: no stamp written before
+holds the new part, so without the bump every completed action of every
+existing store reads as edited. The bump makes such a store refused until
+`agac clean --all` removes it.
+
 The model is not in the hash: _edits_since compares model_name and
 model_vendor on their own, so a model change is named as a model edit.
 
