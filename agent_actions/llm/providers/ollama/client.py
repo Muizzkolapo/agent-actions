@@ -37,9 +37,6 @@ from agent_actions.llm.providers.generation_params import (
     request_timeout_kwargs,
     sdk_keyword_params,
 )
-from agent_actions.llm.providers.ollama.failure_injection import (
-    maybe_inject_online_failure,
-)
 from agent_actions.logging.core.manager import fire_event
 from agent_actions.logging.events import LLMRequestEvent
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
@@ -215,7 +212,6 @@ def _call_ollama_json(
 
     latency_ms = (time.perf_counter() - start_time) * 1000
     ResponseBuilder.record_usage_and_event(response, vendor_slug, model, latency_ms, request_id)
-    maybe_inject_online_failure(model, vendor_slug=vendor_slug)
 
     content = response.message.content
     done_reason = getattr(response, "done_reason", None)
@@ -277,7 +273,6 @@ def _call_ollama_non_json(
 
     latency_ms = (time.perf_counter() - start_time) * 1000
     ResponseBuilder.record_usage_and_event(response, vendor_slug, model, latency_ms, request_id)
-    maybe_inject_online_failure(model, vendor_slug=vendor_slug)
 
     done_reason = getattr(response, "done_reason", None)
     if not response.message.content and is_truncated(done_reason):

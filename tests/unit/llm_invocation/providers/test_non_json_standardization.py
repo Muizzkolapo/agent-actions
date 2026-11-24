@@ -514,12 +514,10 @@ class TestOllamaTokenCounts:
     )
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
     def test_extracts_token_counts(
         self,
         mock_get_client,
-        mock_inject,
         mock_fire,
         mock_rb_fire,
         method,
@@ -554,9 +552,8 @@ class TestOllamaTokenCounts:
         assert event.total_tokens == total_tokens
 
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_missing_token_attrs_default_to_zero(self, mock_get_client, mock_inject, mock_fire):
+    def test_missing_token_attrs_default_to_zero(self, mock_get_client, mock_fire):
         from agent_actions.llm.providers.ollama.client import OllamaLocalClient
 
         mock_response = MagicMock(spec=["message"])
@@ -941,11 +938,8 @@ class TestOllamaTopPStopForwarding:
     """Ollama maps top_p → options.top_p, stop → options.stop (as list)."""
 
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
-    def test_call_non_json_options_include_top_p_and_stop(
-        self, mock_get_client, mock_inject, mock_fire
-    ):
+    def test_call_non_json_options_include_top_p_and_stop(self, mock_get_client, mock_fire):
         from agent_actions.llm.providers.ollama.client import OllamaLocalClient
 
         config = {"model_name": "llama3", "top_p": 0.9, "stop": "\\n"}
@@ -1025,12 +1019,10 @@ class TestOllamaCountsItsUsage:
     @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
     def test_a_call_is_counted_with_its_tokens(
         self,
         mock_get_client,
-        mock_inject,
         mock_fire,
         _mock_rb_fire,
         mock_set_usage,
@@ -1066,10 +1058,9 @@ class TestOllamaCountsItsUsage:
     @patch("agent_actions.output.response.response_builder.record_usage")
     @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
-    @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client._build_ollama_client")
     def test_a_call_that_reports_no_tokens_is_still_counted(
-        self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
+        self, mock_get_client, mock_fire, _mock_rb_fire, mock_set_usage
     ):
         from agent_actions.llm.providers.ollama.client import OllamaLocalClient
 
