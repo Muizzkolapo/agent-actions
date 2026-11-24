@@ -773,8 +773,8 @@ class TestMetadataDeletion:
         backend._save_metadata_raw("some_key", "value")
         assert backend.list_metadata_prefix("nomatch:") == []
 
-    def test_prefix_helpers_escape_like_wildcards(self, backend):
-        """`_` and `%` in the prefix must NOT act as LIKE wildcards."""
+    def test_prefix_helpers_take_wildcards_literally(self, backend):
+        """`_` and `%` in the prefix are not wildcards."""
         backend._save_metadata_raw("batch_registry:alpha", "ok")
         backend._save_metadata_raw("batchXregistry:beta", "trap")
         backend._save_metadata_raw("batch%registry:gamma", "trap")
@@ -785,6 +785,40 @@ class TestMetadataDeletion:
         assert deleted == 1
         assert backend.load_metadata("batchXregistry:beta") == "trap"
         assert backend.load_metadata("batch%registry:gamma") == "trap"
+
+    def test_a_prefix_matches_case(self, backend):
+        """A file name that differs only in case is another file."""
+        backend._save_metadata_raw("batch_context:act:Item.json#parts", "new")
+        backend._save_metadata_raw("batch_context:act:item.json#parts", "old")
+
+        assert backend.list_metadata_prefix("batch_context:act:Item.json#") == [
+            "batch_context:act:Item.json#parts"
+        ]
+        assert backend.delete_metadata_prefix("batch_context:act:Item.json#") == 1
+        assert backend.load_metadata("batch_context:act:item.json#parts") == "old"
+
+    @pytest.mark.parametrize("prefix", ["a_b:", "a%b:", "a\\b:", "a[b]:", "a*b:", "a?b:"])
+    def test_every_character_of_a_prefix_is_literal(self, backend, prefix):
+        """No character is a wildcard or an escape, under LIKE or GLOB."""
+        traps = ["ab:1", "aXb:1", "aXXb:1", "a\\\\b:1", "A" + prefix[1:] + "1"]
+        for key in [prefix + "1", *traps]:
+            backend._save_metadata_raw(key, key)
+
+        assert backend.list_metadata_prefix(prefix) == [prefix + "1"]
+        assert backend.delete_metadata_prefix(prefix) == 1
+        assert [backend.load_metadata(key) for key in traps] == traps
+
+    def test_clear_batch_state_leaves_an_action_whose_name_differs_only_in_case(self, backend):
+        prefixes = ("recovery_state", "batch_context", "batch_inputs", "batch_no_input")
+        for action in ("Act", "act"):
+            for prefix in prefixes:
+                backend._save_metadata_raw(f"{prefix}:{action}:f.json", action)
+
+        backend.clear_batch_state("Act")
+
+        for prefix in prefixes:
+            assert backend.load_metadata(f"{prefix}:Act:f.json") is None
+            assert backend.load_metadata(f"{prefix}:act:f.json") == "act"
 
     def test_clear_batch_state_removes_all_batch_keys(self, backend):
         """clear_batch_state wipes registry, recovery, context and input keys."""
