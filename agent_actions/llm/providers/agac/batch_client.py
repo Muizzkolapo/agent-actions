@@ -401,13 +401,20 @@ class AgacBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 rules = followed.rules_for(contract.action, record_input)
                 fault = followed.error_for(contract.action, record, attempt, rules)
 
-            # Straight off the task this client wrote, which holds both.
+            # Straight off the task this client wrote, which holds both. Seeded as online
+            # seeds it: by the action and what the record is asked, never by the task id.
+            asked = f"{prompt}\n{task.get('user_content') or ''}".strip()
+            action = contract.action if contract is not None else "action"
             openai_response = FakeDataGenerator.generate_openai_response(
-                custom_id, task.get("schema"), task.get("prompt"), attempt, contract=contract
+                custom_id,
+                task.get("schema"),
+                task.get("prompt"),
+                attempt,
+                contract=contract,
+                seed_key=f"{action}:{asked}" if asked else None,
             )
             message = openai_response["choices"][0]["message"]
             if shapes:
-                action = contract.action if contract is not None else "action"
                 passing = followed.judge_passes(action, prompt) if followed is not None else None
                 message["content"] = FakeDataGenerator.generate_offered_answer(
                     shapes, f"{action}:{prompt}", passing

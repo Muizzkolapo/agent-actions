@@ -1013,8 +1013,13 @@ class FakeDataGenerator:
         prompt: str | None = None,
         attempt: int = 1,
         contract: "Contract | None" = None,
+        seed_key: str | None = None,
     ) -> dict[str, Any]:
         """An OpenAI-shaped response carrying data generated from *schema* and *contract*.
+
+        *seed_key* is what the record is asked. An answer seeded with it is the same in
+        every run; *custom_id* is a new one in each run, so it seeds only a task that
+        asks nothing.
 
         Takes the schema and prompt rather than a request to read them out of:
         the only caller is the fake batch provider answering a task it wrote
@@ -1023,11 +1028,8 @@ class FakeDataGenerator:
         """
         schema = cls.unwrap_schema(schema) if schema else None
 
-        # Set context with prompt for reproducible, prompt-aware generation
-        seed = int(
-            hashlib.md5(f"{custom_id}:{attempt}".encode(), usedforsecurity=False).hexdigest()[:8],
-            16,
-        )
+        seeded_by = seed_key or f"{custom_id}:{attempt}"
+        seed = int(hashlib.md5(seeded_by.encode(), usedforsecurity=False).hexdigest()[:8], 16)
         cls.set_context(seed=seed, prompt=prompt)
 
         if schema and contract is not None:
