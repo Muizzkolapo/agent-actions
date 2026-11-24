@@ -17,6 +17,7 @@ from agent_actions.utils.constants import DEFAULT_ACTION_KIND, MODEL_VENDOR_KEY
 SANDBOX_VENDOR = "agac-provider"
 SANDBOX_DIR = "sandbox"
 STATUS_FILE_NAME = ".agent_status.json"
+SANDBOX_STORE_SUFFIX = ".sandbox.db"
 # Set on a HITL action's config: the review approves every record with no human.
 AUTO_APPROVE_KEY = "_sandbox_auto_approve"
 
@@ -48,8 +49,13 @@ def status_file(io_dir: Path) -> Path:
 
 
 def store_file(io_dir: Path, workflow_name: str) -> Path:
-    suffix = ".sandbox.db" if _active else ".db"
+    suffix = SANDBOX_STORE_SUFFIX if _active else ".db"
     return io_dir / "store" / f"{workflow_name}{suffix}"
+
+
+def is_sandbox_store(path: Path) -> bool:
+    """True when *path* is a store ``store_file`` names for a sandbox run."""
+    return path.name.endswith(SANDBOX_STORE_SUFFIX)
 
 
 def point_at_mock(action_configs: dict[str, dict[str, Any]]) -> list[str]:
