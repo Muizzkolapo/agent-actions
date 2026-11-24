@@ -137,7 +137,9 @@ def _one_row_per_key(
         row_key = tuple(row[position] for position in positions)
         held = kept.setdefault(row_key, row)
         if held != row:
-            shown = ", ".join(f"{name}={value!r}" for name, value in zip(key, row_key, strict=True))
+            shown = ", ".join(
+                f"{name}={value!r}" for name, value in zip(key, row_key, strict=True)
+            )
             raise ConfigurationError(
                 f"Two records of {output.action} share the key of {table} ({shown}), and "
                 f"a {output.mode.value} keeps one row a key. Set 'key' to columns that tell "

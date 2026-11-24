@@ -72,6 +72,7 @@ def is_in_top_level_block(lines: list[str], current_line: int, key: str) -> bool
         line = lines[i]
         if line and not line[0].isspace() and not line.startswith("#"):
             return (
-                i != current_line and re.match(rf"^{re.escape(key)}:\s*(?:#.*)?$", line) is not None
+                i != current_line
+                and re.match(rf"^{re.escape(key)}:\s*(?:#.*)?$", line) is not None
             )
     return False
