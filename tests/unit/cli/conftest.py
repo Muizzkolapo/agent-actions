@@ -34,6 +34,13 @@ def make_mock_backend(dispositions: dict[str, list[dict]] | None = None):
 
 
 @pytest.fixture
+def a_store_exists(monkeypatch):
+    """For a retry test that stands in for the store: the check that one exists passes."""
+    monkeypatch.setattr("agent_actions.cli.retry.refuse_without_a_store", lambda *_: None)
+    monkeypatch.setattr("agent_actions.cli.retry_filter.refuse_without_a_store", lambda *_: None)
+
+
+@pytest.fixture
 def isolated_user_tools():
     """Undo what running a project's tools registers, so the next project discovers afresh.
 

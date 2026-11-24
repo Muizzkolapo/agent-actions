@@ -17,7 +17,7 @@ from agent_actions.utils.limits import (
     record_indices_to_process,
     slice_observation,
 )
-from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
+from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies, config_in_force
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 from agent_actions.workflow.runner_file_processing import (
     _file_limit_reached,
@@ -1138,22 +1138,22 @@ class TestALimitAcrossTheBatchPause:
 
         assert stamp["file_limit"] == 9
 
-    def test_a_batch_submitted_before_the_limits_were_stamped_is_grandfathered(self, executor):
-        """State written by an earlier version carries no limit key at all.
-        Reading its absence as 'no limit' would make the next run see a change
-        and re-submit the whole batch, so an absent key is answered from this
-        run instead — the same grandfathering the model keys get."""
+    def test_a_key_the_submission_did_not_write_is_not_written_by_the_collecting_run(
+        self, executor
+    ):
+        """Every submission writes each key, so one missing was removed by hand: the next run
+        reads it as a change, not as what the collecting run was asked for."""
         executor.deps.state_manager.get_status_details.return_value = {
             "batch_submitted_at": "2026-01-01T00:00:00"
         }
 
         stamp = executor._completion_metadata("act", {"file_limit": 2}, keep_stored=True)
 
-        assert stamp["file_limit"] == 2
+        assert "file_limit" not in stamp
 
-    def test_a_submission_that_stamped_no_limit_is_not_grandfathered(self, executor):
-        """The control: a present key holding None is a real answer from a run
-        that was bounded by nothing, not missing state."""
+    def test_a_submission_that_stamped_no_limit_keeps_it(self, executor):
+        """A present key holding None is a real answer from a run that was bounded by
+        nothing."""
         executor.deps.state_manager.get_status_details.return_value = {
             "record_limit": None,
             "file_limit": None,
@@ -1193,13 +1193,21 @@ class TestAFileLimitMeetingAConfigChange:
         [
             pytest.param(
                 {"file_limit": 1, "prompt": "new"},
-                {"record_limit": None, "file_limit": 1, "config_hash": "stale"},
+                {
+                    "record_limit": None,
+                    "file_limit": 1,
+                    **config_in_force({"file_limit": 1, "prompt": "old"}),
+                },
                 "action config (prompt/schema/guard/routing)",
                 id="config_change",
             ),
             pytest.param(
                 {"file_limit": 2, "model_name": "new-model"},
-                {"record_limit": None, "file_limit": 2, "model_name": "old-model"},
+                {
+                    "record_limit": None,
+                    "file_limit": 2,
+                    **config_in_force({"file_limit": 2, "model_name": "old-model"}),
+                },
                 "model",
                 id="model_change",
             ),
@@ -1219,7 +1227,10 @@ class TestAFileLimitMeetingAConfigChange:
 
     def test_a_file_limit_change_alone_resets_and_says_nothing(self, executor, caplog):
         status, said = self._next_run(
-            executor, caplog, {"file_limit": 1}, {"record_limit": None, "file_limit": 5}
+            executor,
+            caplog,
+            {"file_limit": 1},
+            {"record_limit": None, "file_limit": 5, **config_in_force({"file_limit": 1})},
         )
 
         assert status == ActionStatus.PENDING

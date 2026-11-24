@@ -11,6 +11,7 @@ from agent_actions.workflow.executor import (
     ActionExecutor,
     ExecutorDependencies,
     _compute_action_config_hash,
+    config_in_force,
 )
 from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
 
@@ -162,9 +163,8 @@ class TestConfigChangeInvalidation:
         state_mgr = ActionStateManager(status_file, ["action_a"])
 
         old_config = {"prompt": "X", "record_limit": 10}
-        old_hash = _compute_action_config_hash(old_config)
         state_mgr.update_status(
-            "action_a", ActionStatus.COMPLETED, record_limit=10, config_hash=old_hash
+            "action_a", ActionStatus.COMPLETED, record_limit=10, **config_in_force(old_config)
         )
 
         new_config = {"prompt": "Y", "record_limit": 10}
@@ -378,7 +378,7 @@ class TestAResetReachesEveryActionThatReadsWhatItWrites:
         state_mgr = ActionStateManager(tmp_path / "status.json", list(configs))
         for name, config in configs.items():
             status = (statuses or {}).get(name, ActionStatus.COMPLETED)
-            state_mgr.update_status(name, status, config_hash=_compute_action_config_hash(config))
+            state_mgr.update_status(name, status, **config_in_force(config))
             backend.set_disposition(name, "r1", DISPOSITION_SUCCESS)
             backend.save_metadata(f"batch_inputs:{name}:page.json", "[]")
         action_runner = MagicMock()

@@ -1,8 +1,4 @@
-"""An edit to `schema_options` is reported as an edit, as an edit to the scope is.
-
-Its stamp is None for an action with no options, so a stamp left before this key existed
-stays valid and no action without options reads as edited.
-"""
+"""An edit to `schema_options` is reported as an edit, as an edit to the scope is."""
 
 from __future__ import annotations
 
@@ -32,7 +28,10 @@ def test_the_same_option_list_is_not_an_edit():
     )
 
 
-def test_an_action_without_options_carries_no_options_stamp():
-    assert (
-        config_in_force({"prompt": "p", "schema": {"x": "string"}})["schema_options_hash"] is None
-    )
+def test_options_added_to_an_action_without_them_are_an_edit():
+    stamp = config_in_force(BASE)
+
+    assert config_in_force(BASE)["schema_options_hash"] == ""
+    assert edits_since_its_work_began(
+        {"answered_under": stamp}, {**BASE, "schema_options": ["a"]}
+    ) == ["schema options"]

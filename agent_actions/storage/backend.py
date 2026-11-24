@@ -441,11 +441,17 @@ class StorageBackend(ABC):
         raise NotImplementedError(f"{type(self).__name__} must implement delete_metadata()")
 
     def delete_metadata_prefix(self, prefix: str) -> int:
-        """Delete all metadata keys starting with prefix. Returns count deleted."""
+        """Delete all metadata keys that start with `prefix`, matched exactly and with case.
+
+        Returns the count deleted.
+        """
         raise NotImplementedError(f"{type(self).__name__} must implement delete_metadata_prefix()")
 
     def list_metadata_prefix(self, prefix: str) -> list[str]:
-        """Return all metadata keys starting with `prefix`, sorted lexically."""
+        """Return all metadata keys that start with `prefix`, matched exactly and with case.
+
+        Sorted lexically.
+        """
         raise NotImplementedError(f"{type(self).__name__} must implement list_metadata_prefix()")
 
     def _joinable_identities(self, action_name: str, relative_path: str) -> set[str]:

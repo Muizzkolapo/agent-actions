@@ -12,8 +12,13 @@ from agent_actions.workflow.executor import (
     ActionExecutor,
     ExecutorDependencies,
     _compute_action_config_hash,
+    config_in_force,
 )
-from agent_actions.workflow.managers.state import ActionStateManager, ActionStatus
+from agent_actions.workflow.managers.state import (
+    ANSWERS_UNDER_MORE_THAN_ONE_CONFIG,
+    ActionStateManager,
+    ActionStatus,
+)
 
 NAMES = ["split", "define", "grade"]
 
@@ -86,9 +91,7 @@ def test_a_retry_says_so_for_the_edited_action_it_is_about_to_re_run(tmp_path, c
     and the records it did not name still hold what the old config wrote."""
     config = {"prompt": "X", "model": "m"}
     state = ActionStateManager(tmp_path / "status.json", ["split"])
-    state.update_status(
-        "split", ActionStatus.COMPLETED, config_hash=_compute_action_config_hash(config)
-    )
+    state.update_status("split", ActionStatus.COMPLETED, **config_in_force(config))
     state.update_status("split", ActionStatus.PENDING)
     runner = MagicMock()
     runner.retried_records = frozenset({"r1"})
@@ -130,8 +133,7 @@ def _executor(tmp_path, configs, retried=frozenset(), **stamp):
         state.update_status(
             name,
             ActionStatus.COMPLETED,
-            config_hash=_compute_action_config_hash(config),
-            **stamp,
+            **{**config_in_force(config), **stamp},
         )
     runner = MagicMock()
     runner.retried_records = retried
@@ -196,3 +198,26 @@ def test_a_declared_reader_is_still_reset_when_the_rest_cannot_be_inferred(tmp_p
     executor.reopen_with_readers("split")
 
     assert state.get_status("define") == ActionStatus.PENDING
+
+
+def test_a_rerun_under_a_file_limit_of_an_action_that_never_completed_marks_no_mixed_answers(
+    tmp_path,
+):
+    """It holds no completion stamp, so nothing it holds was answered under another config."""
+    configs = {"split": {**CHAIN["split"], "file_limit": 1}}
+    executor, state = _executor(tmp_path, configs)
+    state.action_status["split"] = {"status": ActionStatus.FAILED.value}
+
+    executor.rerun(["split"])
+
+    assert ANSWERS_UNDER_MORE_THAN_ONE_CONFIG not in state.get_status_details("split")
+
+
+def test_a_rerun_under_a_file_limit_of_an_edited_action_marks_mixed_answers(tmp_path):
+    """The files the walk does not reach keep the answers of the other config."""
+    configs = {"split": {**CHAIN["split"], "file_limit": 1}}
+    executor, state = _executor(tmp_path, configs, config_hash="before the edit")
+
+    executor.rerun(["split"])
+
+    assert state.get_status_details("split")[ANSWERS_UNDER_MORE_THAN_ONE_CONFIG] is True
