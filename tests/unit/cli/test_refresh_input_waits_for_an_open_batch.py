@@ -12,6 +12,7 @@ import click
 import pytest
 
 from agent_actions.cli.args import RunCommandArgs
+from agent_actions.cli.exit_codes import RunOutcome
 from agent_actions.cli.run import RunCommand, batches_still_open
 from agent_actions.input.loaders import database_source
 
@@ -59,3 +60,25 @@ def test_a_fresh_run_discards_the_batches_so_it_may_refresh(tmp_path):
 
 def test_a_project_never_run_has_no_open_batch(tmp_path):
     assert batches_still_open(tmp_path / "agent_io", "wf") == []
+
+
+def test_the_refresh_request_ends_with_the_run_that_asked(tmp_path, monkeypatch):
+    # The request is process-wide: a later run in the same process did not ask.
+    io_dir = _io(tmp_path, {"first": "completed"})
+    command = _command()
+    monkeypatch.setattr(
+        "agent_actions.cli.run.ProjectPathsFactory.create_project_paths",
+        lambda *args, **kwargs: SimpleNamespace(io_dir=io_dir),
+    )
+    seen = []
+
+    def run(paths, project_root):
+        seen.append(database_source._refresh_requested)
+        return RunOutcome.SUCCESS
+
+    monkeypatch.setattr(command, "_run_holding_the_lock", run)
+
+    command.execute()
+
+    assert seen == [True]
+    assert not database_source._refresh_requested

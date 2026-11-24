@@ -98,17 +98,39 @@ def test_an_output_merges_on_the_record_identity_unless_told_otherwise(connector
     ]
 
 
-def test_two_records_sharing_a_key_leave_the_last_one_stored(connector):
+@pytest.mark.parametrize("mode", [WriteMode.MERGE, WriteMode.APPEND])
+def test_two_records_sharing_a_key_are_refused_before_a_row_is_written(connector, mode):
+    # An expansion stores several records under one source_guid, the default key.
+    store = _Stored([_record("g1", {"item": "a"}), _record("g1", {"item": "b"})])
+
+    with pytest.raises(ConfigurationError, match="Two records of grade share the key of grades"):
+        write_output(store, _output(mode=mode), connector)
+
+    assert list(connector.read("SELECT name FROM sqlite_master WHERE name = 'grades'")) == []
+
+
+def test_a_key_that_tells_the_records_apart_writes_them_all(connector):
     store = _Stored(
         [
-            _record("old", {"score": 1}, source={"id": 7}),
-            _record("new", {"score": 5}, source={"id": 7}),
+            _record("g1", {"item": "a"}, source={"id": 1}),
+            _record("g1", {"item": "b"}, source={"id": 2}),
         ]
     )
 
-    write_output(store, _output(carry=["id"], key=["id"]), connector)
+    assert write_output(store, _output(carry=["id"], key=["id"]), connector) == 2
 
-    assert _held(connector) == [{"source_guid": "new", "id": 7, "score": 5}]
+
+def test_a_record_stored_twice_alike_is_written_once(connector):
+    store = _Stored([_record("g1", {"score": 4}), _record("g1", {"score": 4})])
+
+    assert write_output(store, _output(), connector) == 1
+    assert _held(connector) == [{"source_guid": "g1", "score": 4}]
+
+
+def test_a_replace_writes_every_record_of_a_shared_key(connector):
+    store = _Stored([_record("g1", {"item": "a"}), _record("g1", {"item": "b"})])
+
+    assert write_output(store, _output(mode=WriteMode.REPLACE), connector) == 2
 
 
 def test_a_key_the_rows_do_not_hold_is_refused(connector):

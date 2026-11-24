@@ -12,6 +12,7 @@ from agent_actions.cli.cli_decorators import (
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.connections.export import write_outputs
+from agent_actions.storage.run_lock import hold_run_lock
 from agent_actions.utils.project_root import find_project_root
 
 
@@ -29,17 +30,20 @@ def export(agent: str, action: str | None, project_root: Path | None = None) -> 
     paths = ProjectPathsFactory.create_project_paths(
         name, agent, auto_create=False, project_root=project_root
     )
-    loaded = load_workflow(name, paths, project_root, sends_requests=False, read_only=True)
-    declared = (loaded.config.manager.user_config or {}).get("outputs")
-    if not declared:
-        raise click.ClickException(f"Workflow '{name}' declares no outputs")
-    root = project_root or find_project_root(str(paths.current_dir)) or paths.current_dir
-    written = write_outputs(
-        loaded.storage_backend,
-        declared,
-        root,
-        actions=list(loaded.execution_order),
-        only_action=action,
-    )
+    # A run or retry in progress is still storing records: a table written now
+    # would hold part of them, and a replace would drop the rest.
+    with hold_run_lock(paths.io_dir, name):
+        loaded = load_workflow(name, paths, project_root, sends_requests=False, read_only=True)
+        declared = (loaded.config.manager.user_config or {}).get("outputs")
+        if not declared:
+            raise click.ClickException(f"Workflow '{name}' declares no outputs")
+        root = project_root or find_project_root(str(paths.current_dir)) or paths.current_dir
+        written = write_outputs(
+            loaded.storage_backend,
+            declared,
+            root,
+            actions=list(loaded.execution_order),
+            only_action=action,
+        )
     for table, count in written.items():
         click.echo(f"Wrote {count} rows to {table}")

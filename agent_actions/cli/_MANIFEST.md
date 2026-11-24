@@ -184,5 +184,5 @@
 | `llm` | outbound | Invokes Cleaner for clean command and batch CLI |
 | `tooling` | outbound | Generates docs and tracks run results |
 | `connections` | outbound | `run` writes the declared `outputs:` tables when a run ends and `export` writes them again, through `connections.export.write_outputs`; `retry` writes them after a repair |
-| `input` | outbound | `run --refresh-input` drops the database snapshots with `input.loaders.database_source.drop_database_snapshots` |
+| `input` | outbound | `run --refresh-input` has each database snapshot read again with `input.loaders.database_source.request_refresh` (the snapshot is kept until the new read finishes), and `forget_refresh_request` when the run ends |
 | `processing` | outbound | `retry` asks `answered_by_repair` and `found_by_repair` what its re-run reached; `expect` reads `bypasses_expectations` |

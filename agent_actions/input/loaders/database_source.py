@@ -88,6 +88,17 @@ def snapshot_needs_reading(snapshot_dir: Path) -> bool:
         return _refresh_requested and snapshot_dir not in _refreshed
 
 
+def replaces_a_snapshot(snapshot_dir: Path) -> bool:
+    """Whether reading *snapshot_dir* would remove a snapshot the action already has."""
+    fingerprint_dir = snapshot_dir.parent
+    if snapshot_dir.exists() or not fingerprint_dir.parent.is_dir():
+        return False
+    return any(
+        sibling != fingerprint_dir and sibling.is_dir()
+        for sibling in fingerprint_dir.parent.iterdir()
+    )
+
+
 def snapshot_query(
     connector: Connector, query: str, snapshot_dir: Path, files: int = DEFAULT_SNAPSHOT_FILES
 ) -> int:

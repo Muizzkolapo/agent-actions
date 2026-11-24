@@ -33,6 +33,9 @@ class BigqueryConnector(DbApiConnector):
     """
 
     kind = "bigquery"
+    driver = "google.cloud.bigquery"
+    # One load job for the write: each is counted against the table's daily load quota.
+    write_batch = None
 
     dialect = Dialect(
         quote="`",
@@ -44,6 +47,8 @@ class BigqueryConnector(DbApiConnector):
         },
         untyped="STRING",
         text_cast="STRING",
+        # BigQuery's limit on the parameters of one query, so a merge sends few deletes.
+        max_params=10000,
     )
 
     def __init__(self, settings: BigquerySettings, project_root: Path) -> None:

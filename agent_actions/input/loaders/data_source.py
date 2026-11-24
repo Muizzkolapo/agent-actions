@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -19,6 +20,7 @@ from agent_actions.input.loaders.database_source import (
     DEFAULT_SNAPSHOT_FILES,
     REMOTE_CACHE_DIR,
     refuse_a_statement_that_writes,
+    replaces_a_snapshot,
     snapshot_directory,
     snapshot_fingerprint,
     snapshot_needs_reading,
@@ -303,13 +305,19 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
 
 
 def _resolve_database(
-    config: DataSourceConfig, agent_folder: Path, agent_name: str, project_root: Path | None
+    config: DataSourceConfig,
+    agent_folder: Path,
+    agent_name: str,
+    project_root: Path | None,
+    has_open_batch: Callable[[str], bool] | None = None,
 ) -> DataSourceResolutionResult:
     """Resolve a database data source -- read the query once and keep its rows on disk.
 
     A snapshot is kept per action, query, file count and connection settings (a
     ``${NAME}`` setting by its value, a credential by its name), so changing any
-    of them reads again. ``agac run --refresh-input`` reads it again too.
+    of them reads again. ``agac run --refresh-input`` reads it again too. A change
+    that would replace the snapshot while *has_open_batch* says the action's batch
+    is open is refused: the batch answers the rows it was sent.
     """
     if not config.connection or not config.sql or not config.sql.strip():
         raise ConfigurationError(
@@ -331,6 +339,18 @@ def _resolve_database(
     if not snapshot_needs_reading(snapshot_dir):
         logger.info("Using the stored snapshot of '%s': %s", config.connection, snapshot_dir)
         return DataSourceResolutionResult(directories=[snapshot_dir])
+    if (
+        has_open_batch is not None
+        and replaces_a_snapshot(snapshot_dir)
+        and has_open_batch(agent_name)
+    ):
+        raise ConfigurationError(
+            f"The database source of '{agent_name}' changed (its sql, files or connection "
+            "settings), but a batch is still open for it, and reading the query again "
+            "would forget the rows the batch is answering. Put the source back until the "
+            "batch is collected, or run with --fresh to discard the batch",
+            context={"action": agent_name, "connection": config.connection},
+        )
 
     with open_connection(config.connection, root, read_only=True) as connector:
         snapshot_query(connector, config.sql, snapshot_dir, config.files)
@@ -347,11 +367,14 @@ def resolve_start_node_data_source(
     data_source: Any,
     agent_name: str,
     project_root: Path | None = None,
+    has_open_batch: Callable[[str], bool] | None = None,
 ) -> DataSourceResolutionResult:
     """Resolve the data source for a start node.
 
     Single entry point for data source resolution. Falls back to
     ``agent_folder / "staging"`` when data_source is missing, empty, or None.
+    *has_open_batch* tells whether an action's batch is still open; a database
+    source refuses to replace its snapshot under one.
     """
     if not data_source:
         return _resolve_staging(agent_folder)
@@ -368,7 +391,7 @@ def resolve_start_node_data_source(
         return _resolve_api(config, agent_folder, agent_name)
 
     if config.type == DataSourceType.DATABASE:
-        return _resolve_database(config, agent_folder, agent_name, project_root)
+        return _resolve_database(config, agent_folder, agent_name, project_root, has_open_batch)
 
     raise ConfigurationError(
         f"Unsupported data source type: {config.type}",

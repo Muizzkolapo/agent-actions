@@ -64,7 +64,7 @@ A `path` or `keyfile` is relative to the project. `bigquery` without a
 |------|----------------------------|-------|
 | `sqlite`, `duckdb`, `postgres`, `redshift` | Yes, table creation included | |
 | `mysql`, `snowflake` | Rows yes; a `CREATE TABLE` commits at once | A first write that fails leaves the new table behind, empty |
-| `bigquery`, `databricks` | No | Rows are added by a load job on `bigquery`. A write that stops partway is put right by writing again |
+| `bigquery`, `databricks` | No | On `bigquery` a write adds its rows in one load job, so it counts once against the table's daily load quota. A write that stops partway is put right by writing again |
 
 `snowflake` names are quoted in upper case, the name Snowflake gives an
 unquoted one, so a table made by hand is found and a column named like a
@@ -128,7 +128,9 @@ agac run -a my_workflow --refresh-input
 The new rows replace the snapshot only once they are all read, so a refresh
 that fails leaves the snapshot there was. `--refresh-input` is refused, before
 anything else happens, while a batch is still open, since the batch answers the
-rows it was sent.
+rows it was sent. So is a change to the query, the file count or the connection's
+settings while the start action's batch is open: put it back until the batch is
+collected, or run with `--fresh`.
 
 A record's identity is its content, so after a refresh:
 
@@ -195,16 +197,21 @@ the `source_guid` text. Keep keys to ids and text; a timestamp or a fraction may
 not read back as the same text.
 
 `merge` and `append` refuse a row with no value for its key, before anything is
-written. `merge` never removes a row. With the default key, a source row that changes
+written. They also refuse two different records sharing a key, since the table would
+keep one and lose the other: an action that stores several records for one source row
+(an expansion) shares the default key, so carry a field that tells them apart and set
+`key` to it, or use `replace`. A record stored twice alike is written once. `merge` never removes a row. With the default key, a source row that changes
 gets a new `source_guid`, so the table keeps both versions. Set `key` to the
 row's own identifier (carried from the source) to have the new version replace
 the old one, or use `replace` to mirror the store.
 
 ### When tables are written
 
-The outputs are checked before any action runs: an output naming an action the
-workflow does not run, or a connection the project does not declare, stops the
-run at once. Tables are written when `agac run` or `agac retry` finishes with
+The outputs are checked before any action runs, and `agac retry` checks them
+before it clears anything. An output naming an action the workflow does not run, a
+connection the project does not declare or whose driver is not installed, a table,
+`key` or `carry` name that is not a plain name, or a table another output writes on
+the same connection stops the run at once. Tables are written when `agac run` or `agac retry` finishes with
 every action complete. If the write fails, the results are still in the store. Write them
 again, without calling a model, with:
 
@@ -213,4 +220,6 @@ agac export -w my_workflow
 agac export -w my_workflow -A classify_ticket    # one action's table
 ```
 
-`-A` must name an action that has an output.
+`-A` must name an action that has an output. An export waits for no run: while
+`agac run` or `agac retry` holds the workflow, it is refused, since the results are
+still being stored.
