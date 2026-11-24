@@ -138,7 +138,7 @@ data_source config value
        +-- {type: "api", url: "https://...", headers: {...}}     --> fetch + cache
 ```
 
-API responses are cached by fingerprint (SHA-256 of url + query + headers) under `_remote_cache/api/`. Delete the cache directory to force a refresh.
+API responses are cached by fingerprint (SHA-256 of url + query + headers) under `_remote_cache/api/<fingerprint>/data/<action>.json`, as a list of records: a response that is not a list is cached as a list of one. A cache file that does not hold a list is fetched again and overwritten. Delete the cache directory to force a refresh.
 
 ---
 
