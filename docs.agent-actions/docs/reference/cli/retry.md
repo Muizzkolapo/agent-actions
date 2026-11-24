@@ -14,7 +14,7 @@ agac retry -w <workflow-name> [options]
 
 A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or another retry of the workflow is in progress, the retry exits 1 with `Another run of workflow '<workflow>' is in progress`. `--filter` also takes the lock, because `--filter` rewrites dispositions, stored rows, the status file and the retry manifest. `--dry-run` writes nothing and does not take the lock.
 
-A retry uses the same [exit codes](./run.md#exit-codes) as a run. The code is `0` when no action holds a failed or exhausted record. The code is `1` when an action failed. The code is `3` when a failed or exhausted record remains. The code is `4` when the retry submitted a batch, or stopped before every action ended. The code is `0` when there is nothing to retry, and for `--dry-run` and `--filter`.
+A retry uses the same [exit codes](./run.md#exit-codes) as a run. The code is `0` when no action holds a failed or exhausted record. The code is `1` when an action failed. The code is `3` when a failed or exhausted record remains. The code is `4` when the retry submitted a batch, or stopped before every action ended. The code is `0` when there is nothing to retry, and for `--dry-run` and `--filter`. The code is `1` when the workflow has no store, because it did not run. This is also true with `--dry-run`, `--filter` and `--all`. See [Errors](#errors).
 
 The code is `5` when a provider answers that its [quota is at its limit](./run.md#quota-stop). The retry stops in the same way as
 [an interrupted retry](#when-a-retry-is-interrupted). After you add credits, run the retry again. The retry
@@ -750,6 +750,14 @@ record. Thus the command marks these records failed. They do not join the repair
 asked for. To retry them, run `agac retry` again.
 
 With `--dry-run`, the command reports the same figures and writes nothing.
+
+## Errors
+
+| Message | Cause |
+|---------|-------|
+| `No store for workflow '<name>' at <path>. Has it been run?` | The workflow did not run. Thus it has no store, and there is nothing to retry or filter. The command exits 1 and creates no store. With `--sandbox`, `<path>` is the sandbox store, `agent_io/store/<name>.sandbox.db`. Thus a workflow that has only a real run has no store for `--sandbox`. |
+| `Another run of workflow '<workflow>' is in progress` | A run or another retry of the workflow holds the lock. See [`run`](./run.md#concurrent-runs). |
+| `Nothing was filtered: ...` | A `--filter` record is not a failed record of that action. See [Exclude a record permanently](#keep-a-record-out-for-good). |
 
 :::note[Run from Anywhere]
 You can run this command from any subdirectory of your project.

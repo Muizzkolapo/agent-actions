@@ -23,6 +23,7 @@ from agent_actions.cli.cli_decorators import (
 )
 from agent_actions.cli.renderers.whole_table import print_whole
 from agent_actions.cli.workflow_loader import load_workflow
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.record.reasons import (
     EXPECTATIONS_FAILED,
@@ -151,7 +152,7 @@ class DispositionsCommand:
         )
 
         # Before the workflow loads: loading it opens the store, which creates the file.
-        db_path = paths.io_dir / "store" / f"{self.agent_name}.db"
+        db_path = sandbox.store_file(paths.io_dir, self.agent_name)
         if not db_path.exists():
             raise click.ClickException(
                 f"No store for workflow '{self.agent_name}' at {db_path}. Has it been run?"

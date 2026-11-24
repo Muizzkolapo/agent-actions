@@ -9,7 +9,8 @@ body: >-
   file's batch state: its batch registry entries, context map, recorded inputs and
   recovery state. A file whose batch is still owed keeps that state, with a warning, for a
   collect pass to read.
-  `agac dispositions` and `agac retry` (also with `--dry-run` or `--filter`) refuse a
-  workflow that has no store with "No store for workflow ...", and create no store file.
-  `agac dispositions` reads the store read-only.
+  `agac dispositions` and `agac retry` (also with `--dry-run`, `--all` or `--filter`) refuse
+  a workflow that has no store with "No store for workflow ...", exit 1 and create no store
+  file. With `--sandbox` the store is `<workflow>.sandbox.db`. `agac dispositions` reads the
+  store read-only.
 time: 2026-11-24T02:00:00.000000+00:00

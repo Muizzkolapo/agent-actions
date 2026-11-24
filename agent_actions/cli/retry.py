@@ -78,7 +78,7 @@ def refuse_without_a_store(paths: ProjectPaths, workflow_name: str) -> None:
     Opening the store creates the file, and a workflow that has not run holds nothing
     to retry or filter.
     """
-    db_path = paths.io_dir / "store" / f"{workflow_name}.db"
+    db_path = sandbox.store_file(paths.io_dir, workflow_name)
     if not db_path.exists():
         raise click.ClickException(
             f"No store for workflow '{workflow_name}' at {db_path}. Has it been run?"
