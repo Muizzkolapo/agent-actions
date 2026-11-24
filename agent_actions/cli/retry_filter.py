@@ -187,7 +187,10 @@ class RetryFilterCommand:
         self, target: tuple[str, str], held: dict[str, Any] | None, execution_order: list[str]
     ) -> str | None:
         action, record_id = target
-        listed = f"agac dispositions -a {self.agent_name} --action {action} --quarantined"
+        listed = (
+            f"agac dispositions -a {self.agent_name} --action {action} --quarantined"
+            f"{sandbox.flag()}"
+        )
         if action not in execution_order:
             return (
                 f"Action '{action}' is not in workflow '{self.agent_name}'; its actions are "

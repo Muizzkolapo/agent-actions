@@ -364,8 +364,9 @@ class RunCommand:
             partial = actions_with_record_failures(state_mgr, execution_order)
             click.echo(
                 f"Workflow finished with failed or exhausted records in: {', '.join(partial)}. "
-                f"See them with agac dispositions -w {self.args.agent} --quarantined; "
-                f"repair them with agac retry -w {self.args.agent}."
+                f"See them with agac dispositions -w {self.args.agent} --quarantined"
+                f"{sandbox.flag()}; repair them with agac retry -w {self.args.agent}"
+                f"{sandbox.flag()}."
             )
         elif outcome is RunOutcome.SUCCESS:
             # All complete prints nothing more; guard-skipped actions get the sentence.

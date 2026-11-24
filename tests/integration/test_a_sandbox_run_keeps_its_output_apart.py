@@ -275,6 +275,9 @@ def test_retry_repairs_the_failed_records_of_a_sandbox_run(openai_project):
     )
     assert failed.returncode != 0
     assert _counts(openai_project, "shout")["failed"] == 1
+    hint = " ".join((failed.stdout + failed.stderr).split())
+    assert f"agac dispositions -w {WORKFLOW} --quarantined --sandbox" in hint, hint
+    assert f"agac retry -w {WORKFLOW} --sandbox" in hint, hint
     marker.unlink()
 
     _agac(openai_project, "retry", "-w", WORKFLOW, "--sandbox")

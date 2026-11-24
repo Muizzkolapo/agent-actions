@@ -39,6 +39,11 @@ def sandbox_mode(enabled: bool) -> Iterator[None]:
         _active = previous
 
 
+def flag() -> str:
+    """The flag a printed command needs to act on this run's output: ``" --sandbox"`` or ``""``."""
+    return " --sandbox" if _active else ""
+
+
 def run_dir(io_dir: Path) -> Path:
     """The folder that holds a run's ``target/``, ``logs/`` and status file."""
     return io_dir / SANDBOX_DIR if _active else io_dir
