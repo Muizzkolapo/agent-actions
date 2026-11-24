@@ -150,7 +150,7 @@ The command removes these items:
 - `agent_io/target/`: Your generated output (with `--target` or `--all`).
 - `agent_io/staging/` and the durable store: Your input data and run history (only with `--all`).
 - The output of [sandbox runs](../../guides/sandbox.md): `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db` (only with `--all`). `--target` does not remove `agent_io/sandbox/target/`.
-- The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data.
+- The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data. The real store and the sandbox store each name the batches of their own runs, and the command reclaims the data of each.
 
 **Options:**
 | Option | Description |

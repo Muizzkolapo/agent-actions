@@ -49,42 +49,55 @@ class Cleaner:
 
         The store about to be wiped holds the registry, and the registry is what
         names a batch: afterwards nothing could find these records to reclaim,
-        and each holds the payload its batch was submitted with.
+        and each holds the payload its batch was submitted with. The real store and
+        the sandbox store each name their own batches, so each is read on its own.
 
         Reported and not raised if it fails; False says the store has to stay,
         since removing it would put the payload out of reach of every command.
         """
-        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
         from agent_actions.llm.providers.local_batch_records import (
             discard_partial_batch_records,
-            release_local_batch_record,
         )
-        from agent_actions.storage import get_storage_backend
 
         discard_partial_batch_records()
         released = True
+        for in_sandbox in (False, True):
+            with sandbox_mode(in_sandbox):
+                # Opening a store that is not there would create it.
+                if not store_file(io_dir, self.agent).exists():
+                    continue
+                reclaimed = self._release_records_of_store(io_dir)
+            if reclaimed is None:
+                return False
+            released = reclaimed and released
+        return released
+
+    def _release_records_of_store(self, io_dir: Path) -> bool | None:
+        """Reclaim the batches the store of the current mode names; None if it failed."""
+        from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+        from agent_actions.llm.providers.local_batch_records import release_local_batch_record
+        from agent_actions.storage import get_storage_backend
+
+        db_path = store_file(io_dir, self.agent)
+        released = True
         try:
-            for in_sandbox in (False, True):
-                with sandbox_mode(in_sandbox):
-                    if in_sandbox and not store_file(io_dir, self.agent).exists():
-                        continue
-                    backend = get_storage_backend(
-                        workflow_path=str(io_dir.parent), workflow_name=self.agent
-                    )
-                try:
-                    backend.initialize()
-                    for action_name in BatchRegistryManager.list_action_names(backend):
-                        for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
-                            released = release_local_batch_record(batch_id) and released
-                finally:
-                    backend.close()
+            backend = get_storage_backend(
+                workflow_path=str(io_dir.parent), workflow_name=self.agent
+            )
+            try:
+                backend.initialize()
+                for action_name in BatchRegistryManager.list_action_names(backend):
+                    for batch_id in BatchRegistryManager.batch_ids(backend, action_name):
+                        released = release_local_batch_record(batch_id) and released
+            finally:
+                backend.close()
         except StoreFormatError as e:
             # This version cannot read the store, so nothing can name its batches.
             logger.debug("Removing a store of another storage format: %s", e)
             click.echo(
                 click.style(
-                    f"⚠️  The store for '{self.agent}' uses another storage format, so the "
-                    f"batches it names cannot be reclaimed. Removing it.",
+                    f"⚠️  The store {db_path.name} for '{self.agent}' uses another storage "
+                    f"format, so the batches it names cannot be reclaimed. Removing it.",
                     fg="yellow",
                 )
             )
@@ -99,7 +112,7 @@ class Cleaner:
                     fg="yellow",
                 )
             )
-            return False
+            return None
         return released
 
     def _run(self) -> None:

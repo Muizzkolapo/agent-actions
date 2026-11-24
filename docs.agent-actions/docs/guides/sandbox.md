@@ -91,7 +91,9 @@ agac run -w my_workflow --sandbox --wait --poll 1
 
 ## Remove the Sandbox Output
 
-`agac clean --all` removes the sandbox output together with the real output: `agent_io/sandbox/` and the sandbox store. `agac clean --target` removes only `agent_io/target/`. See [clean](../reference/cli/utilities.md#clean).
+`agac clean --all` removes the sandbox output together with the real output: `agent_io/sandbox/` and the sandbox store. It also reclaims the local records of the batches that the sandbox store names, as it does for the real store. `agac clean --target` removes only `agent_io/target/`. See [clean](../reference/cli/utilities.md#clean).
+
+The `reset_workflow.py --full` script of the skills removes the sandbox output too.
 
 ## Limits
 
