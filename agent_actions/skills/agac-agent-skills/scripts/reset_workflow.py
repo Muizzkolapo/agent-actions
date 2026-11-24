@@ -6,8 +6,9 @@ workflow, while keeping source data and the SQLite store intact. Records already
 completed in the store are carried forward, not regenerated — use --full for a
 true from-scratch rebuild.
 
---full: wipes target/, everything in store/ but the run lock file, and
-.agent_status.json, then recreates target/, and reclaims what a provider recorded locally under .agac/ about this
+--full: wipes target/, everything in store/ but the run lock file,
+.agent_status.json and sandbox/ (the output of `agac run --sandbox`), then
+recreates target/, and reclaims what a provider recorded locally under .agac/ about this
 workflow's batches, since the store being removed is what names them. It holds the
 run lock `agac run` takes, so it exits while a run is in progress (without
 the framework and without fcntl, as on Windows, it can only warn).
@@ -177,7 +178,7 @@ def release_batch_records(root: Path, base: Path, workflow: str) -> bool:
 
 def _full_reset(root: Path, base: Path, workflow: str, status: Path, had_store: bool) -> None:
     print(
-        f"Full reset: wiping store, target, and status under {base}, "
+        f"Full reset: wiping store, target, sandbox output and status under {base}, "
         "and reclaiming this workflow's local batch records"
     )
     # The store is what names these batches. Removing it over a record that
@@ -192,6 +193,7 @@ def _full_reset(root: Path, base: Path, workflow: str, status: Path, had_store: 
     if reclaimed and had_store:
         clear_store(base / "store", lock_file(base, workflow))
     remove(status)
+    remove(base / "sandbox")
     (base / "target").mkdir(parents=True, exist_ok=True)
     print("Done.")
 
