@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Database outputs and sources: a merge or append refuses two different records sharing a key instead of keeping one (an expansion shares the default `source_guid`); two outputs writing one table are refused; an output whose driver is not installed, or whose table, key or carry is not a plain name, is refused before the run; an append to a table lacking its key column adds it; `agac export` waits for no run in progress; `agac retry` checks its outputs before clearing anything; a database source whose query or settings changed is not read again while its batch is open; a BigQuery write uses one load job; and `--refresh-input` ends with the run that asked for it.'
+time: 2026-11-24T12:00:00.000000000+00:00

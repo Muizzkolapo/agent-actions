@@ -282,3 +282,17 @@ def test_a_merge_sends_one_delete_and_one_insert_a_batch_not_one_a_row(
     inserts = [s for s in driver.statements if s.startswith("INSERT")]
     assert (len(deletes), len(inserts)) == (1, 1)
     assert inserts[0].count("),") == 39
+
+
+def test_bigquery_writes_a_large_merge_in_one_load_job_and_few_deletes(
+    driver, tmp_path, monkeypatch
+):
+    # Each load job counts against the table's daily quota.
+    rows = [(n, f"row {n}") for n in range(12_000)]
+
+    with _open("bigquery", tmp_path, monkeypatch) as connector:
+        connector.write("labels", COLUMNS, rows, mode=WriteMode.MERGE, key=["id"], types=TYPES)
+
+    assert len(driver.loaded) == 1
+    assert len(driver.loaded[0][1]) == 12_000
+    assert len([s for s in driver.statements if s.startswith("DELETE")]) == 2

@@ -175,3 +175,59 @@ def test_a_retry_that_repairs_a_record_writes_it_to_the_table(project):
 
     assert "Wrote 2 rows to published" in output, output
     assert [row[0] for row in _published(project)] == [1, 2]
+
+
+def test_an_export_while_a_run_holds_the_workflow_is_refused(project):
+    # The run is still storing records: a replace written now would drop the rest.
+    from agent_actions.storage.run_lock import hold_run_lock
+
+    _agac(project, "run")
+    before = _published(project)
+
+    with hold_run_lock(project / IO, WORKFLOW):
+        result = run_agac(project, "export", "-a", WORKFLOW)
+
+    output = " ".join((result.stdout + result.stderr).split())
+    assert result.returncode != 0, output
+    assert "is in progress" in output, output
+    assert _published(project) == before
+
+
+def _statuses(project: Path) -> dict:
+    import json
+
+    return {
+        action: details.get("status")
+        for action, details in json.loads(
+            (project / IO / ".agent_status.json").read_text(encoding="utf-8")
+        ).items()
+    }
+
+
+def test_a_retry_whose_outputs_cannot_be_written_clears_nothing(project):
+    tools = project / TOOLS
+    text = tools.read_text(encoding="utf-8")
+    tools.write_text(
+        text.replace(
+            READ_SPEC,
+            READ_SPEC
+            + '    if source["topic"] == "photosynthesis":\n'
+            + '        raise ValueError("refused on purpose")\n',
+        ),
+        encoding="utf-8",
+    )
+    first = run_agac(project, "run", "-a", WORKFLOW)
+    assert first.returncode != 0, first.stdout + first.stderr
+    before = _statuses(project)
+    settings = project / "agent_actions.yml"
+    settings.write_text(
+        settings.read_text(encoding="utf-8").replace(CONNECTIONS, ""), encoding="utf-8"
+    )
+
+    result = run_agac(project, "retry", "-a", WORKFLOW)
+
+    output = " ".join((result.stdout + result.stderr).split())
+    assert result.returncode != 0, output
+    assert "No connection named 'warehouse'" in output, output
+    assert _statuses(project) == before
+    assert not list((project / IO).rglob("_retry_manifest.json")), output

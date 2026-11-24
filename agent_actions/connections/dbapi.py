@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 from abc import abstractmethod
@@ -99,9 +100,27 @@ class DbApiConnector(Connector):
     dialect = Dialect()
     # The connection type a project names, which is also the name of the driver's extra.
     kind = "database"
+    # Rows given to one `_insert`; None gives it every row of the write at once.
+    write_batch: int | None = _WRITE_BATCH
+    # The module `_connect` imports; None for one the standard library holds.
+    driver: str | None = None
 
     def __init__(self) -> None:
         self._connection: Any = None
+
+    @classmethod
+    def check_driver(cls) -> None:
+        """Refuse a connection whose driver is not installed, before it is opened."""
+        if cls.driver is None:
+            return
+        try:
+            importlib.import_module(cls.driver)
+        except ImportError as error:
+            raise ConfigurationError(
+                f"A {cls.kind} connection needs a driver that is not installed "
+                f"({cls.driver}). Install it with: pip install 'agent-actions[{cls.kind}]'",
+                cause=error,
+            ) from error
 
     @abstractmethod
     def _connect(self) -> Any:
@@ -243,7 +262,7 @@ class DbApiConnector(Connector):
                 self._add_missing_columns(cursor, table, columns, held, types or {})
             if mode is WriteMode.REPLACE:
                 cursor.execute(f"DELETE FROM {target} WHERE 1 = 1")  # nosec B608
-            for batch in _batches(rows, _WRITE_BATCH):
+            for batch in _batches(rows, self.write_batch or len(rows) or 1):
                 if mode is WriteMode.MERGE:
                     self._delete_keyed(cursor, table, key, positions, batch)
                 self._insert(cursor, table, columns, batch)
@@ -333,12 +352,27 @@ class DbApiConnector(Connector):
         return kept
 
     def held_keys(self, table: str, key: Sequence[str]) -> set[tuple[str | None, ...]]:
-        """The *key* values *table* holds, as text; none when there is no such table."""
-        if self._held_columns(self._open(), table) is None:
+        """The *key* values *table* holds, as text.
+
+        None are held when there is no such table, or it lacks a key column, which
+        the write then adds.
+        """
+        held = self._held_columns(self._open(), table)
+        if held is None:
+            return set()
+        have = {self.dialect.same_name(name) for name in held}
+        if any(self.dialect.same_name(column) not in have for column in key):
             return set()
         names = ", ".join(self.dialect.as_text(column) for column in key)
         query = f"SELECT {names} FROM {self.dialect.identifier(table)}"  # nosec B608
-        return set(self._read_tuples(query))
+        try:
+            return set(self._read_tuples(query))
+        except Exception as error:
+            raise ConfigurationError(
+                f"Cannot read the keys {table} holds: {error}",
+                context={"table": table, "key": list(key)},
+                cause=error,
+            ) from error
 
     def _read_tuples(self, query: str) -> Iterator[tuple[Any, ...]]:
         """Read *query* as tuples, without the duplicate-name check: casts may share a name."""

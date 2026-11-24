@@ -15,6 +15,7 @@ class ReferenceType(Enum):
     WORKFLOW = "workflow"  # workflow: workflow_name
     SEED_FILE = "seed_file"  # $file:path/to/file.json
     CONTEXT_FIELD = "context_field"  # context_scope.observe action.field
+    CONNECTION = "connection"  # connection: name, from agent_actions.yml `connections:`
 
 
 @dataclass
@@ -142,6 +143,9 @@ class ProjectIndex:
 
     # Workflow files that do not render: file_path → ParseError
     parse_errors: dict[Path, ParseError] = field(default_factory=dict)
+
+    # connection name → where agent_actions.yml declares it; None when that file is unreadable
+    connections: dict[str, Location] | None = None
 
     def workflow_for_file(self, file_path: Path) -> str | None:
         """Derive the workflow name from a file path.

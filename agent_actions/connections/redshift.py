@@ -32,6 +32,7 @@ class RedshiftConnector(DbApiConnector):
     """Reads and writes Redshift through redshift_connector. A write is one transaction."""
 
     kind = "redshift"
+    driver = "redshift_connector"
 
     dialect = Dialect(
         types={

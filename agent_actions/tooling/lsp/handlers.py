@@ -28,6 +28,7 @@ SEMANTIC_TOKEN_TYPE_MAP = {
     ReferenceType.CONTEXT_FIELD: "property",
     ReferenceType.PROMPT: "string",
     ReferenceType.SEED_FILE: "string",
+    ReferenceType.CONNECTION: "namespace",
 }
 
 
@@ -68,6 +69,14 @@ def build_hover_content(reference, index: ProjectIndex, current_file=None) -> st
 
     elif reference.type == ReferenceType.SEED_FILE:
         return _build_seed_file_hover(reference, index, current_file)
+
+    elif reference.type == ReferenceType.CONNECTION:
+        location = (index.connections or {}).get(reference.value)
+        if location:
+            return (
+                f"**Connection**: `{reference.value}`\n\n"
+                f"Declared in `{location.file_path.name}` at line {location.line + 1}"
+            )
 
     return None
 

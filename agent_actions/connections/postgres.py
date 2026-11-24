@@ -30,6 +30,7 @@ class PostgresConnector(DbApiConnector):
     dialect = Dialect(case_sensitive_names=True)
 
     kind = "postgres"
+    driver = "psycopg"
 
     def __init__(self, settings: PostgresSettings) -> None:
         super().__init__()

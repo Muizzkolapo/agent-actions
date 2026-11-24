@@ -11,6 +11,7 @@ from typing import Any
 from agent_actions.config.schema import OUTPUT_IDENTITY_COLUMN as IDENTITY_COLUMN
 from agent_actions.config.schema import OutputConfig
 from agent_actions.connections import ColumnType, Connector, WriteMode, open_connection
+from agent_actions.connections.base import quoted_identifier
 from agent_actions.errors import ConfigurationError
 from agent_actions.record.state import CASCADE_BLOCKING_STATES, RecordState
 from agent_actions.storage.backend import StorageBackend
@@ -101,8 +102,8 @@ def write_output(backend: StorageBackend, output: OutputConfig, connector: Conne
     )
     if not rows and output.mode is not WriteMode.REPLACE:
         return 0
-    if output.mode is WriteMode.MERGE:
-        rows = _last_row_per_key(columns, rows, output.key, output.table)
+    if output.mode is not WriteMode.REPLACE:
+        rows = _one_row_per_key(columns, rows, output)
     return connector.write(
         output.table,
         columns,
@@ -113,10 +114,16 @@ def write_output(backend: StorageBackend, output: OutputConfig, connector: Conne
     )
 
 
-def _last_row_per_key(
-    columns: list[str], rows: list[tuple[Any, ...]], key: list[str], table: str
+def _one_row_per_key(
+    columns: list[str], rows: list[tuple[Any, ...]], output: OutputConfig
 ) -> list[tuple[Any, ...]]:
-    """One row a key, the last one stored: a merge leaves a table holding no key twice."""
+    """*rows* with a repeated row dropped; two different rows sharing a key are refused.
+
+    A merge or an append keeps one row a key, so writing both would keep one and
+    lose the other without a word: an action that stores several records for one
+    source row (an expansion) shares the default key, `source_guid`.
+    """
+    key, table = output.key, output.table
     missing = [name for name in key if name not in columns]
     if missing:
         raise ConfigurationError(
@@ -125,16 +132,29 @@ def _last_row_per_key(
             context={"table": table, "key": key},
         )
     positions = [columns.index(name) for name in key]
-    latest = {tuple(row[position] for position in positions): row for row in rows}
-    return list(latest.values())
+    kept: dict[tuple[Any, ...], tuple[Any, ...]] = {}
+    for row in rows:
+        row_key = tuple(row[position] for position in positions)
+        held = kept.setdefault(row_key, row)
+        if held != row:
+            shown = ", ".join(f"{name}={value!r}" for name, value in zip(key, row_key, strict=True))
+            raise ConfigurationError(
+                f"Two records of {output.action} share the key of {table} ({shown}), and "
+                f"a {output.mode.value} keeps one row a key. Set 'key' to columns that tell "
+                "them apart (carry the source row's own id), or use mode: replace",
+                context={"table": table, "key": key, "action": output.action},
+            )
+    return list(kept.values())
 
 
 def check_outputs(declared: Any, project_root: Path, *, actions: Collection[str]) -> None:
-    """Refuse outputs that name an action the workflow does not run or an undeclared connection.
+    """Refuse outputs that cannot be written, before the run pays for any answer.
 
-    Asked before the run, so a typo fails in a second, not after every action has run.
+    An output that names an action the workflow does not run, a connection the
+    project does not declare or whose driver is not installed, a name that is not
+    a table or column name, or a table another output writes is refused.
     """
-    from agent_actions.connections import connection_settings
+    from agent_actions.connections import _connector_class, connection_settings
 
     outputs = _parsed(declared)
     unknown = sorted({output.action for output in outputs} - set(actions))
@@ -145,7 +165,23 @@ def check_outputs(declared: Any, project_root: Path, *, actions: Collection[str]
             context={"unknown": unknown},
         )
     for connection in sorted({output.connection for output in outputs}):
-        connection_settings(connection, project_root)
+        connector = _connector_class(connection, connection_settings(connection, project_root))
+        check_driver = getattr(connector, "check_driver", None)
+        if check_driver is not None:
+            check_driver()
+    writers: dict[tuple[str, str], str] = {}
+    for output in outputs:
+        for name in (output.table, *output.key, *output.carry):
+            quoted_identifier(name)
+        target = (output.connection, output.table.lower())
+        if target in writers:
+            raise ConfigurationError(
+                f"Both {writers[target]} and {output.action} write {output.table} on "
+                f"'{output.connection}', and each write would remove the other's rows; "
+                "give each output a table of its own",
+                context={"table": output.table, "connection": output.connection},
+            )
+        writers[target] = output.action
 
 
 def _parsed(declared: Any) -> list[OutputConfig]:
@@ -165,6 +201,8 @@ def write_outputs(
 ) -> dict[str, int]:
     """Write every output a workflow declares; rows written, keyed by table.
 
+    A table name two connections share is told apart by its connection.
+
     *actions* are the workflow's own: an output naming any other is refused
     before a table is touched.
     """
@@ -176,13 +214,15 @@ def write_outputs(
             context={"action": only_action},
         )
     check_outputs(outputs, project_root, actions=actions)
+    tables = [output.table.lower() for output in outputs]
     written: dict[str, int] = {}
     for output in outputs:
         if only_action and output.action != only_action:
             continue
+        label = output.table
+        if tables.count(output.table.lower()) > 1:
+            label = f"{output.table} on {output.connection}"
         with open_connection(output.connection, project_root) as connector:
-            written[output.table] = write_output(backend, output, connector)
-        logger.info(
-            "Wrote %d rows of %s to %s", written[output.table], output.action, output.table
-        )
+            written[label] = write_output(backend, output, connector)
+        logger.info("Wrote %d rows of %s to %s", written[label], output.action, label)
     return written

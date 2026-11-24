@@ -416,6 +416,9 @@ class RetryCommand:
                 f"file it halted in was never stored, so it is asked again.[/cyan]"
             )
         self._settle_batches_in_flight(backend, owed)
+        # Before the manifest, the cleared dispositions and the PENDING stamps, so an
+        # output that cannot be written leaves the store as it was, and a dry run says so.
+        check_declared_outputs(workflow, project_root)
 
         if self.args.dry_run:
             self.console.print("\n[yellow]Dry run — no changes made.[/yellow]")
@@ -468,7 +471,6 @@ class RetryCommand:
         for action in downstream_actions:
             state_mgr.update_status(action, ActionStatus.PENDING, **{REPAIRED_BY: created_at})
 
-        check_declared_outputs(workflow, project_root)
         tracker, run_id = start_tracked_run(workflow, self.agent_name, project_root)
 
         outcome = RunOutcome.FAILED

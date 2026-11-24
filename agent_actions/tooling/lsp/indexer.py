@@ -10,7 +10,11 @@ from ruamel.yaml import YAML, YAMLError
 
 from agent_actions.config.includes import branch_file
 from agent_actions.config.loops import is_loop
-from agent_actions.config.path_config import get_tool_dirs, load_project_config
+from agent_actions.config.path_config import (
+    get_tool_dirs,
+    load_project_config,
+    project_config_file,
+)
 from agent_actions.config.schema import version_variant_names
 from agent_actions.errors import ConfigValidationError
 from agent_actions.input.context.normalizer import observe_entry_reference
@@ -81,6 +85,7 @@ def build_index(project_root: Path) -> ProjectIndex:
     """Build complete project index."""
     index = ProjectIndex(root=project_root)
 
+    _index_connections(index, project_root)
     _index_workflows(index, project_root)
     _index_prompts(index, project_root)
     tool_paths = get_tool_dirs(project_root)
@@ -110,6 +115,51 @@ def _project_output_field(project_root: Path) -> str | None:
     defaults = data.get("default_agent_config") if isinstance(data, dict) else None
     value = defaults.get("output_field") if isinstance(defaults, dict) else None
     return value if isinstance(value, str) else None
+
+
+def _index_connections(index: ProjectIndex, project_root: Path) -> None:
+    """Where the project file's `connections:` block names each connection."""
+    try:
+        declared = load_project_config(project_root).get("connections")
+    except Exception as e:
+        logger.debug("project config not readable yet: %s", e)
+        return
+    names = (
+        [name for name, settings in declared.items() if isinstance(settings, dict)]
+        if isinstance(declared, dict)
+        else []
+    )
+    config_file = project_config_file(project_root)
+    lines = config_file.read_text(encoding="utf-8").split("\n") if config_file else []
+    index.connections = {
+        str(name): _connection_location(config_file or project_root, lines, str(name))
+        for name in names
+    }
+
+
+def _connection_location(config_file: Path, lines: list[str], name: str) -> Location:
+    """The line of the `connections:` block that names *name*; the block's own if none does."""
+    line_no, column = 0, 0
+    in_block = False
+    for i, line in enumerate(lines):
+        if re.match(r"^\S", line) and not line.startswith("#"):
+            if in_block:
+                break
+            in_block = re.match(r"^connections:\s*(?:#.*)?$", line) is not None
+            if in_block:
+                line_no = i
+            continue
+        match = re.match(rf"^\s+['\"]?({re.escape(name)})['\"]?\s*:", line) if in_block else None
+        if match:
+            line_no, column = i, match.start(1)
+            break
+    return Location(
+        file_path=config_file,
+        line=line_no,
+        column=column,
+        end_line=line_no,
+        end_column=column + len(name),
+    )
 
 
 def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
@@ -179,6 +229,7 @@ def _index_workflow_file(
             rendered.action_sources,
             rendered.live_lines,
         )
+        _index_database_references(index, yaml_file, lines, rendered.line_paths)
         _drop_jinja_line_references(index, yaml_file, lines)
         index.duplicate_actions_by_file[yaml_file].update(_repeated_names(actions))
         _index_included_outputs(index, yaml_file, actions, default_output_field)
@@ -330,6 +381,48 @@ def _index_included_outputs(
 
 
 _ENTRY_KEYS = ("route", "join", "loop")
+
+
+_DATABASE_KEY = re.compile(
+    r"^(\s*(?:-\s+)?)(action|connection):"  # the key
+    r"\s*(['\"]?)([\w.-]+)\3\s*(?:#.*)?$"  # its name, quoted or not
+)
+
+
+def _index_database_references(
+    index: ProjectIndex,
+    yaml_file: Path,
+    lines: list[str],
+    line_paths: dict[int, tuple[str, ...] | None] | None,
+) -> None:
+    """Index the action each `outputs:` entry writes, and each connection a workflow names.
+
+    A line counts only where the render puts it under the key it writes, so an `action:`
+    in a prompt or a dropped Jinja branch is not read.
+    """
+    if line_paths is None:
+        return
+    for i, line in enumerate(lines):
+        match = _DATABASE_KEY.match(line)
+        path = line_paths.get(i)
+        if not match or not path or path[-1] != match.group(2):
+            continue
+        key, value = match.group(2), match.group(4)
+        if key == "action" and path != ("outputs", "-", "action"):
+            continue
+        if key == "connection" and path[:2] != ("outputs", "-") and "data_source" not in path:
+            continue
+        start = match.end(3)
+        _add_reference(
+            index,
+            yaml_file,
+            ReferenceType.ACTION if key == "action" else ReferenceType.CONNECTION,
+            value,
+            i,
+            start,
+            start + len(value),
+            value,
+        )
 
 
 def _index_entry_actions(
