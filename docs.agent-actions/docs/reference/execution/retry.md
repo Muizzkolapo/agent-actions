@@ -9,6 +9,8 @@ Retry sends a request again after a transient error, with exponential backoff. A
 
 A rate-limit error can carry a `Retry-After` value from the provider. Agent Actions reads this value from OpenAI, Anthropic and Groq errors, and from the errors of a [declared endpoint](../configuration/endpoints.md). If the error carries the value, the action waits for exactly that time, in place of the random wait. The value can be `retry-after-ms`, seconds or an HTTP date. If the value is longer than `max_delay`, the action waits for `max_delay`. The action also logs a warning that shows the two numbers.
 
+In a [sandbox run](../../guides/sandbox.md#no-wait), an action does not wait before a retry, because the mock provider answers immediately. The log names the wait that the action did not make.
+
 The OpenAI, Anthropic and Groq SDKs retry two times before the error gets to the retry of Agent Actions. Thus the number of sends of a rate-limited request can be more than `max_attempts`.
 
 Retry is **disabled until a `retry:` block enables it**. You can put the block on the action or

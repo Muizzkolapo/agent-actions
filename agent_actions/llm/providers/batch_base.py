@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.config import sandbox
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.errors import PromptTooLargeError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
@@ -64,7 +65,7 @@ def retry(
     delay: float = 2.0,
     exceptions: tuple[type[Exception], ...] = (Exception,),
 ):
-    """Simple retry decorator for batch operations."""
+    """Simple retry decorator for batch operations; a sandbox run tries again with no wait."""
 
     def decorator(func):
         @functools.wraps(func)
@@ -77,7 +78,7 @@ def retry(
                     return func(*args, **kwargs)
                 except exceptions as e:
                     last_exception = e
-                    if attempt < max_attempts - 1:
+                    if attempt < max_attempts - 1 and not sandbox.is_active():
                         time.sleep(delay * (attempt + 1))
             raise last_exception  # type: ignore[misc]
 

@@ -31,10 +31,11 @@ def project(tmp_path):
     return root
 
 
-def _run(project, *args, checks_until_complete: int):
+def _run(project, *args, checks_until_complete: int, held_seconds: float = 0):
     # The scenario holds the batch for the status checks before the one that completes it.
     (project / "sandbox.yml").write_text(
-        f"batch: {{polls_until_complete: {checks_until_complete - 1}}}\n"
+        f"batch: {{polls_until_complete: {checks_until_complete - 1}, "
+        f"complete_after_seconds: {held_seconds}}}\n"
     )
     result = run_agac(project, "run", "-a", WORKFLOW, "--sandbox", "-u", "tools", *args)
     return result.returncode, result.stdout + result.stderr
@@ -50,6 +51,40 @@ def test_a_batch_run_with_wait_ends_with_exit_0_after_the_batches_finish(project
     assert code == 0, output
     assert output.count("Workflow paused - batch job(s) submitted") == 2, output
     assert _records(project), "the batch was submitted but nothing was collected"
+
+
+NO_WAIT = "Checking the batch job(s) again..."
+ONE_SECOND = "Waiting 1s before checking the batch job(s) again..."
+
+
+def test_without_a_poll_a_sandbox_run_checks_the_batch_again_with_no_wait(project):
+    code, output = _run(
+        project, "--fresh", "--wait", "--wait-timeout", "120", checks_until_complete=2
+    )
+
+    assert code == 0, output
+    assert output.count("Workflow paused - batch job(s) submitted") == 2, output
+    assert output.count(NO_WAIT) == 2, output
+    assert "Waiting" not in output, output
+    assert _records(project)
+
+
+def test_a_batch_the_scenario_holds_by_time_is_checked_once_a_second(project):
+    code, output = _run(
+        project,
+        "--fresh",
+        "--wait",
+        "--wait-timeout",
+        "120",
+        checks_until_complete=1,
+        held_seconds=2,
+    )
+
+    assert code == 0, output
+    assert NO_WAIT not in output, output
+    # Two waits of a second reach the 2 s; passes with no wait between them would be many.
+    assert 1 <= output.count(ONE_SECOND) <= 2, output
+    assert _records(project)
 
 
 def test_without_wait_the_same_run_pauses_and_exits_4(project):

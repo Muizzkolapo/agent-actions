@@ -119,8 +119,13 @@ class RunCommandArgs(BaseModel):
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
     )
     wait: bool = Field(False, description="Run again while paused for a batch, until none is open")
-    poll: int = Field(
-        DEFAULT_POLL_SECONDS, description="Whole seconds between two passes of --wait", ge=1
+    poll: int | None = Field(
+        None,
+        description=(
+            "Whole seconds between two passes of --wait. Not given: the default in a real "
+            "run, no wait in a sandbox run"
+        ),
+        ge=1,
     )
     wait_timeout: float | None = Field(
         None, description="Seconds after which --wait stops and leaves the batches open", ge=0

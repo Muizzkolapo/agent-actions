@@ -8,7 +8,7 @@ sidebar_position: 6
 
 `agac run --sandbox` runs a workflow end to end with no model call and no API key. The offline mock provider, `agac-provider`, answers each LLM action. You do not edit the workflow. The output of a sandbox run is kept apart from the output of real runs.
 
-Use a sandbox run to test the connections of a workflow: the dependencies, guards, `context_scope`, versions, routers, loops, batch actions, repair loops and HITL actions. A sandbox run takes seconds and costs nothing.
+Use a sandbox run to test the connections of a workflow: the dependencies, guards, `context_scope`, versions, routers, loops, batch actions, repair loops and HITL actions. A sandbox run takes seconds and costs nothing. It does not wait for a provider. See [No wait for a provider](#no-wait).
 
 ```bash
 agac run -w my_workflow --sandbox
@@ -29,6 +29,18 @@ Agent Actions loads the workflow as for a real run. Then it changes these action
 Preflight checks the changed workflow. A key that is not set is not an error, because the mock reads no key. The configuration must still be valid for its real vendor. For example, an action on a vendor that takes a key must name `api_key`, as for a real run.
 
 A workflow that declares `outputs:` does not write its database tables in a sandbox run. The run also does not check the connections of those tables.
+
+## No Wait for a Provider {/* #no-wait */}
+
+The mock answers immediately, so a sandbox run does not wait where a real run waits for a provider:
+
+| Wait | Real run | Sandbox run |
+|------|----------|-------------|
+| The backoff before a retry of a rate limit, a network error or a server error, and the time that a provider's `Retry-After` gives | Waits | Does not wait. The event log names the wait that the run did not make: `(backoff 0.42s; skipped in sandbox)` |
+| The time between two passes of `agac run --wait`, when you do not give `--poll` | 60 seconds | No wait. See [Batch actions](#batch-actions) |
+| The wait before a second try to get the results of a batch | Waits | Does not wait |
+
+A sandbox run waits only where you tell it to wait: the `latency_ms` and `batch.complete_after_seconds` of the [scenario](#scenario), and a `--poll` that you give. The retry limits stay the same: an action with `retry: {max_attempts: 3}` makes three attempts.
 
 ## What the Mock Answers
 
@@ -147,6 +159,8 @@ The mock batch provider makes the same decisions for each record when it returns
 
 A batch reports `in_progress` for its first `polls_until_complete` status checks, and until `complete_after_seconds` passed. The first status check after both completes it. With both at 0, which is the default, the first status check completes the batch.
 
+`agac run --sandbox --wait` makes one status check in each pass. Without `--poll`, it does not wait between two passes, so `polls_until_complete` adds passes and no time. When `complete_after_seconds` is more than 0, it waits that time between two passes, at most 1 second. See [Batch actions](#batch-actions).
+
 ### Presets
 
 | Preset | Scenario |
@@ -224,13 +238,17 @@ agac expect report -w my_workflow --sandbox
 agac inspect -w my_workflow --sandbox action summarize
 ```
 
-## Batch Actions
+## Batch Actions {/* #batch-actions */}
 
 An action with `run_mode: batch` goes to the mock batch provider. A batch run pauses after it submits, as with a real provider. Run the workflow again with `--sandbox`, or give `--wait`:
 
 ```bash
-agac run -w my_workflow --sandbox --wait --poll 1
+agac run -w my_workflow --sandbox --wait
 ```
+
+In a sandbox run, `--wait` does not wait between two passes when you do not give `--poll`. It prints `Checking the batch job(s) again...` and runs the next pass immediately. A real run waits 60 seconds.
+
+A scenario can hold each batch for a time (`batch.complete_after_seconds`). Then `--wait` waits that time between two passes, at most 1 second, and prints the time: `Waiting 1s before checking the batch job(s) again...`. A `--poll` that you give is used as given, also in a sandbox run.
 
 ## Remove the Sandbox Output
 

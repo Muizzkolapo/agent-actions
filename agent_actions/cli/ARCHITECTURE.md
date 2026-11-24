@@ -258,7 +258,9 @@ RunCommand.execute()
   ├─ tracker.finalize_workflow_run()                ← TRACKER_STATUSES[outcome]
   │  └─ LoggerFactory.flush()
   │
-  ├─ --wait and PAUSED_FOR_BATCH? sleep --poll, then the steps from load_workflow again
+  ├─ --wait and PAUSED_FOR_BATCH? sleep --poll (a sandbox run with no --poll: no sleep, or up
+  │                                                    to 1 s while the scenario holds a batch by
+  │                                                    time), then the steps from load_workflow again
   │                                                    (no --fresh/--rerun/--verify-keys), under
   │                                                    the same run lock, until --wait-timeout
   │

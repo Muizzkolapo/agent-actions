@@ -318,6 +318,23 @@ def test_an_input_staged_again_after_it_was_removed_starts_its_count_again(tmp_p
     assert _pages(root, "classify") == ALL_PAGES
 
 
+def test_a_retry_of_a_transport_fault_does_not_wait_its_backoff(tmp_path):
+    root = _project(tmp_path, FAILS_ONCE)
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    short = "base_delay: 0.01, max_delay: 0.01"
+    assert short in config.read_text()
+    # A real run would wait up to 20 s before each of the twelve retries.
+    config.write_text(config.read_text().replace(short, "base_delay: 20, max_delay: 60"))
+
+    result = _ok(_run(root))
+
+    assert _summary(result).startswith("SANDBOX scenario sandbox.yml: 12 errors")
+    events = (_io(root) / "sandbox" / "logs" / "events.json").read_text().splitlines()
+    retries = [json.loads(line)["message"] for line in events if "Retry attempt 1/3" in line]
+    assert len(retries) == 12, retries
+    assert all(message.endswith("s; skipped in sandbox)") for message in retries), retries
+
+
 HEAL_IN_TURN = """records:
   - match: {source.page_id: p3}
     actions: {extract: {errors: {rate: 1.0, kinds: [refusal], heal_on_attempt: 2}}}

@@ -146,6 +146,17 @@ def scenario_summary(only_after_calls: bool = False) -> str | None:
     return line
 
 
+def wait_between_passes() -> float:
+    """Seconds ``agac run --wait`` waits between two passes when ``--poll`` is not given.
+
+    No time, since the mock answers at once. While the scenario holds each batch for
+    ``complete_after_seconds``, that time, at most one second: with no wait the passes
+    would repeat without a pause until the time is up.
+    """
+    held = _scenario.batch.complete_after_seconds if _scenario is not None else 0.0
+    return min(1.0, held)
+
+
 def flag() -> str:
     """The flag a printed command needs to act on this run's output: ``" --sandbox"`` or ``""``."""
     return " --sandbox" if _active else ""

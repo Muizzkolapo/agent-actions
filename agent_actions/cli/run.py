@@ -241,15 +241,18 @@ class RunCommand:
         timeout = self.args.wait_timeout
         deadline = None if timeout is None else started + timeout
         while outcome is RunOutcome.PAUSED_FOR_BATCH:
-            pause: float = self.args.poll
+            pause = self._poll_seconds()
             if deadline is not None:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     self._stop_waiting(started)
                     break
                 pause = min(pause, remaining)
-            click.echo(f"Waiting {pause:g}s before checking the batch job(s) again...")
-            self._sleep(pause)
+            if pause > 0:
+                click.echo(f"Waiting {pause:g}s before checking the batch job(s) again...")
+                self._sleep(pause)
+            else:
+                click.echo("Checking the batch job(s) again...")
             if deadline is not None and time.monotonic() >= deadline:
                 self._stop_waiting(started)
                 break
@@ -259,6 +262,12 @@ class RunCommand:
                 "--wait has no batch to wait for: the run stopped before every action ended."
             )
         return outcome
+
+    def _poll_seconds(self) -> float:
+        """Seconds between two passes: ``--poll`` when given, else the default of the run."""
+        if self.args.poll is not None:
+            return self.args.poll
+        return sandbox.wait_between_passes() if sandbox.is_active() else DEFAULT_POLL_SECONDS
 
     def _stop_waiting(self, started: float) -> None:
         click.echo(
@@ -505,7 +514,8 @@ class RunCommand:
     metavar="SECONDS",
     help=(
         "With --wait: whole seconds between two checks of the batch job(s), at least 1 "
-        f"(default: {DEFAULT_POLL_SECONDS})"
+        f"(default: {DEFAULT_POLL_SECONDS}; with --sandbox: no wait, or up to 1 second "
+        "while the scenario holds a batch for complete_after_seconds)"
     ),
 )
 @click.option(
@@ -573,7 +583,7 @@ def run(
         rerun=rerun,
         verify_keys=verify_keys,
         wait=wait,
-        poll=DEFAULT_POLL_SECONDS if poll is None else poll,
+        poll=poll,
         wait_timeout=wait_timeout,
     )
     command = RunCommand(args)
