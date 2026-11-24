@@ -139,9 +139,12 @@ def validate_output_against_schema(
     expected_fields, required_fields, field_types = _extract_schema_fields(schema)
     actual_fields = _extract_output_fields(llm_output)
 
-    missing_required = [f for f in required_fields if f not in actual_fields]
-    missing_optional = [f for f in (expected_fields - required_fields) if f not in actual_fields]
-    extra_fields = [f for f in actual_fields if f not in expected_fields]
+    # Sorted: a set's order changes per process, and this text goes into repair prompts.
+    missing_required = sorted(f for f in required_fields if f not in actual_fields)
+    missing_optional = sorted(
+        f for f in expected_fields - required_fields if f not in actual_fields
+    )
+    extra_fields = sorted(f for f in actual_fields if f not in expected_fields)
 
     type_errors = _check_field_types(llm_output, field_types)
 
