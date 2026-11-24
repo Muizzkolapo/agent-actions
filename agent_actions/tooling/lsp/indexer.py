@@ -383,7 +383,10 @@ def _index_included_outputs(
 _ENTRY_KEYS = ("route", "join", "loop")
 
 
-_DATABASE_KEY = re.compile(r"^(\s*(?:-\s+)?)(action|connection):\s*(['\"]?)([\w.-]+)\3\s*(?:#.*)?$")
+_DATABASE_KEY = re.compile(
+    r"^(\s*(?:-\s+)?)(action|connection):"  # the key
+    r"\s*(['\"]?)([\w.-]+)\3\s*(?:#.*)?$"  # its name, quoted or not
+)
 
 
 def _index_database_references(
