@@ -235,6 +235,12 @@ def _as_staging_document(payload: Any) -> list[Any]:
 
 def _holds_a_staging_document(cache_file: Path) -> bool:
     """Whether *cache_file* holds what a fetch writes; a file that does not is fetched again."""
+    if cache_file.is_dir():
+        # A fetch could not replace it, so refuse before spending a request.
+        raise ConfigurationError(
+            f"The API cache path {cache_file} is a directory. Remove it to fetch the data again.",
+            context={"cache_file": str(cache_file), "operation": "resolve_api_cache"},
+        )
     if not cache_file.is_file():
         return False
     try:

@@ -137,3 +137,12 @@ class TestACacheHoldingNoDocumentIsFetchedAgain:
         fetched = _fetch(tmp_path, ENVELOPE)
         assert fetched == cache
         assert json.loads(cache.read_text()) == [ENVELOPE]
+
+
+def test_a_directory_at_the_cache_path_is_refused_before_any_fetch(tmp_path):
+    cache = _fetch(tmp_path, [{"seed": True}])
+    cache.unlink()
+    cache.mkdir()
+
+    with pytest.raises(AgentActionsError, match="is a directory"):
+        _resolve_again(tmp_path)
