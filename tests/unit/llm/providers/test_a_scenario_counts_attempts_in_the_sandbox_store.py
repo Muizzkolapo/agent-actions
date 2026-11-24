@@ -140,6 +140,20 @@ def test_forgetting_one_action_keeps_the_others_and_forgetting_all_keeps_none(tm
     assert store.list_metadata_prefix(sc.ATTEMPTS_KEY_PREFIX) == []
 
 
+def test_forgetting_some_records_of_an_action_keeps_its_other_records(tmp_path):
+    store = _store(tmp_path / "wf.sandbox.db")
+    for key in ("extract:r1", "extract:r2", "extract:r3", "classify:r1"):
+        store.increment_metadata(f"{sc.ATTEMPTS_KEY_PREFIX}{key}")
+
+    with sandbox.sandbox_mode(True):
+        sandbox.forget_attempts(store, "extract", records={"r1", "r3", "never-counted"})
+
+    assert store.list_metadata_prefix(sc.ATTEMPTS_KEY_PREFIX) == [
+        f"{sc.ATTEMPTS_KEY_PREFIX}classify:r1",
+        f"{sc.ATTEMPTS_KEY_PREFIX}extract:r2",
+    ]
+
+
 def test_a_real_run_forgets_nothing(tmp_path):
     store = _store(tmp_path / "wf.db")
     store.increment_metadata(f"{sc.ATTEMPTS_KEY_PREFIX}extract:r1")

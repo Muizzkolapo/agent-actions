@@ -9,7 +9,7 @@ follows a scenario, loaded once per workflow load and held here for the mock to 
 from __future__ import annotations
 
 import shlex
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -108,24 +108,38 @@ def attach_store(store: StorageBackend) -> None:
         _scenario.attach(store)
 
 
-def forget_attempts(store: StorageBackend, action: str | None = None) -> None:
-    """Clear the scenario attempt counts of *action*, or of every action, from *store*."""
+def forget_attempts(
+    store: StorageBackend, action: str | None = None, records: Iterable[str] | None = None
+) -> None:
+    """Clear the scenario attempt counts from *store*: of every action, or of *action*.
+
+    With *records*, only the counts of those records (their ``source_guid``) at *action*.
+    """
     if not _active:
         return
-    from agent_actions.llm.providers.agac.scenario import ATTEMPTS_KEY_PREFIX
+    from agent_actions.llm.providers.agac.scenario import ATTEMPTS_KEY_PREFIX, attempts_key
 
-    store.delete_metadata_prefix(
-        ATTEMPTS_KEY_PREFIX if action is None else f"{ATTEMPTS_KEY_PREFIX}{action}:"
-    )
+    if action is None:
+        store.delete_metadata_prefix(ATTEMPTS_KEY_PREFIX)
+    elif records is None:
+        store.delete_metadata_prefix(attempts_key(action, ""))
+    else:
+        for record in records:
+            store.delete_metadata(attempts_key(action, record))
 
 
 def scenario() -> Scenario | None:
     return _scenario if _active else None
 
 
-def scenario_summary() -> str | None:
-    """The line that counts what the scenario did in this command; the count then restarts."""
+def scenario_summary(only_after_calls: bool = False) -> str | None:
+    """The line that counts what the scenario did in this command; the count then restarts.
+
+    With *only_after_calls*, None when the mock answered no call.
+    """
     if _scenario is None or not _active or _tally is None:
+        return None
+    if only_after_calls and not _tally.calls:
         return None
     line = _tally.line(_scenario.name)
     _tally.clear()

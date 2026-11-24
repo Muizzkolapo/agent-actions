@@ -180,6 +180,8 @@ class RetryCommand:
         # What the last pass planned over: the workflow's actions, and its open failures.
         self._execution_order: list[str] = []
         self._open_before: frozenset[tuple[str, str]] = frozenset()
+        # Whether a pass ran the workflow to its end.
+        self._reran = False
 
     def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
@@ -199,6 +201,10 @@ class RetryCommand:
                 # Its manifest stays, as after an interrupt, so the next retry resumes it.
                 report_quota_stop(stop)
                 code = EXIT_CODES[RunOutcome.QUOTA_STOP]
+            finally:
+                # One line counts every pass. When no pass ended, it is printed only
+                # after the mock answered a call.
+                report_scenario(only_after_calls=not self._reran)
         if code != EXIT_SUCCESS:
             raise SystemExit(code)
 
@@ -519,7 +525,7 @@ class RetryCommand:
         _delete_manifest(manifest_file)
 
         self._report(outcome, state_mgr, execution_order)
-        report_scenario()
+        self._reran = True
         if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
             write_declared_outputs(workflow, project_root, self.args.agent)
         return outcome

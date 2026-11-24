@@ -116,12 +116,13 @@ The mock makes each decision from the seed, the action, the input of the record,
 
 The mock counts the attempts of each record at each action, from 1. In a sandbox run the count is kept in the sandbox store, `agent_io/store/<workflow>.sandbox.db`. A retry, a repair round, a later pass of `--wait` and `agac retry --sandbox` are each the next attempt of the record, online and in a batch. In a batch, each submission of a record is its next attempt. Thus `heal_on_attempt` can stop a fault in a retry run.
 
-These commands start the count again:
+These events start the count again:
 
-| Command | Count |
-|---------|-------|
+| Event | Count |
+|-------|-------|
 | `agac run --sandbox --fresh` | Starts again for each action |
 | `agac run --sandbox --rerun <action>` | Starts again for that action and the actions that read it |
+| An input record is removed from the staged input, and a run sees that | Starts again for that record, at the action that read it and the actions that read that action. If you stage the same input again, it is a new record: its count starts at 1 |
 | `agac clean --all` | Removed with the sandbox store |
 
 ### Error Kinds {/* #error-kinds */}
@@ -168,11 +169,13 @@ The summary line and the failure hint show these records.
 
 ### The Summary Line
 
-After the result, a sandbox run or retry prints one line with the counts of the whole command. With `--wait`, the line counts each pass:
+After the result, a sandbox run or retry prints one line with the counts of the whole command. With `--wait`, the line counts each pass. With `agac retry --all`, the line counts each pass too, and comes after the last pass:
 
 ```
 SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped
 ```
+
+When an error stops the command after the mock answered a call, the command prints the line before the error message. The line then counts the faults up to the error. A command that stops before the first call prints no line. A retry that finds no record to retry prints no line.
 
 When you give `--scenario`, the hints that name `agac run` or `agac retry` name the same `--scenario`.
 

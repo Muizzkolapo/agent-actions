@@ -79,9 +79,13 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
     return sorted(open_actions)
 
 
-def report_scenario() -> None:
-    """The one line that counts what the sandbox scenario did over the whole command."""
-    line = sandbox.scenario_summary()
+def report_scenario(*, only_after_calls: bool = False) -> None:
+    """The one line that counts what the sandbox scenario did over the whole command.
+
+    With *only_after_calls*, for a command that an error stopped: no line when the mock
+    answered no call.
+    """
+    line = sandbox.scenario_summary(only_after_calls)
     if line is not None:
         click.echo(line)
 
@@ -202,6 +206,7 @@ class RunCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, project_root=project_root
         )
+        ended = False
         # Before anything loads, clears or submits: `--fresh` clears the store inside
         # load_workflow, so a later lock would wipe a run in progress before refusing.
         try:
@@ -212,10 +217,12 @@ class RunCommand:
                 outcome = self._run_holding_the_lock(paths, project_root)
                 if self.args.wait:
                     outcome = self._wait_for_batches(outcome, paths, project_root, started)
-                report_scenario()
+                ended = True
         except ProviderQuotaStop as stop:
             report_quota_stop(stop)
             outcome = RunOutcome.QUOTA_STOP
+        finally:
+            report_scenario(only_after_calls=not ended)
 
         if EXIT_CODES[outcome] != EXIT_SUCCESS:
             raise SystemExit(EXIT_CODES[outcome])

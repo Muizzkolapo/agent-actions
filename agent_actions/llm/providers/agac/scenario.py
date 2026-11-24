@@ -37,7 +37,8 @@ ERROR_KINDS = (
     "empty",
     "invalid_json",
 )
-COUNTS = ("errors", "rules_broken", "dropped")
+# "calls" is counted to know that the mock answered; the summary line does not show it.
+COUNTS = ("errors", "rules_broken", "dropped", "calls")
 
 
 def _rate(value: float) -> float:
@@ -175,6 +176,12 @@ class Tally:
         with self._lock:
             self._counts = dict.fromkeys(COUNTS, 0)
 
+    @property
+    def calls(self) -> int:
+        """The record attempts the mock counted: online calls and batch submissions."""
+        with self._lock:
+            return self._counts["calls"]
+
     def line(self, name: str) -> str:
         with self._lock:
             counts = dict(self._counts)
@@ -224,6 +231,7 @@ class Scenario:
         ``--wait`` pass and ``agac retry`` continue the count. The store adds one under
         its write lock, so two processes cannot both read the old count.
         """
+        self._tally.add("calls")
         key = attempts_key(action, record)
         if self._store is not None:
             return self._store.increment_metadata(key)

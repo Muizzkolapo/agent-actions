@@ -287,6 +287,60 @@ def test_a_rerun_of_an_action_starts_its_count_again_and_fresh_starts_every_coun
     assert _pages(root, "extract") == ALL_PAGES - {"p3"}
 
 
+FAILS_ONCE = "defaults:\n  errors: {rate: 1.0, kinds: [timeout], heal_on_attempt: 2}\n"
+
+
+def test_an_input_staged_again_after_it_was_removed_starts_its_count_again(tmp_path):
+    root = _project(tmp_path, FAILS_ONCE)
+    # classify reads extract, so a record gone from staging is forgotten at both.
+    config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    reads_source = "    prompt: $scripted.Classify\n    context_scope: { observe: ["
+    assert reads_source in config.read_text()
+    config.write_text(
+        config.read_text().replace(
+            reads_source, f"    dependencies: [extract]\n{reads_source}extract.code, "
+        )
+    )
+    staged = _io(root) / "staging" / "pages.json"
+    errors = "SANDBOX scenario sandbox.yml: %d errors, 0 rules broken, 0 batch results dropped"
+
+    # Each record fails its first call at each of the two actions.
+    assert _summary(_ok(_run(root))) == errors % 12
+    staged.write_text(json.dumps(ROWS[:5]))
+    assert _summary(_ok(_run(root))) == errors % 0
+    assert _pages(root, "classify") == ALL_PAGES - {"p6"}
+
+    # The same input has the same source_guid, and is a new record all the same.
+    staged.write_text(json.dumps(ROWS))
+    again = _ok(_run(root))
+
+    assert _summary(again) == errors % 2
+    assert _pages(root, "classify") == ALL_PAGES
+
+
+HEAL_IN_TURN = """records:
+  - match: {source.page_id: p3}
+    actions: {extract: {errors: {rate: 1.0, kinds: [refusal], heal_on_attempt: 2}}}
+  - match: {source.page_id: p4}
+    actions: {extract: {errors: {rate: 1.0, kinds: [refusal], heal_on_attempt: 3}}}
+"""
+
+
+def test_a_retry_of_several_passes_prints_one_line_that_counts_them_all(tmp_path):
+    root = _project(tmp_path, HEAL_IN_TURN, repair="none")
+    assert _run(root).returncode == 3
+
+    # Pass 1 repairs p3 and fails p4 again; pass 2 repairs p4.
+    retried = _ok(_run(root, "--all", command="retry"))
+
+    assert "Pass 2: 0 open failure(s) left" in _said(retried)
+    assert _summary(retried) == (
+        "SANDBOX scenario sandbox.yml: 1 errors, 0 rules broken, 0 batch results dropped"
+    )
+    assert retried.stdout.rstrip().endswith(_summary(retried))
+    assert _pages(root, "extract") == ALL_PAGES
+
+
 BROKEN = "actions:\n  extract:\n    break_rules: {rules: [matches_regex], rate: 1.0%s}\n"
 
 

@@ -962,7 +962,8 @@ class ActionExecutor:
     ) -> None:
         """Forget, here and at every action reading it, the records no staged file holds.
 
-        Their dispositions and checkpoints go; the answers of every other record stand.
+        Their dispositions, checkpoints and sandbox attempt counts go; the answers of
+        every other record stand.
         Only after a walk that read every staged file, counted by its slices: a file lost
         or left unread under a file limit may still hold a record the walk did not see.
         Not under a repair, and only for a record some run staged.
@@ -989,6 +990,7 @@ class ActionExecutor:
             for name in [action_name, *readers]:
                 backend.clear_dispositions_batch(name, gone)
                 backend.clear_checkpoint_records(name, source_guids=gone)
+                sandbox.forget_attempts(backend, name, records=gone)
         except Exception as e:
             logger.warning(
                 "Could not forget the records no longer staged for %s: %s", action_name, e
