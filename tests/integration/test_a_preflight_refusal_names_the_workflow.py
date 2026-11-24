@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 from tests._support.agac_cli import run_agac
 
 _PROJECT = """\
@@ -94,6 +95,12 @@ def _project(tmp_path: Path, refusal: str | None) -> Path:
     (root / "tools" / "w" / "pick_rows.py").write_text(_TOOL)
     (root / "agent_actions.yml").write_text(_PROJECT)
     (root / ".env").write_text("OLLAMA_API_KEY=not-used\n")
+    # As a run leaves it: `dispositions` and `retry` refuse a workflow with no store
+    # before pre-flight runs.
+    (workflow / "agent_io" / "store").mkdir()
+    store = SQLiteBackend(str(workflow / "agent_io" / "store" / "w.db"), workflow_name="w")
+    store.initialize()
+    store.close()
     return root
 
 

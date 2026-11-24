@@ -71,6 +71,20 @@ from agent_actions.utils.atomic_write import atomic_json_write
 
 logger = logging.getLogger(__name__)
 
+
+def refuse_without_a_store(paths: ProjectPaths, workflow_name: str) -> None:
+    """Refuse a workflow whose store does not exist, before anything opens it.
+
+    Opening the store creates the file, and a workflow that has not run holds nothing
+    to retry or filter.
+    """
+    db_path = sandbox.store_file(paths.io_dir, workflow_name)
+    if not db_path.exists():
+        raise click.ClickException(
+            f"No store for workflow '{workflow_name}' at {db_path}. Has it been run?"
+        )
+
+
 _RETRY_MANIFEST_NAME = "_retry_manifest.json"
 # What the retry the manifest names noted below each split it re-ran (repair_lineage).
 _REPAIR_NOTES_NAME = "_retry_repair_notes.json"
@@ -169,6 +183,7 @@ class RetryCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, auto_create=False, project_root=project_root
         )
+        refuse_without_a_store(paths, self.agent_name)
         passes = self._retry_while_it_helps if self.args.all else self._retry_once
         if self.args.dry_run:
             code = passes(paths, project_root)

@@ -159,13 +159,10 @@ def _compute_dependencies_hash(action_config: ActionConfigDict) -> str:
     return _digest(dependencies)
 
 
-def _compute_schema_options_hash(action_config: ActionConfigDict) -> str | None:
-    """A digest of a dispatched schema's ``schema_options``; None for an action with none.
-
-    None leaves an action without options unstamped, so its earlier stamps stay valid.
-    """
+def _compute_schema_options_hash(action_config: ActionConfigDict) -> str:
+    """A digest of a dispatched schema's ``schema_options``; empty for an action with none."""
     options: Any = action_config.get("schema_options")
-    return _digest(list(options)) if options else None
+    return _digest(list(options)) if options else ""
 
 
 def _compute_generation_hash(action_config: ActionConfigDict) -> str:
@@ -297,23 +294,32 @@ CONFIG_EDIT = "action config (prompt/schema/guard/routing)"
 def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list[str]:
     """What differs from the config *stamp* recorded, by label; empty when nothing does.
 
-    A key the stamp holds no value for never differs, so state written before a key
-    was recorded is left alone; nor does one the config cannot compute now.
+    Every stamp writer records each part, so a part the stamp lacks reads as edited. Of the
+    ``_READS_STAMPS`` digests, one that was not or cannot now be computed (None: a tool not
+    loaded) is not compared. The model and ``config_hash`` are compared as they are, None too.
     """
     edits: list[str] = []
     if any(
-        stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
+        key not in stamp or stamp[key] != action_config.get(key)
         for key in ("model_name", "model_vendor")
     ):
         edits.append(MODEL_EDIT)
-    stored_hash = stamp.get("config_hash")
-    if stored_hash is not None and stored_hash != _compute_action_config_hash(action_config):
+    if "config_hash" not in stamp or stamp["config_hash"] != _compute_action_config_hash(
+        action_config
+    ):
         edits.append(CONFIG_EDIT)
     for key, label, compute in _READS_STAMPS:
-        stored, current = stamp.get(key), compute(action_config)
+        if key not in stamp:
+            edits.append(label)
+            continue
+        stored, current = stamp[key], compute(action_config)
         if stored is not None and current is not None and stored != current:
             edits.append(label)
     return edits
+
+
+def _holds_a_completion_stamp(details: dict[str, Any]) -> bool:
+    return not _COMPLETION_STAMP_KEYS.isdisjoint(details)
 
 
 def edits_since_its_work_began(
@@ -515,8 +521,7 @@ def action_is_halted(storage_backend: Any, action_name: str) -> bool:
 def action_failed_every_input(storage_backend: Any, action_name: str) -> bool:
     """True if *action_name* failed after reaching all of its input.
 
-    Any other failure may have stopped it partway. One written before the marker
-    existed reads as that.
+    Any other failure may have stopped it partway.
     """
     return _failed_as(storage_backend, action_name, EVERY_INPUT_FAILED)
 
@@ -617,13 +622,11 @@ class ActionExecutor:
 
         A first completion has nothing to preserve, and preserving nothing writes
         the limit a full uncapped run writes — the cap it ran under is then
-        unreadable. Asked of the whole stamp rather than the one key being
-        written: the keys were introduced at different times.
+        unreadable.
         """
         if not getattr(self.deps.action_runner, "retried_records", ()):
             return False
-        details = self.deps.state_manager.get_status_details(action_name)
-        return not _COMPLETION_STAMP_KEYS.isdisjoint(details)
+        return _holds_a_completion_stamp(self.deps.state_manager.get_status_details(action_name))
 
     def _stamped(self, action_name: str, key: str, in_force: Any) -> Any:
         """*in_force*, unless a repair is keeping an earlier completion's stamp.
@@ -698,9 +701,7 @@ class ActionExecutor:
 
         *keep_stored* is that collecting run. Its own config describes a
         different run — other limits, another prompt, another model — so every
-        key the submission wrote stands, and only a key it did not write is
-        answered from here, which grandfathers state predating this stamp
-        instead of reading it as an absent value.
+        key the submission wrote stands, and it writes none of its own.
         """
         cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         records_processed, truncated = self._stamped_slice_outcome(action_name)
@@ -739,7 +740,7 @@ class ActionExecutor:
                 did_the_work[ANSWERS_UNDER_MORE_THAN_ONE_CONFIG] = True
             return did_the_work
         submitted = self.deps.state_manager.get_status_details(action_name)
-        return {key: submitted.get(key, value) for key, value in did_the_work.items()}
+        return {key: submitted[key] for key in did_the_work if key in submitted}
 
     def _staged_input(
         self, action_name: str, action_config: ActionConfigDict
@@ -772,7 +773,8 @@ class ActionExecutor:
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
-        edits = _edits_since(details, action_config)
+        # A repair of an action that never completed has no stamp to compare.
+        edits = _edits_since(details, action_config) if _holds_a_completion_stamp(details) else []
 
         # A retry asks for named records, not for other work at actions it never started
         # from. A reset here clears every other record's disposition, here and at whatever
@@ -882,7 +884,7 @@ class ActionExecutor:
         for name in [*names, *(r for n in names for r in self._stale_readers(n))]:
             details = self.deps.state_manager.get_status_details(name)
             if name in configs and (
-                _edits_since(details, configs[name])
+                (_holds_a_completion_stamp(details) and _edits_since(details, configs[name]))
                 or details.get(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG)
             ):
                 mixed_before.add(name)
@@ -1012,8 +1014,7 @@ class ActionExecutor:
         storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is None:
             return
-        # A completed action has collected every batch it had, whatever an entry of its
-        # written before `collected_at` existed says.
+        # A completed action has collected every batch it had: none is given up.
         if self.deps.state_manager.get_status(action_name) not in COMPLETED_STATUSES:
             given_up = BatchRegistryManager.uncollected_batch_ids(storage_backend, action_name)
             if given_up:
@@ -2203,8 +2204,7 @@ class ActionExecutor:
     def _compute_batch_wall_clock(self, action_name: str, fallback: float) -> float:
         """Compute wall-clock time from batch submission to now.
 
-        Falls back to *fallback* when no ``batch_submitted_at`` timestamp
-        was persisted (e.g. jobs submitted before this feature was added).
+        Falls back to *fallback* when no readable ``batch_submitted_at`` is recorded.
         """
         details = self.deps.state_manager.get_status_details(action_name)
         submitted_at = details.get("batch_submitted_at")

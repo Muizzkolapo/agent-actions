@@ -442,7 +442,8 @@ def test_every_stamp_of_an_included_action_does_work_and_equals_inline(tmp_path,
         name: {key: compute(included[name]) for key, _, compute in _READS_STAMPS}
         for name in ("b1", "b2")
     }
-    assert stamps["b1"]["schema_options_hash"] is not None
+    # Empty for an action with no options: not empty, the options reached the included action.
+    assert stamps["b1"]["schema_options_hash"]
     assert stamps["b1"]["generation_hash"]
     assert stamps["b2"]["udf_source_hash"]
     for name in ("b1", "b2"):

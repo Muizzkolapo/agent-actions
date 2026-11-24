@@ -8,6 +8,8 @@ from agent_actions.cli.retry import RetryCommand, _manifest_path, _write_manifes
 from agent_actions.workflow.managers.state import REPAIRED_BY, ActionStatus
 from tests.unit.cli.conftest import make_mock_backend
 
+pytestmark = pytest.mark.usefixtures("a_store_exists")
+
 
 def _printed(console: MagicMock) -> str:
     return "\n".join(str(c.args[0]) for c in console.print.call_args_list if c.args)

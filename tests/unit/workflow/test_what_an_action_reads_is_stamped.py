@@ -1,7 +1,7 @@
 """What an action reads — its context_scope and dependencies — is stamped beside config_hash (1332).
 
-Each has a digest of its own, so an edit names which part changed. An absent digest never
-reads as an edit.
+Each has a digest of its own, so an edit names which part changed. Every stamp writer records
+each digest, so one a stamp lacks reads as an edit of that part.
 """
 
 from agent_actions.workflow.executor import (
@@ -13,6 +13,7 @@ from agent_actions.workflow.executor import (
     _compute_generation_hash,
     _compute_udf_source_hash,
     _edits_since,
+    config_in_force,
     edits_since_its_work_began,
 )
 
@@ -27,13 +28,7 @@ CONFIG = {
 
 
 def _stamp(config):
-    return {
-        "config_hash": _compute_action_config_hash(config),
-        "model_name": config["model_name"],
-        "model_vendor": config["model_vendor"],
-        "context_scope_hash": _compute_context_scope_hash(config),
-        "dependencies_hash": _compute_dependencies_hash(config),
-    }
+    return config_in_force(config)
 
 
 def _with_scope(**scope):
@@ -100,12 +95,28 @@ class TestEditsSince:
             "dependencies",
         ]
 
-    def test_a_stamp_written_before_these_digests_never_reads_as_an_edit(self):
-        old = _stamp(CONFIG)
-        del old["context_scope_hash"], old["dependencies_hash"]
-        edited = {**CONFIG, "dependencies": ["a"], "context_scope": {"observe": ["a.x"]}}
+    def test_a_stamp_without_a_part_names_that_part_as_edited(self):
+        stamp = _stamp(CONFIG)
+        del stamp["context_scope_hash"], stamp["model_vendor"]
 
-        assert _edits_since(old, edited) == []
+        assert _edits_since(stamp, CONFIG) == [MODEL_EDIT, "context scope"]
+
+    def test_a_stamp_without_the_config_digest_names_the_action_config_as_edited(self):
+        stamp = _stamp(CONFIG)
+        del stamp["config_hash"]
+
+        assert _edits_since(stamp, CONFIG) == [CONFIG_EDIT]
+
+    def test_a_digest_of_what_it_reads_recorded_as_none_is_not_compared(self):
+        """None: a tool not loaded when the stamp was written; its code cannot be compared."""
+        stamp = {**_stamp(CONFIG), "context_scope_hash": None}
+
+        assert _edits_since(stamp, _with_scope(observe=["a.x"])) == []
+
+    def test_a_model_recorded_as_none_and_now_set_is_an_edit(self):
+        stamp = {**_stamp(CONFIG), "model_name": None}
+
+        assert _edits_since(stamp, CONFIG) == [MODEL_EDIT]
 
     def test_an_action_stopped_partway_reads_a_scope_edit(self):
         details = {"answered_under": _stamp(CONFIG)}
@@ -138,13 +149,10 @@ class TestTheGenerationDigest:
             _compute_generation_hash(CONFIG)
         )
 
-    def test_an_edit_is_named_and_an_old_stamp_names_none(self):
-        stamp = {**_stamp(CONFIG), "generation_hash": _compute_generation_hash(CONFIG)}
+    def test_an_edit_is_named(self):
         edited = {**CONFIG, "max_tokens": 50}
 
-        assert _edits_since(stamp, edited) == ["generation settings"]
-        del stamp["generation_hash"]
-        assert _edits_since(stamp, edited) == []
+        assert _edits_since(_stamp(CONFIG), edited) == ["generation settings"]
 
 
 class TestTheUdfSourceDigest:
@@ -182,16 +190,15 @@ class TestTheUdfSourceDigest:
         self._registered(monkeypatch)
         tool = {"kind": "tool", "model_vendor": "tool", "model_name": "tag"}
         assert _compute_udf_source_hash(tool) is None
-        assert _edits_since({"udf_source_hash": "old"}, tool) == []
+        assert _edits_since({**config_in_force(tool), "udf_source_hash": "old"}, tool) == []
 
-    def test_an_edit_is_named_and_an_old_stamp_names_none(self, monkeypatch):
+    def test_an_edit_is_named(self, monkeypatch):
         tool = {"kind": "tool", "model_vendor": "tool", "model_name": "tag"}
         self._registered(monkeypatch, tag="t1")
-        stamp = {"udf_source_hash": _compute_udf_source_hash(tool)}
+        stamp = config_in_force(tool)
         self._registered(monkeypatch, tag="t2")
 
         assert _edits_since(stamp, tool) == ["tool/guard code"]
-        assert _edits_since({}, tool) == []
 
 
 def test_a_udf_registers_with_the_digest_of_its_file(tmp_path):
