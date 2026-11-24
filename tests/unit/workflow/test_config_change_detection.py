@@ -1,5 +1,7 @@
 """Tests for config change detection via action hash."""
 
+import hashlib
+import json
 import logging
 from unittest.mock import MagicMock
 
@@ -24,11 +26,6 @@ class TestComputeActionConfigHash:
         ("base", "changed"),
         [
             pytest.param(
-                {"prompt": "Summarize", "model": "gpt-4", "schema": "s.yml"},
-                {"prompt": "Summarize", "model": "gpt-4o", "schema": "s.yml"},
-                id="model",
-            ),
-            pytest.param(
                 {"prompt": "Summarize", "model": "gpt-4"},
                 {"prompt": "Analyze", "model": "gpt-4"},
                 id="prompt",
@@ -47,6 +44,11 @@ class TestComputeActionConfigHash:
                 {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "skip"}},
                 {"prompt": "X", "guard": {"clause": "a > 1", "behavior": "warn"}},
                 id="guard_behavior",
+            ),
+            pytest.param(
+                {"prompt": "X"},
+                {"prompt": "X", "_sends_elsewhere": True},
+                id="routing",
             ),
         ],
     )
@@ -70,6 +72,51 @@ class TestComputeActionConfigHash:
     )
     def test_a_cosmetic_or_limit_change_keeps_the_hash(self, base, changed):
         assert _compute_action_config_hash(base) == _compute_action_config_hash(changed)
+
+    @pytest.mark.parametrize(
+        "changed",
+        [
+            pytest.param({"prompt": "X", "model": "gpt-4"}, id="model"),
+            pytest.param({"prompt": "X", "model_name": "gpt-4o"}, id="model_name"),
+            pytest.param({"prompt": "X", "model_vendor": "openai"}, id="model_vendor"),
+        ],
+    )
+    def test_the_model_is_outside_the_hash(self, changed):
+        assert _compute_action_config_hash({"prompt": "X"}) == _compute_action_config_hash(changed)
+
+    def test_the_hash_holds_no_model_key(self):
+        config = {
+            "prompt": "p",
+            "schema": "s",
+            "guard": "a > 1",
+            "_gathers": ["x"],
+            "model": "m",
+            "model_name": "n",
+            "model_vendor": "v",
+        }
+        hash_input = {
+            "prompt": "p",
+            "schema": "s",
+            "guard_clause": "a > 1",
+            "guard_behavior": "skip",
+            "routing": {"_gathers": ["x"]},
+        }
+        serialized = json.dumps(hash_input, sort_keys=True).encode("utf-8")
+        assert _compute_action_config_hash(config) == hashlib.sha256(serialized).hexdigest()[:16]
+
+    def test_an_action_without_routing_keys_hashes_an_empty_routing_map(self):
+        hash_input = {
+            "prompt": "p",
+            "schema": "s",
+            "guard_clause": "",
+            "guard_behavior": "",
+            "routing": {},
+        }
+        serialized = json.dumps(hash_input, sort_keys=True).encode("utf-8")
+        assert (
+            _compute_action_config_hash({"prompt": "p", "schema": "s"})
+            == hashlib.sha256(serialized).hexdigest()[:16]
+        )
 
     def test_guard_string_normalized_to_dict(self):
         """Guard as string should produce same hash as equivalent dict."""
@@ -114,13 +161,13 @@ class TestConfigChangeInvalidation:
         status_file = tmp_path / "status.json"
         state_mgr = ActionStateManager(status_file, ["action_a"])
 
-        old_config = {"prompt": "X", "model": "gpt-4", "record_limit": 10}
+        old_config = {"prompt": "X", "record_limit": 10}
         old_hash = _compute_action_config_hash(old_config)
         state_mgr.update_status(
             "action_a", ActionStatus.COMPLETED, record_limit=10, config_hash=old_hash
         )
 
-        new_config = {"prompt": "X", "model": "gpt-4o", "record_limit": 10}
+        new_config = {"prompt": "Y", "record_limit": 10}
         executor = self._make_executor(state_mgr)
         with caplog.at_level(logging.WARNING, logger="agent_actions"):
             result = executor._maybe_invalidate_completed_status(

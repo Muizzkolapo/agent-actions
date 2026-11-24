@@ -850,7 +850,7 @@ partway.
 ```
 _compute_action_config_hash() covers:
     prompt, schema, guard clause, guard behavior
-    routing keys (ROUTING_KEYS), only when the action sets one
+    routing keys (ROUTING_KEYS) that the action sets
 Stamped beside it, each compared on its own (_edits_since):
     model_name, model_vendor
     context_scope_hash   (_compute_context_scope_hash: observe/passthrough/
@@ -862,12 +862,11 @@ Stamped beside it, each compared on its own (_edits_since):
                           tool and UDF guard registered with; "" with
                           neither, None, never compared, if not loaded)
 
-Never add a key to _compute_action_config_hash: every stored digest would
+Do not add a key to _compute_action_config_hash: every stored digest would
 change and every completed action of every workflow would be named as edited.
 Add a stamp key to _READS_STAMPS instead; a stamp without it never differs.
-The routing keys are the one exception: the hash input holds them only when an
-action sets one, so the digest of every action without them is the digest it
-had before, and no completed action is named as edited.
+The model is not in the hash: _edits_since compares model_name and
+model_vendor on their own, so a model change is named as a model edit.
 
 If you change one of these fields and re-run WITHOUT --fresh:
     Nothing is reset. The executor finds the mismatch and logs a warning

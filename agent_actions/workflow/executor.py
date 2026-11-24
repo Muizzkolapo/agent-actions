@@ -97,33 +97,27 @@ def _compute_action_config_hash(
     """Compute a deterministic hash of semantically-meaningful action config.
 
     Covers: prompt reference, schema reference, guard clause + behavior, and the
-    routing keys (``ROUTING_KEYS``) when set.
+    routing keys (``ROUTING_KEYS``) the action sets (an empty map when it sets none).
     Cosmetic fields (description, tags) are excluded.
 
-    NOT the model: the ``"model"`` key below is permanently ``""`` because
-    configs declare ``model_vendor``/``model_name``.  It is kept so the digest
-    does not rotate.  A model change is caught by comparing those two fields
-    against the stamps in ``_edits_since`` — do not delete that as redundant.
+    NOT the model: ``_edits_since`` compares ``model_name``/``model_vendor`` against
+    the stamps on their own, so a model change is named as a model edit.
     """
     raw_guard: Any = action_config.get("guard") or {}
     guard: dict[str, str] = (
         {"clause": raw_guard, "behavior": "skip"} if isinstance(raw_guard, str) else raw_guard
     )
 
+    config: dict[str, Any] = action_config  # type: ignore[assignment]
     prompt = action_config.get("prompt", "")
     hash_input = {
         # A cache point changes how a request reaches the provider, not the text sent.
         "prompt": without_cache_points(prompt) if isinstance(prompt, str) else prompt,
-        "model": action_config.get("model", ""),  # frozen empty — see docstring
         "schema": action_config.get("schema", ""),
         "guard_clause": guard.get("clause", ""),
         "guard_behavior": guard.get("behavior", ""),
+        "routing": {key: config[key] for key in ROUTING_KEYS if config.get(key)},
     }
-    # Only when set, so the digest of an action without them does not rotate.
-    config: dict[str, Any] = action_config  # type: ignore[assignment]
-    routing = {key: config[key] for key in ROUTING_KEYS if config.get(key)}
-    if routing:
-        hash_input["routing"] = routing
 
     serialized = json.dumps(hash_input, sort_keys=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
@@ -141,7 +135,7 @@ def _digest(value: Any) -> str:
 def _compute_context_scope_hash(action_config: ActionConfigDict) -> str:
     """A digest of what ``context_scope`` lets the action read.
 
-    Apart from ``config_hash`` so that recording it changed no digest already stored.
+    Apart from ``config_hash`` so that an edit names which part changed.
     """
     scope: Any = action_config.get("context_scope") or {}
     if not isinstance(scope, dict):
@@ -306,8 +300,6 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
     was recorded is left alone; nor does one the config cannot compute now.
     """
     edits: list[str] = []
-    # The hash reads a "model" key and configs write model_name/model_vendor; adding
-    # them would change every stored digest and name an edit at every completed action.
     if any(
         stamp.get(key) is not None and stamp.get(key) != action_config.get(key)
         for key in ("model_name", "model_vendor")
