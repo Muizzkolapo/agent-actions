@@ -23,7 +23,7 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `SKILL.md` (project structure) | `agent_actions.yml` | Reads | — |
-| `SKILL.md` (project structure) | `agent_config/{workflow}.yml` | Reads | `name`, `defaults`, `actions[]` |
+| `SKILL.md` (project structure) | `agent_config/{workflow}.yml` | Reads | `name`, `defaults`, `actions[]`, `outputs[]` |
 | `SKILL.md` (project structure) | `prompt_store/{workflow}.md` | Reads | — |
 | `SKILL.md` (project structure) | `schema/{workflow}/{action}.yml` | Reads | — |
 | `SKILL.md` (project structure) | `tools/{workflow}/*.py` | Reads | — |
@@ -35,6 +35,8 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `references/pooling-approach.md` | `agent_config/{workflow}.yml` | Reads | `actions[].dependencies`, `actions[].versions`, `actions[].version_consumption`, `actions[].context_scope` |
 | `references/context-scoping.md` | `agent_config/{workflow}.yml` | Reads | `actions[].context_scope` |
 | `references/prompt-engineering.md` | `prompt_store/{workflow}.md` | Reads | — |
+| `references/database-io.md` | `agent_actions.yml` | Reads | `connections` |
+| `references/database-io.md` | `agent_config/{workflow}.yml` | Reads | `defaults.data_source`, `outputs[]` |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Writes (deletes) | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/{store,target,sandbox}/` | Writes (`--full` wipes) | — |
 | `scripts/reset_workflow.py` | `.agac/batch_state/` | Writes (`--full` reclaims) | — |

@@ -55,6 +55,8 @@ defaults:
       reference_data: $file:reference_data.json
 ```
 
+To read input rows from a database instead of `staging/`, set `data_source: {type: database, connection: <name>, sql: <query>}`; to write an action's results to a table, add a top-level `outputs:` block. Connections are named in `agent_actions.yml`, with credentials as `${NAME}`. See [references/database-io.md](references/database-io.md).
+
 ## Data Model
 
 Every record carries a `content` dict that only grows. Each action adds its output under a namespace key:
@@ -75,6 +77,7 @@ Detailed guidance — loaded on demand:
 - [references/loop-patterns.md](references/loop-patterns.md) — verify→rewrite, aggregate threshold patterns, sequential enrichment, contract check loops
 - [references/pooling-approach.md](references/pooling-approach.md) — sequential vs parallel pooling, selection action design, pooling vs versioning
 - [references/prompt-engineering.md](references/prompt-engineering.md) — one unit of outcome, distil before generating, seed data, output contracts, version diversity
+- [references/database-io.md](references/database-io.md) — `connections:`, a `database` data source and its snapshot, `outputs:` tables and their modes, `--refresh-input`, `agac export`
 
 Related skills:
 
