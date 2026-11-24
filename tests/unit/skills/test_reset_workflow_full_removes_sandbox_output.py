@@ -73,3 +73,30 @@ def test_a_soft_reset_leaves_the_sandbox_output(script, project, monkeypatch):
     script.main()
 
     assert (base / "sandbox" / ".agent_status.json").exists()
+
+
+def test_a_full_reset_reclaims_the_batches_the_sandbox_store_names(script, project, monkeypatch):
+    from agent_actions.config.sandbox import sandbox_mode
+    from agent_actions.llm.providers import local_batch_records
+    from agent_actions.storage import get_storage_backend
+
+    root, base = project
+    (base / "store" / "wf.sandbox.db").unlink()
+    with sandbox_mode(True):
+        backend = get_storage_backend(workflow_path=str(base.parent), workflow_name="wf")
+    backend.initialize()
+    entry = {"batch_id": "sandbox_batch", "status": "completed", "timestamp": "t"}
+    backend.save_metadata("batch_registry:summarize", json.dumps({"pages.json": entry}))
+    backend.close()
+    released = []
+    monkeypatch.setattr(local_batch_records, "discard_partial_batch_records", lambda: None)
+    monkeypatch.setattr(
+        local_batch_records,
+        "release_local_batch_record",
+        lambda batch_id: released.append(batch_id) or True,
+    )
+
+    assert script.release_batch_records(root, base, "wf") is True
+
+    assert released == ["sandbox_batch"]
+    assert not (base / "store" / "wf.db").exists()
