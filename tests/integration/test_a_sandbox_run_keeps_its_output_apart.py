@@ -192,6 +192,8 @@ def test_status_and_records_read_the_store_they_are_told_to(openai_project):
     assert real["run_status"] is None
     refused = run_agac(openai_project, "records", "-w", WORKFLOW, "-A", "shout")
     assert refused.returncode != 0
+    real_store = _io(openai_project) / "store" / f"{WORKFLOW}.db"
+    assert f"No store for workflow '{WORKFLOW}' at {real_store}" in refused.stderr
 
 
 def test_a_sandbox_run_leaves_a_real_runs_files_as_they_were(mock_project):
