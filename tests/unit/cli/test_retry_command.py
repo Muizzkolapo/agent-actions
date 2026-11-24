@@ -451,6 +451,14 @@ class TestARepairNarrowsOnlyWhatFinished:
     def test_an_action_left_unfinished_is_refused(self, tmp_path, status):
         assert f"classify ({status})" in self._refused(tmp_path, status)
 
+    def test_a_sandbox_retry_names_the_flag_in_its_remedy(self, tmp_path):
+        from agent_actions.config import sandbox
+
+        with sandbox.sandbox_mode(True):
+            message = self._refused(tmp_path, "pending")
+
+        assert "agac run -a wf --sandbox" in message
+
     def test_an_action_a_run_was_stopped_in_is_refused(self, tmp_path):
         for status in ("running", "interrupted", "checking_batch"):
             target = tmp_path / status

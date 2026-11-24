@@ -931,14 +931,15 @@ class RetryCommand:
         if not unfinished:
             return
 
-        remedy = f"Run the workflow first — agac run -a {self.agent_name} — then retry."
+        flag = sandbox.flag()
+        remedy = f"Run the workflow first — agac run -a {self.agent_name}{flag} — then retry."
         if halted:
             resume = (
                 f"resume {halted[0]} with a retry from it, which names no record and runs it "
-                f"in full — agac retry -a {self.agent_name} --from {halted[0]} — then retry."
+                f"in full — agac retry -a {self.agent_name} --from {halted[0]}{flag} — then retry."
             )
             remedy = (
-                f"Run the workflow first — agac run -a {self.agent_name} — then {resume}"
+                f"Run the workflow first — agac run -a {self.agent_name}{flag} — then {resume}"
                 if len(unfinished) > len(halted)
                 else f"First {resume}"
             )
