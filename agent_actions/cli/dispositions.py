@@ -29,7 +29,6 @@ from agent_actions.record.reasons import (
     HALTED_ON_EXHAUSTED,
     SENT_ELSEWHERE,
 )
-from agent_actions.storage import get_storage_backend
 from agent_actions.storage.backend import (
     DISPOSITION_DEFERRED,
     DISPOSITION_EXHAUSTED,
@@ -42,6 +41,7 @@ from agent_actions.storage.backend import (
     FAILURE_DISPOSITIONS,
     NODE_LEVEL_RECORD_ID,
 )
+from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 logger = logging.getLogger(__name__)
 
@@ -149,11 +149,12 @@ class DispositionsCommand:
             self.agent_name, self.agent, auto_create=False, project_root=project_root
         )
 
-        backend = get_storage_backend(
-            workflow_path=str(paths.io_dir.parent),
-            workflow_name=self.agent_name,
-        )
-        backend.initialize()
+        # Before the workflow loads: loading it opens the store, which creates the file.
+        db_path = paths.io_dir / "store" / f"{self.agent_name}.db"
+        if not db_path.exists():
+            raise click.ClickException(
+                f"No store for workflow '{self.agent_name}' at {db_path}. Has it been run?"
+            )
 
         workflow = load_workflow(
             self.agent_name, paths, project_root, sends_requests=False, read_only=True
@@ -169,13 +170,17 @@ class DispositionsCommand:
         else:
             actions = execution_order
 
-        if self.as_json:
-            report = dispositions_report(backend, self.agent_name, actions)
-            click.echo(json.dumps(report, indent=2, ensure_ascii=False))
-        elif self.quarantined_only:
-            self._show_quarantined(backend, actions)
-        else:
-            self._show_summary(backend, actions)
+        backend = SQLiteBackend.create_readonly(db_path)
+        try:
+            if self.as_json:
+                report = dispositions_report(backend, self.agent_name, actions)
+                click.echo(json.dumps(report, indent=2, ensure_ascii=False))
+            elif self.quarantined_only:
+                self._show_quarantined(backend, actions)
+            else:
+                self._show_summary(backend, actions)
+        finally:
+            backend.close()
 
     def _show_summary(self, backend, actions: list[str]) -> None:
         """Show per-action disposition counts beside the records produced."""

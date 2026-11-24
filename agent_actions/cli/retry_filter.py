@@ -9,7 +9,12 @@ import click
 from rich.console import Console
 
 from agent_actions.cli.args import RetryCommandArgs
-from agent_actions.cli.retry import RetryCommand, _manifest_path, _read_manifest
+from agent_actions.cli.retry import (
+    RetryCommand,
+    _manifest_path,
+    _read_manifest,
+    refuse_without_a_store,
+)
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.processing.repair_lineage import actions_below
@@ -45,6 +50,7 @@ class RetryFilterCommand:
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, auto_create=False, project_root=project_root
         )
+        refuse_without_a_store(paths, self.agent_name)
         if self.args.dry_run:
             self._filter(paths, project_root)
             return
