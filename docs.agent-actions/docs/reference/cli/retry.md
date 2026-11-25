@@ -152,7 +152,9 @@ reason, and a detail that names `agac retry --filter` and the date.
 
 After this, `retry` does not list the record, and the downstream actions treat the record
 as absent. The command removes what the failure of the record cascaded into the downstream
-actions: their `unprocessed` row and their tombstone. Thus the downstream actions hold
+actions: their `unprocessed` row and their tombstone. If a downstream action has a `failed`
+or `exhausted` row beside the tombstone of the record, the command also removes that row,
+because only the failure cascaded the record to that action. Thus the downstream actions hold
 nothing for the record, which is what they would hold under the guard. The action where the
 record failed keeps its tombstone. Thus a later run of that action carries the record as it
 is, and does not answer the record again.
