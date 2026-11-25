@@ -124,6 +124,8 @@ def test_a_run_that_wrote_no_result_fails_the_report(capsys):
         ({"exit_code": 1.5}, "exit_code: 1.5 is not a whole number"),
         ({"actions": ["classify"]}, "actions: must be a mapping"),
         ({"actions": {"classify": 4}}, "actions.classify: must be a mapping"),
+        ({"actions": {"classify": None}}, "actions.classify: states no value"),
+        ({"actions": {"classify": {}}}, "actions.classify: states no value"),
         ([], "the file must be a mapping"),
         ({}, "the file states no expectation"),
         (None, "the file must be a mapping"),

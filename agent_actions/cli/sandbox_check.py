@@ -133,6 +133,10 @@ def parse_expected(data: Any, name: str) -> Expected:
     for action, keys in _mapping(data.get("actions"), f"{name}: actions").items():
         where = f"{name}: actions.{action}"
         keys = _mapping(keys, where)
+        if not keys:
+            raise ExpectationsError(
+                f"{where}: states no value. State its status or a count, or remove the entry"
+            )
         _refuse_unknown(keys, ACTION_KEYS, where)
         checked: dict[str, Any] = {}
         for key, value in keys.items():

@@ -102,6 +102,7 @@ The check refuses these entries with exit code 2. The message names the file and
 
 - An unknown key, at the top level, under `scenario` or under an action.
 - A count that is not a whole number 0 or more, and a status that is not in the list.
+- An action entry that states no value, such as `classify:` or `classify: {}`.
 - An action that the workflow does not have. The check finds this after the run, in the status file that the run wrote. When the run wrote no result, the check does not read the actions, so it does not refuse a name. The check fails, as [A run that wrote no result](#no-result) says.
 
 The mock and the scenario decide in the same way for the same input, also in a parallel run. Thus a sandbox run gives the same values each time, and a file can state them exactly. See [Each decision is per record](../../guides/sandbox.md#each-decision-is-per-record).

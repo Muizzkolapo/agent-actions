@@ -153,3 +153,13 @@ def test_the_exit_code_of_a_run_that_wrote_no_result_is_compared_and_the_check_f
     assert "  ✓ exit code  1" in result.stdout, result.stdout
     assert "  ✗ run" in result.stdout
     assert "FAIL: 1 of 2" in result.stdout
+
+
+def test_an_action_entry_that_states_no_value_exits_2_before_any_run(project):
+    (project / "f.yml").write_text("exit_code: 0\nactions:\n  classify:\n")
+
+    result = _check(project, "--expected", "f.yml")
+
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "f.yml: actions.classify: states no value" in result.stderr
+    assert "Starting agent run" not in result.stdout
