@@ -558,7 +558,7 @@ fire_event(ActionCompleteEvent(
 - `mode` (str): `"online"` or `"batch"`
 - `model_vendor` / `model_name` (str): The model that ran the action. Empty for a tool action or a HITL action
 - `kind` (str): `"llm"`, `"tool"`, `"hitl"`, … — consumers use it to decide if a model is meaningful
-- `stubbed` (bool): True for a tool action that the scenario of a [sandbox run](../guides/sandbox.md#stub-a-tool-action) stubs. The code of the tool did not run, and the mock built its output. The completion line then ends with `(stubbed)`
+- `stubbed` (bool): True for a tool action that the scenario of a [sandbox run](../guides/sandbox.md#stub-a-tool-action) stubs. The code of the tool did not run, and the mock built its output. The completion line then shows `(stubbed)` after the time. The notes come after it, for example `✓ retrieve_candidates  3 records in 0.1s (stubbed) — 1 skipped by guard`
 - `cases` (Dict[str, int] | None): For a built-in router, the number of records of each case in this execution, in the order of the cases of the router, `default` last. None for every other action. The completion line ends with these counts, for example `— a 2, b 3, default 1`.
 
 ---

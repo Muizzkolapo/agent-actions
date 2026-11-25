@@ -174,7 +174,7 @@ A [scenario file](../../guides/sandbox.md#scenario) makes the mock fail, change 
 agac run -w my_workflow --sandbox --scenario chaos
 ```
 
-A tool action runs its own code in a sandbox run. If the tool calls a service, the run is slow and not offline. To prevent that, stub the tool in the scenario file: with `stub: true`, the code of the tool does not run, and the mock builds its output from its output schema. The run names the stubbed tools on a `SANDBOX` line, and the line of each stubbed tool ends with `(stubbed)`. See [Stub a tool action](../../guides/sandbox.md#stub-a-tool-action).
+A tool action runs its own code in a sandbox run. If the tool calls a service, the run is slow and not offline. To prevent that, stub the tool in the scenario file: with `stub: true`, the code of the tool does not run, and the mock builds its output from its output schema. The run names the stubbed tools on a `SANDBOX` line. The line of each stubbed tool shows `(stubbed)` after the time, and then its notes, for example `(stubbed) — 1 skipped by guard`. See [Stub a tool action](../../guides/sandbox.md#stub-a-tool-action).
 
 ```yaml
 # sandbox.yml
