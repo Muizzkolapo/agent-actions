@@ -106,8 +106,8 @@ the `stub` entries in it.
 
 ## Read the results
 
-1. The run prints `SANDBOX` lines when it starts and after its result. The last one counts
-   the faults:
+1. The run prints `SANDBOX` lines when it starts and after its result. One line, once per
+   command, names the stubbed tools. The last one counts the faults:
    `SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped`.
 2. The exit codes are those of a real run: 0 every action succeeded, 1 the run failed,
    3 some records failed, 4 paused for a batch.

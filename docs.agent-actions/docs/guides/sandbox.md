@@ -14,7 +14,7 @@ Use a sandbox run to test the connections of a workflow: the dependencies, guard
 agac run -w my_workflow --sandbox
 ```
 
-The run prints `SANDBOX` on stderr when it starts. When the scenario stubs tool actions, a second `SANDBOX` line names them. After its result, the run prints a `SANDBOX run` line. At the end of the command, it prints one `SANDBOX scenario` line that counts the faults of the [scenario](#scenario).
+The run prints `SANDBOX` on stderr when it starts. When the scenario stubs tool actions, a second `SANDBOX` line names them. The command prints this line once, after the scenario passed its checks, also when `--wait` or `agac retry --all` makes more than one pass. After its result, the run prints a `SANDBOX run` line. At the end of the command, it prints one `SANDBOX scenario` line that counts the faults of the [scenario](#scenario).
 
 ## What Changes in a Sandbox Run
 

@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Console
-from rich.markup import escape
 
 from agent_actions.config import sandbox
 from agent_actions.config.manager import ConfigManager
@@ -91,9 +90,6 @@ def load_workflow_configs(
         sandbox.load_scenario(
             config.project_root, mocked, sandbox.tool_actions(action_configs), workflow_name
         )
-        notice = sandbox.stub_notice()
-        if notice is not None:
-            console.print(f"[bold yellow]SANDBOX[/bold yellow]: {escape(notice)}", soft_wrap=True)
     action_indices = {action: i for i, action in enumerate(execution_order)}
 
     # Add idx and workflow_config_path fields to each action config

@@ -34,6 +34,8 @@ _scenario_flag: str | None = None
 _scenario: Scenario | None = None
 # What the scenario did over the whole command, across each load of the workflow.
 _tally: Tally | None = None
+# Whether this command printed the line naming the stubbed tools.
+_stubs_noted = False
 
 
 def is_active() -> bool:
@@ -54,15 +56,16 @@ def sandbox_mode(enabled: bool) -> Iterator[None]:
 @contextmanager
 def scenario_choice(source: str | None) -> Iterator[None]:
     """Have each workflow load in this block read the scenario *source* names."""
-    global _follows_scenario, _scenario_flag, _scenario, _tally
+    global _follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted
     from agent_actions.llm.providers.agac.scenario import Tally
 
-    previous = (_follows_scenario, _scenario_flag, _scenario, _tally)
+    previous = (_follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted)
     _follows_scenario, _scenario_flag, _scenario, _tally = True, source, None, Tally()
+    _stubs_noted = False
     try:
         yield
     finally:
-        _follows_scenario, _scenario_flag, _scenario, _tally = previous
+        _follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted = previous
 
 
 def load_scenario(
@@ -156,11 +159,17 @@ def stubbed_tools() -> list[str]:
 
 
 def stub_notice() -> str | None:
-    """The line that names the stubbed tool actions, and where a preset took the stubs from."""
+    """The line that names the stubbed tool actions, and where a preset took the stubs from.
+
+    Once per command: None after the first line, so a ``--wait`` pass or a ``retry --all``
+    pass, which loads the workflow again, does not repeat it.
+    """
+    global _stubs_noted
     followed = scenario()
     stubbed = followed.stubbed() if followed is not None else []
-    if followed is None or not stubbed:
+    if followed is None or not stubbed or _stubs_noted:
         return None
+    _stubs_noted = True
     names = ", ".join(stubbed)
     line = f"the scenario stubs these tool actions, so their code does not run: {names}"
     if followed.stubs_from is not None:
