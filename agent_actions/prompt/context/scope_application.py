@@ -987,12 +987,12 @@ def apply_context_scope_for_records(
     # alone (`extract_tool_input` reads it from there).
     enriched: list[dict] = []
     qualified_keys: set[str] = set()
-    for record, enriched_content, record_seed in prepared:
-        if enriched_content is None:
+    for record, scoped_content, record_seed in prepared:
+        if scoped_content is None:
             enriched.append(record)
             continue
         qualified_keys |= _inject_flat_observed_keys(
-            enriched_content,
+            scoped_content,
             resolved_observe,
             qualify_wildcards,
             action_name,
@@ -1002,7 +1002,7 @@ def apply_context_scope_for_records(
         enriched.append(
             {
                 **record,
-                "content": enriched_content,
+                "content": scoped_content,
                 **({"_seed": record_seed} if record_seed else {}),
             }
         )
