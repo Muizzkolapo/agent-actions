@@ -336,6 +336,14 @@ When the pipeline reaches `review_classification`, a browser-based HITL review U
 
 Output is written to `agent_io/target/select_for_users/` with three views per book: `seo_view`, `management_view`, and `developer_view`.
 
+### Run Offline
+
+```bash
+agac run -w book_catalog_enrichment --sandbox
+```
+
+A sandbox run needs no API key and no network. The mock provider answers each LLM action, and the HITL review approves each record. The `retrieve_candidates` tool calls the Open Library API, so `sandbox.yml` stubs it: its code does not run, and the mock builds its output from the `search_book_catalog` schema. The other tools run their own code. Remove `stub: true` from `sandbox.yml` to call the API in a sandbox run. A real run does not read `sandbox.yml`.
+
 ### Input Format
 
 Drop your own catalog data into `agent_io/staging/` as JSON:
@@ -363,6 +371,7 @@ book_catalog_enrichment/
 ├── README.md
 ├── docs/
 ├── agent_actions.yml
+├── sandbox.yml                           # Sandbox scenario: stubs retrieve_candidates
 ├── agent_workflow/
 │   └── book_catalog_enrichment/
 │       ├── README.md                     # Design philosophy and patterns

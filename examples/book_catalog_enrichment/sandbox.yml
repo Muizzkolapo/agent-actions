@@ -1,0 +1,8 @@
+# The scenario of `agac run -w book_catalog_enrichment --sandbox`.
+#
+# `retrieve_candidates` calls the Open Library API. With `stub: true` its code does not
+# run in a sandbox run: the mock builds its output from the `search_book_catalog` schema.
+# Thus the sandbox run is offline. A real run does not read this file.
+actions:
+  retrieve_candidates:
+    stub: true

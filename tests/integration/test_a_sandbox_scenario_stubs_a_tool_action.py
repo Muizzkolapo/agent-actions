@@ -11,12 +11,13 @@ the tool runs. A scenario the run cannot follow stops it before any call.
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import jsonschema
 import pytest
 
-from tests._support.agac_cli import run_agac
+from tests._support.agac_cli import REPO, run_agac
 
 WORKFLOW = "catalog"
 TITLES = ["Dune", "Emma", "Ulysses", "Beloved", "Hamlet", "Walden"]
@@ -393,3 +394,33 @@ def test_inspect_refuses_a_scenario_the_run_would_refuse(tmp_path):
 
     assert shown.returncode != 0
     assert "actions.rank.stub" in _said(shown)
+
+
+EXAMPLE = "book_catalog_enrichment"
+# Appended to the example's tool: its one network call writes a marker and reaches no host.
+NO_NETWORK = """
+
+def _search_open_library(query: str, limit: int = 20) -> list[dict]:
+    from pathlib import Path
+
+    (Path(__file__).resolve().parents[2] / "searched").write_text(query)
+    return []
+"""
+
+
+@pytest.mark.parametrize("stubbed", [True, False])
+def test_the_book_catalog_example_makes_no_search_in_a_sandbox_run(tmp_path, stubbed):
+    root = tmp_path / EXAMPLE
+    shutil.copytree(REPO / "examples" / EXAMPLE, root)
+    tool = root / "tools" / EXAMPLE / "search_book_catalog.py"
+    assert "def _search_open_library(" in tool.read_text()
+    tool.write_text(tool.read_text() + NO_NETWORK)
+    if not stubbed:
+        (root / "sandbox.yml").unlink()
+
+    result = run_agac(root, "run", "-w", EXAMPLE, "--sandbox", "--fresh", env=ENV)
+
+    assert result.returncode == 0, _said(result)
+    assert (root / "searched").exists() is not stubbed
+    assert "retrieve_candidates  3 records" in result.stderr, result.stderr
+    assert ("(stubbed)" in result.stderr) is stubbed
