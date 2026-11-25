@@ -15,7 +15,7 @@ scenario:
 # Per action: its status, and the record counts of `agac dispositions --sandbox`.
 actions:
   read_ticket: {status: completed, records: 5}
-  classify: {status: completed, success: 4, filtered: 1}          # the guard filters the spam ticket
+  classify: {status: completed, records: 4, total: 5, success: 4, filtered: 1}  # 5 reach it (total); the guard filters the spam ticket, so 4 are stored (records)
   score_1: {status: completed, success: 4}
   score_2: {status: completed, success: 4}
   merge_scores: {status: completed, success: 4}

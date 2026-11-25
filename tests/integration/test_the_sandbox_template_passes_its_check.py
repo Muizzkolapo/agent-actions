@@ -163,3 +163,40 @@ def test_an_action_entry_that_states_no_value_exits_2_before_any_run(project):
     assert result.returncode == 2, result.stdout + result.stderr
     assert "f.yml: actions.classify: states no value" in result.stderr
     assert "Starting agent run" not in result.stdout
+
+
+def test_the_check_run_twice_passes_twice_because_each_run_starts_fresh(project):
+    first = _check(project)
+    second = _check(project)
+
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert second.returncode == 0, second.stdout + second.stderr
+    # The second run cleared the first run's output and made each call again.
+    assert "--fresh: cleared stored results" in second.stdout + second.stderr
+    assert "SANDBOX scenario sandbox.yml: 8 errors, 4 rules broken" in second.stdout
+
+
+FAILS_ONE_TICKET = """\
+seed: 7
+records:
+  - match: {read_ticket.ticket_id: T-1001}
+    actions:
+      classify: {error: server_error}   # each attempt: the record fails for good
+"""
+
+
+def test_the_exit_code_of_a_run_that_fails_a_record_is_compared_as_a_value(project):
+    (project / "fails_one.yml").write_text(FAILS_ONE_TICKET)
+    (project / "f.yml").write_text("exit_code: 3\n")
+
+    holds = _check(project, "--expected", "f.yml", "--scenario", "fails_one.yml")
+
+    assert holds.returncode == 0, holds.stdout + holds.stderr
+    assert "  ✓ exit code  3" in holds.stdout
+
+    (project / "f.yml").write_text("exit_code: 0\n")
+
+    differs = _check(project, "--expected", "f.yml", "--scenario", "fails_one.yml")
+
+    assert differs.returncode == 1, differs.stdout + differs.stderr
+    assert "  exit code: expected 0, got 3" in differs.stdout
