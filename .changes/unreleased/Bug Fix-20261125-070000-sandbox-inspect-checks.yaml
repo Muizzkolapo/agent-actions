@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: '`agac inspect --sandbox` now refuses a scenario `pin` that names a field the action''s output schema does not declare, and a `pin` or `break_rules` on a text-mode action, as `agac run --sandbox` does. It exited 0 before.'
+time: 2026-11-25T07:00:00+00:00
