@@ -514,19 +514,21 @@ def load(
     """The scenario *source* names, checked against the workflow's LLM and tool actions.
 
     None is the project's file for *workflow* (``project_file``), else ``happy``. A preset
-    keeps the ``stub`` entries of that file, with their ``pin``, and nothing else of it; a
-    path is that file alone. *groups* maps each LLM action to the base name of its version
-    group, or to None.
+    keeps the ``stub`` entries of that file, with their ``pin``, and nothing else of it (a
+    model-call key in such an entry is refused); a path is that file alone. *groups* maps
+    each LLM action to the base name of its version group, or to None.
     """
     own = project_file(project_root, workflow)
     hint = stubs_from = None
     if source in PRESETS:
         name, raw = source, PRESETS[source]
-        stubs = _stub_entries(_read(own, own.name)) if own is not None else {}
-        if own is not None and stubs:
-            raw = {**raw, "actions": stubs}
-            stubs_from = own.name
-            hint = _per_workflow_hint(own, project_root, workflow)
+        if own is not None:
+            own_hint = _per_workflow_hint(own, project_root, workflow)
+            own_label = Scenario(name, _File(), {}, stubs_from=own.name).label
+            stubs = _stub_entries(_read(own, own_label, own_hint))
+            if stubs:
+                raw = {**raw, "actions": stubs}
+                stubs_from, hint = own.name, own_hint
         label = Scenario(name, _File(), {}, stubs_from=stubs_from).label
     else:
         if source is None:
@@ -547,7 +549,7 @@ def load(
                 )
             name = source
         label = name
-        raw = _read(path, label)
+        raw = _read(path, label, hint)
     try:
         data = _File.model_validate(raw)
     except ValidationError as e:
@@ -560,12 +562,13 @@ def load(
 
 
 def _stub_entries(raw: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    """Each ``actions`` entry of *raw* that sets ``stub``, with only its ``stub`` and ``pin``."""
+    """Each ``actions`` entry of *raw* that sets ``stub``: its ``stub`` and ``pin``, and any
+    model-call key, kept so that the load refuses it as it does without a preset."""
     actions = raw.get("actions")
     if not isinstance(actions, dict):
         return {}
     return {
-        name: {key: entry[key] for key in ("stub", "pin") if key in entry}
+        name: {key: entry[key] for key in ("stub", "pin", *MODEL_CALL_KEYS) if key in entry}
         for name, entry in actions.items()
         if isinstance(entry, dict) and "stub" in entry
     }
@@ -592,18 +595,18 @@ _HINT = (
 )
 
 
-def _read(path: Path, label: str) -> Any:
+def _read(path: Path, label: str, hint: str | None = None) -> Any:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as e:
-        raise ConfigurationError(
-            f"Scenario {label} cannot be read: {e}",
-            context={"config_file": label, "hint": _HINT},
-        ) from None
+        said = f"Scenario {label} cannot be read: {e}"
+        if hint is not None:
+            said += f"\n  {hint}"
+        raise ConfigurationError(said, context={"config_file": label, "hint": _HINT}) from None
     if raw is None:
         return {}
     if not isinstance(raw, dict):
-        raise _refusal(label, [f"(file): must be a mapping, got {type(raw).__name__}"])
+        raise _refusal(label, [f"(file): must be a mapping, got {type(raw).__name__}"], hint)
     return raw
 
 

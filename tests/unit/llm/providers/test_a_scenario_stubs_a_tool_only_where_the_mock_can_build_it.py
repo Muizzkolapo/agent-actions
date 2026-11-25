@@ -3,7 +3,9 @@
 ``stub`` is a key of a tool action under ``actions``. The load refuses it anywhere else,
 on a tool the mock cannot build an output for, and refuses on a tool action each key that
 describes a model call. ``pin`` on a tool action needs ``stub: true``. ``stub`` is
-``true`` or ``false``: a string or a number is refused, not read as a boolean.
+``true`` or ``false``: a string or a number is refused, not read as a boolean. A preset
+keeps the ``stub`` and ``pin`` of each project-file entry that sets ``stub``, and refuses a
+model-call key there as a run without a preset does.
 """
 
 from __future__ import annotations
@@ -95,6 +97,62 @@ def test_a_preset_stubs_nothing(tmp_path, preset):
     scenario = sc.load(preset, tmp_path, LLM_ACTIONS, tools=TOOLS)
 
     assert scenario.stubbed() == []
+
+
+def _under_a_preset(tmp_path: Path, text: str, preset: str = "happy") -> sc.Scenario:
+    (tmp_path / "sandbox.yml").write_text(text, encoding="utf-8")
+    return sc.load(preset, tmp_path, LLM_ACTIONS, tools=TOOLS)
+
+
+@pytest.mark.parametrize(
+    ("entry", "key"),
+    [
+        ("{stub: true, errors: {rate: 0.5}}", "errors"),
+        ("{stub: true, break_rules: {rate: 0.5}}", "break_rules"),
+        ("{stub: true, judge: {pass_rate: 0.5}}", "judge"),
+        ("{stub: true, latency_ms: 5}", "latency_ms"),
+    ],
+)
+def test_a_preset_refuses_a_model_call_key_in_a_kept_entry(tmp_path, entry, key):
+    with pytest.raises(ConfigurationError) as caught:
+        _under_a_preset(tmp_path, f"actions:\n  search: {entry}\n", "chaos")
+
+    message = str(caught.value)
+    assert "Scenario preset chaos with the stubs of sandbox.yml has 1 problem(s)" in message
+    assert (
+        f"- actions.search.{key}: 'search' is a tool action, and {key} describes a model call"
+        in message
+    )
+
+
+def test_a_preset_refuses_error_in_a_kept_entry_as_a_run_without_one_does(tmp_path):
+    text = "actions:\n  search: {stub: true, error: refusal}\n"
+    without = _refused(tmp_path, text)
+
+    with pytest.raises(ConfigurationError) as caught:
+        _under_a_preset(tmp_path, text)
+
+    assert "- actions.search.error: unknown key" in without, without
+    assert "- actions.search.error: unknown key" in str(caught.value), str(caught.value)
+    assert "preset happy with the stubs of sandbox.yml" in str(caught.value)
+
+
+def test_a_preset_keeps_only_the_stub_and_pin_of_a_kept_entry(tmp_path):
+    scenario = _under_a_preset(
+        tmp_path, "actions:\n  search: {stub: true, pin: {source: x}, note: from the file}\n"
+    )
+
+    assert scenario.stubbed() == ["search"]
+    assert scenario.rules_for("search", {}).pin == {"source": "x"}
+
+
+def test_a_preset_ignores_an_entry_without_stub(tmp_path):
+    scenario = _under_a_preset(
+        tmp_path, "actions:\n  extract: {latency_ms: 5, errors: {rate: 1}}\n"
+    )
+
+    assert scenario.stubs_from is None
+    assert scenario.rules_for("extract", {}).errors.rate == 0.0
 
 
 @pytest.mark.parametrize(
