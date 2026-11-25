@@ -522,11 +522,13 @@ def load(
     hint = stubs_from = None
     if source in PRESETS:
         name, raw = source, PRESETS[source]
-        stubs = _stub_entries(_read(own, own.name)) if own is not None else {}
-        if own is not None and stubs:
-            raw = {**raw, "actions": stubs}
-            stubs_from = own.name
-            hint = _per_workflow_hint(own, project_root, workflow)
+        if own is not None:
+            own_hint = _per_workflow_hint(own, project_root, workflow)
+            own_label = Scenario(name, _File(), {}, stubs_from=own.name).label
+            stubs = _stub_entries(_read(own, own_label, own_hint))
+            if stubs:
+                raw = {**raw, "actions": stubs}
+                stubs_from, hint = own.name, own_hint
         label = Scenario(name, _File(), {}, stubs_from=stubs_from).label
     else:
         if source is None:
@@ -547,7 +549,7 @@ def load(
                 )
             name = source
         label = name
-        raw = _read(path, label)
+        raw = _read(path, label, hint)
     try:
         data = _File.model_validate(raw)
     except ValidationError as e:
@@ -593,18 +595,18 @@ _HINT = (
 )
 
 
-def _read(path: Path, label: str) -> Any:
+def _read(path: Path, label: str, hint: str | None = None) -> Any:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as e:
-        raise ConfigurationError(
-            f"Scenario {label} cannot be read: {e}",
-            context={"config_file": label, "hint": _HINT},
-        ) from None
+        said = f"Scenario {label} cannot be read: {e}"
+        if hint is not None:
+            said += f"\n  {hint}"
+        raise ConfigurationError(said, context={"config_file": label, "hint": _HINT}) from None
     if raw is None:
         return {}
     if not isinstance(raw, dict):
-        raise _refusal(label, [f"(file): must be a mapping, got {type(raw).__name__}"])
+        raise _refusal(label, [f"(file): must be a mapping, got {type(raw).__name__}"], hint)
     return raw
 
 

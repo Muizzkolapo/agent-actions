@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Under `agac run --sandbox --scenario happy` or `--scenario chaos`, a `stub` entry of the project scenario file that also sets a key that describes a model call (`errors`, `break_rules`, `judge`, `latency_ms` or `error`) now stops the command, as it does in a run without `--scenario`; before, the preset dropped that key without a word. A refusal of a `sandbox.yml` that cannot be read or is not a mapping now also adds the line that names `sandbox.<workflow>.yml` in a project of more than one workflow, and under a preset it names `preset <name> with the stubs of sandbox.yml`.'
+time: 2026-11-25T18:30:00Z
