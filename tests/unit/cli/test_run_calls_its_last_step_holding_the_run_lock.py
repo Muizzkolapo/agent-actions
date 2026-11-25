@@ -1,9 +1,10 @@
-"""`RunCommand.execute` calls *holding_the_lock* before it releases the run lock.
+"""`RunCommand.execute` runs inside *holding_the_lock*, entered and exited with the run lock held.
 
-`agac sandbox check` reads what its run wrote there, so no other run of the workflow can
-write between the end of the run and the read. It is called however the run ends.
+`agac sandbox check` notes the status file on entry and reads what its run wrote on exit,
+so no other run of the workflow can write in between. It exits however the run ends.
 """
 
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,35 +44,49 @@ def _lock_is_held(tmp_path) -> bool:
         return True
 
 
-def test_it_is_called_while_the_run_lock_is_held(tmp_path):
-    seen: list[bool] = []
+def _recording(tmp_path, seen: list[tuple[str, bool]]):
+    @contextmanager
+    def holding_the_lock():
+        seen.append(("enter", _lock_is_held(tmp_path)))
+        try:
+            yield
+        finally:
+            seen.append(("exit", _lock_is_held(tmp_path)))
 
-    _execute(
-        tmp_path,
-        lambda *_a, **_k: RunOutcome.SUCCESS,
-        lambda: seen.append(_lock_is_held(tmp_path)),
-    )
+    return holding_the_lock
 
-    assert seen == [True]
+
+def test_it_is_entered_and_exited_while_the_run_lock_is_held(tmp_path):
+    seen: list[tuple[str, bool]] = []
+    ran_inside: list[bool] = []
+
+    def run_pass(*_args, **_kwargs):
+        ran_inside.append(seen == [("enter", True)])
+        return RunOutcome.SUCCESS
+
+    _execute(tmp_path, run_pass, _recording(tmp_path, seen))
+
+    assert ran_inside == [True]
+    assert seen == [("enter", True), ("exit", True)]
     assert not _lock_is_held(tmp_path)
 
 
-def test_it_is_called_when_the_run_raises(tmp_path):
-    seen: list[bool] = []
+def test_it_exits_when_the_run_raises(tmp_path):
+    seen: list[tuple[str, bool]] = []
 
     def fails(*_args, **_kwargs):
         raise RuntimeError("the run broke")
 
     with pytest.raises(RuntimeError, match="the run broke"):
-        _execute(tmp_path, fails, lambda: seen.append(_lock_is_held(tmp_path)))
+        _execute(tmp_path, fails, _recording(tmp_path, seen))
 
-    assert seen == [True]
+    assert seen == [("enter", True), ("exit", True)]
 
 
-def test_it_is_not_called_when_another_run_holds_the_lock(tmp_path):
-    called: list[bool] = []
+def test_it_is_not_entered_when_another_run_holds_the_lock(tmp_path):
+    seen: list[tuple[str, bool]] = []
 
     with hold_run_lock(tmp_path, "wf"), pytest.raises(RunInProgressError):
-        _execute(tmp_path, lambda *_a, **_k: RunOutcome.SUCCESS, lambda: called.append(True))
+        _execute(tmp_path, lambda *_a, **_k: RunOutcome.SUCCESS, _recording(tmp_path, seen))
 
-    assert called == []
+    assert seen == []

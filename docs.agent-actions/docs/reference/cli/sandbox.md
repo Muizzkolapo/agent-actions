@@ -65,7 +65,7 @@ The error of the run comes before the table.
 |------|---------|
 | 0 | Each value that the file states holds |
 | 1 | One or more values do not hold, or the run wrote no result. The `FAIL` line and the rows after it name each value |
-| 2 | The expectations file is missing or not valid (see the list of refusals below), or the check could not run: an unexpected error stopped it. The error is one line, `Error: sandbox check could not run: ...`, and the check prints no table |
+| 2 | The expectations file is missing or not valid (see the list of refusals below), or the check could not run: the command ran outside a project, or an unexpected error stopped it. The error is one `Error:` line (`Error: sandbox check could not run: ...` for an unexpected error), and the check prints no table |
 | 130 | The check was interrupted (Ctrl-C) |
 
 The exit code of the run is a value of the file (`exit_code`), not the exit code of the command. Thus a file can expect a run that fails: `exit_code: 3` holds when some records fail.

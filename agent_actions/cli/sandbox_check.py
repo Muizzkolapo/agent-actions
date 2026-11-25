@@ -10,7 +10,8 @@ from __future__ import annotations
 import functools
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -20,8 +21,8 @@ import yaml
 
 from agent_actions.cli.cli_decorators import (
     SCENARIO_HELP,
+    enter_project,
     handles_user_errors,
-    requires_project,
     scenario_option,
     workflow_option,
 )
@@ -235,7 +236,7 @@ def run_in_sandbox(
     project_root: Path,
     user_code: str | None,
     execution_mode: str,
-    holding_the_lock: Callable[[], None] | None = None,
+    holding_the_lock: Callable[[], AbstractContextManager[object]] | None = None,
 ) -> int:
     """`agac run --sandbox --fresh --wait` in this process; its exit code."""
     from agent_actions.cli.args import RunCommandArgs
@@ -284,8 +285,8 @@ def run_and_read(
 ) -> tuple[Actual, list[str]]:
     """Run in the sandbox, and read what the run wrote while it still holds the run lock.
 
-    A status file the run did not write, missing or the same file as before the run, is
-    an earlier run's: the run stopped before it loaded the workflow, so it wrote no result.
+    A status file the run did not write, missing or the same file as when the run took
+    the lock, is an earlier run's: the run stopped before it loaded the workflow.
     """
     from agent_actions.config.project_paths import ProjectPathsFactory
     from agent_actions.errors import AgentActionsError
@@ -297,19 +298,33 @@ def run_and_read(
     except AgentActionsError:
         # The run resolves the same folders first, so it stops on this and says why.
         io_dir = None
-    before = None if io_dir is None else _file_identity(sandbox_state.status_file(io_dir))
     read: list[tuple[dict[str, str], dict[str, dict[str, int | None]]]] = []
 
-    def read_holding_the_lock() -> None:
+    @contextmanager
+    def holding_the_lock() -> Iterator[None]:
         if io_dir is None:
+            yield
             return
-        written = _file_identity(sandbox_state.status_file(io_dir))
-        if written is not None and written != before:
-            read.append(read_output(io_dir, workflow))
+        status_file = sandbox_state.status_file(io_dir)
+        before = _file_identity(status_file)
 
-    exit_code = run_in_sandbox(
-        workflow, project_root, user_code, execution_mode, read_holding_the_lock
-    )
+        def read_if_written() -> None:
+            written = _file_identity(status_file)
+            if written is not None and written != before:
+                read.append(read_output(io_dir, workflow))
+
+        try:
+            yield
+        except BaseException:
+            # The run's own exception (Ctrl-C, a quota stop) decides the exit code.
+            try:
+                read_if_written()
+            except Exception:
+                logger.debug("could not read the output of a run that raised", exc_info=True)
+            raise
+        read_if_written()
+
+    exit_code = run_in_sandbox(workflow, project_root, user_code, execution_mode, holding_the_lock)
     if not read:
         return Actual(exit_code, None, {}, {}, wrote_result=False), []
     statuses, counts = read[0]
@@ -365,6 +380,19 @@ def read_output(
     return statuses, counts
 
 
+def _project_root(agent: str) -> Path:
+    """The project root; outside a project the check could not run, so it exits 2."""
+    from agent_actions.errors import AgentActionsError
+    from agent_actions.logging.errors import format_user_error
+
+    try:
+        return enter_project()
+    except AgentActionsError as error:
+        context = {"command": "sandbox check", "agent": agent}
+        click.echo(f"Error: {format_user_error(error, context)}", err=True)
+        raise SystemExit(EXIT_NOT_CHECKED) from None
+
+
 def _in_sandbox(func: Callable) -> Callable:
     """Run the command in sandbox mode, as ``--sandbox`` does, and say so on stderr."""
 
@@ -414,13 +442,11 @@ def sandbox() -> None:
     help="Execution mode of the run: 'auto', 'parallel' or 'sequential'",
 )
 @handles_user_errors("sandbox check")
-@requires_project
 def check(
     agent: str,
     expected: str | None = None,
     user_code: str | None = None,
     execution_mode: str = "auto",
-    project_root: Path | None = None,
 ) -> None:
     """Run a workflow in the sandbox and check the result against the expected outcomes.
 
@@ -437,7 +463,7 @@ def check(
         agac sandbox check -w support_desk
         agac sandbox check -w support_desk --scenario chaos --expected chaos_expected.yml
     """
-    assert project_root is not None
+    project_root = _project_root(agent)
     workflow = Path(agent).stem
     path = expectations_path(project_root, workflow, expected)
     try:
