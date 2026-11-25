@@ -222,3 +222,10 @@ def test_the_reference_lists_each_status_and_each_exit_code():
     codes = rows["`exit_code`"]
     listed = ", ".join(str(code) for code in sorted(set(EXIT_CODES.values())))
     assert listed in codes.replace(" or ", ", "), codes
+
+
+def test_a_directory_named_as_the_file_is_refused_as_a_directory(tmp_path):
+    (tmp_path / "expected").mkdir()
+
+    with pytest.raises(ExpectationsError, match="expected: is a directory, not a file"):
+        load_expected(tmp_path / "expected")

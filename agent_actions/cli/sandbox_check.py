@@ -100,6 +100,8 @@ def expectations_path(project_root: Path, workflow: str, given: str | None) -> P
 
 
 def load_expected(path: Path) -> Expected:
+    if path.is_dir():
+        raise ExpectationsError(f"{path.name}: is a directory, not a file: {path}")
     if not path.is_file():
         raise ExpectationsError(f"{path.name}: no such file at {path.parent}")
     try:

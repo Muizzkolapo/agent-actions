@@ -39,6 +39,19 @@ logger = logging.getLogger(__name__)
 PROJECT_TEMPLATES_DIR = Path(__file__).with_name("project_templates")
 BUNDLED_TEMPLATES = ("sandbox",)
 PROJECT_NAME_PLACEHOLDER = "__PROJECT_NAME__"
+# What a run of a template leaves in its folder, never copied into a new project. Of
+# agent_io/, only staging/ (the input) is the template's.
+_RUN_OUTPUT = shutil.ignore_patterns(
+    "__pycache__", "*.pyc", "*.db", "*.db-*", "*.db.lock", ".agac", "artefact"
+)
+
+
+def _ignore_run_output(folder: str, names: list[str]) -> set[str]:
+    ignored = set(_RUN_OUTPUT(folder, names))
+    if Path(folder).name == "agent_io":
+        ignored.update(name for name in names if name != "staging")
+    return ignored
+
 
 # ---------------------------------------------------------------------------
 # Remote examples support  (fetched from GitHub — nothing bundled in wheel)
@@ -262,7 +275,7 @@ class InitCommand:
             PROJECT_TEMPLATES_DIR / self.args.template,
             self.project_dir,
             dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+            ignore=_ignore_run_output,
         )
         config = self.project_dir / "agent_actions.yml"
         config.write_text(

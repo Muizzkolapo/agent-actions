@@ -109,10 +109,28 @@ exclude = [
     ".claude/",
     "MagicMock/",
     "tasks/",
+    # Output a run of a bundled template can leave in the package folder; agent_io/staging/
+    # is the template's input.
+    "agent_actions/cli/project_templates/**/agent_io/*",
+    "!agent_actions/cli/project_templates/**/agent_io/staging/",
+    "agent_actions/cli/project_templates/**/*.db",
+    "agent_actions/cli/project_templates/**/*.db-*",
+    "agent_actions/cli/project_templates/**/.agac/",
+    "agent_actions/cli/project_templates/**/artefact/",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["agent_actions"]
+exclude = [
+    # Output a run of a bundled template can leave in the package folder; agent_io/staging/
+    # is the template's input.
+    "agent_actions/cli/project_templates/**/agent_io/*",
+    "!agent_actions/cli/project_templates/**/agent_io/staging/",
+    "agent_actions/cli/project_templates/**/*.db",
+    "agent_actions/cli/project_templates/**/*.db-*",
+    "agent_actions/cli/project_templates/**/.agac/",
+    "agent_actions/cli/project_templates/**/artefact/",
+]
 
 [dependency-groups]
 dev = [
