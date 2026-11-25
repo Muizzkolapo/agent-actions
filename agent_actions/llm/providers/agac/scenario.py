@@ -1,7 +1,8 @@
 """The scenario a sandbox run follows: which mock answers fail, break a rule or wait.
 
-A scenario is ``sandbox.yml`` at the project root, a preset (``happy``, ``chaos``) or a
-file named by ``--scenario``. It is read and checked once, before any call. Every decision
+A scenario is the project's file for the workflow (``sandbox.<workflow>.yml`` at the
+project root, else ``sandbox.yml``), a preset (``happy``, ``chaos``) or a file named by
+``--scenario``. It is read and checked once, before any call. Every decision
 is a hash of the seed, the action, the record's input, the attempt and the decision's name,
 so a parallel run makes the decisions a serial run makes, and two runs over the same input
 make the same decisions. It also names the tool actions whose code does not run (``stub``).
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 SCENARIO_FILE = "sandbox.yml"
+WORKFLOWS_DIR = "agent_workflow"
 # A workflow_metadata key of the sandbox store: one record's attempts at one action.
 ATTEMPTS_KEY_PREFIX = "sandbox_attempts:"
 ERROR_KINDS = (
@@ -226,8 +228,11 @@ class Scenario:
         groups: Mapping[str, str | None],
         tally: Tally | None = None,
         tools: Mapping[str, Tool] | None = None,
+        hint: str | None = None,
     ) -> None:
         self.name = name
+        # A line every refusal of this scenario adds (``_per_workflow_hint``).
+        self._hint = hint
         self.seed = data.seed
         self.batch = data.batch
         self._data = data
@@ -419,7 +424,7 @@ class Scenario:
                 ]
         if problems:
             label = f"preset {self.name}" if self.name in PRESETS else self.name
-            raise _refusal(label, list(dict.fromkeys(problems)))
+            raise _refusal(label, list(dict.fromkeys(problems)), self._hint)
 
     def _entries(self) -> list[tuple[str, str, ActionRules]]:
         """Each entry that names an action: its key, the name and its rules."""
@@ -477,26 +482,40 @@ class Scenario:
         return problems
 
 
+def workflow_file(workflow: str) -> str:
+    return f"sandbox.{workflow}.yml"
+
+
+def project_file(project_root: Path, workflow: str | None) -> Path | None:
+    """``sandbox.<workflow>.yml`` at *project_root*, else ``sandbox.yml``, else None."""
+    names = ([workflow_file(workflow)] if workflow else []) + [SCENARIO_FILE]
+    return next((project_root / n for n in names if (project_root / n).is_file()), None)
+
+
 def load(
     source: str | None,
     project_root: Path,
     groups: Mapping[str, str | None],
     tally: Tally | None = None,
     tools: Mapping[str, Tool] | None = None,
+    workflow: str | None = None,
 ) -> Scenario:
     """The scenario *source* names, checked against the workflow's LLM and tool actions.
 
-    None is ``sandbox.yml`` at *project_root* when it exists, else ``happy``. *groups*
+    None is the project's file for *workflow* (``project_file``), else ``happy``. *groups*
     maps each LLM action to the base name of its version group, or to None.
     """
+    own = project_file(project_root, workflow)
+    hint = None
     if source in PRESETS:
         name, label, raw = source, f"preset {source}", PRESETS[source]
     else:
         if source is None:
-            path = project_root / SCENARIO_FILE
-            if not path.is_file():
-                return load("happy", project_root, groups, tally, tools)
-            name = SCENARIO_FILE
+            if own is None:
+                return load("happy", project_root, groups, tally, tools, workflow)
+            path = own
+            name = own.name
+            hint = _per_workflow_hint(own, project_root, workflow)
         else:
             path = Path(source)
             if not path.is_file():
@@ -513,12 +532,27 @@ def load(
     try:
         data = _File.model_validate(raw)
     except ValidationError as e:
-        raise _refusal(label, [_problem(error) for error in e.errors()]) from None
-    scenario = Scenario(name, data, groups, tally, tools)
+        raise _refusal(label, [_problem(error) for error in e.errors()], hint) from None
+    scenario = Scenario(name, data, groups, tally, tools, hint)
     problems = _unknown_names(data, groups, tools or {}) + scenario.tool_problems()
     if problems:
-        raise _refusal(label, problems)
+        raise _refusal(label, problems, hint)
     return scenario
+
+
+def _per_workflow_hint(own: Path | None, project_root: Path, workflow: str | None) -> str | None:
+    """The line a refusal of ``sandbox.yml`` adds in a project of more than one workflow."""
+    if own is None or own.name != SCENARIO_FILE or workflow is None:
+        return None
+    folder = project_root / WORKFLOWS_DIR
+    count = sum(1 for path in folder.glob("*/agent_config") if path.is_dir())
+    if count < 2:
+        return None
+    return (
+        f"{SCENARIO_FILE} is read for each of the project's {count} workflows: put a "
+        f"scenario for one workflow in sandbox.<workflow>.yml ({workflow_file(workflow)} "
+        f"for {workflow})"
+    )
 
 
 _HINT = (
@@ -551,8 +585,10 @@ def _problem(error: Any) -> str:
     return f"{key}: {str(error['msg']).removeprefix('Value error, ')}"
 
 
-def _refusal(label: str, problems: list[str]) -> ConfigurationError:
+def _refusal(label: str, problems: list[str], hint: str | None = None) -> ConfigurationError:
     lines = "\n".join(f"  - {problem}" for problem in problems)
+    if hint is not None:
+        lines += f"\n  {hint}"
     return ConfigurationError(
         f"Scenario {label} has {len(problems)} problem(s); nothing was called:\n{lines}",
         context={"config_file": label, "hint": _HINT},

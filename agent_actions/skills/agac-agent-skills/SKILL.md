@@ -33,6 +33,7 @@ prompt_store/{name}.md       # all prompts for this workflow
 schema/{name}/               # output schemas (when complex)
 tools/{tool-group}/          # UDF implementations
 sandbox.yml                  # optional scenario of sandbox runs
+sandbox.{name}.yml           # optional scenario of this workflow only; read before sandbox.yml
 ```
 
 ## Config

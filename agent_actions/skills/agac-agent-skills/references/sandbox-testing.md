@@ -20,7 +20,7 @@ with generated values.
 All commands run from the project root.
 
 ```bash
-agac run -w {workflow} -u tools --sandbox                       # sandbox.yml, else the happy preset
+agac run -w {workflow} -u tools --sandbox                       # sandbox.{workflow}.yml, else sandbox.yml, else happy
 agac run -w {workflow} -u tools --sandbox --fresh               # clear the sandbox output first
 agac run -w {workflow} -u tools --sandbox --scenario chaos      # a preset, or a file path
 agac run -w {workflow} -u tools --sandbox --wait                # batch actions: run every pass
@@ -45,9 +45,15 @@ A sandbox run does not wait for backoff, `Retry-After` or batch polls. A workflo
 
 ## The scenario file
 
-A scenario makes the mock fail, change or delay calls on purpose. Put it in `sandbox.yml`
-at the project root, or give `--scenario <path>` to `run`, `retry` or `inspect`. A real run
-does not read it. Each decision is per record and repeats run to run.
+A scenario makes the mock fail, change or delay calls on purpose. Put it in
+`sandbox.{workflow}.yml` or `sandbox.yml` at the project root, or give `--scenario <path>`
+to `run`, `retry` or `inspect`. A sandbox run of `{workflow}` reads `sandbox.{workflow}.yml`
+when it exists, else `sandbox.yml`, else the `happy` preset. A real run does not read it.
+Each decision is per record and repeats run to run.
+
+The names in a scenario are checked strictly against the workflow that runs: a name of
+another workflow's action stops the command. In a project with more than one workflow, put
+each workflow's scenario in its own `sandbox.{workflow}.yml`.
 
 ```yaml
 seed: 7                                   # another seed makes other decisions
@@ -88,7 +94,7 @@ batch:
 
 | Preset | What it does |
 |--------|--------------|
-| `happy` | No faults. The judge passes. The default when there is no `sandbox.yml` |
+| `happy` | No faults. The judge passes. The default when there is no `sandbox.{workflow}.yml` and no `sandbox.yml` |
 | `chaos` | Transport errors, cut-off and empty answers, broken rules, judge pass rate 0.7, a delayed batch and dropped batch results. Each fault heals on the second attempt |
 
 `chaos` completes only when each LLM action has `retry:` with two attempts or more and an

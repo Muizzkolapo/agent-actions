@@ -56,13 +56,17 @@ A scenario makes the mock fail, change or delay some calls on purpose. Use it to
 
 | Command | Scenario |
 |---------|----------|
-| `agac run -w my_workflow --sandbox` | `sandbox.yml` at the project root. If there is no such file, the `happy` preset |
+| `agac run -w my_workflow --sandbox` | `sandbox.my_workflow.yml` at the project root. If there is no such file, `sandbox.yml` at the project root. If there is neither file, the `happy` preset |
 | `agac run -w my_workflow --sandbox --scenario chaos` | The `happy` or the `chaos` preset |
 | `agac run -w my_workflow --sandbox --scenario path/to/faults.yml` | That file |
 
 `agac retry --sandbox` and `agac inspect --sandbox` take `--scenario` too. Without `--sandbox`, `--scenario` is an error. The other read commands do not read a scenario.
 
-Agent Actions reads and checks the scenario when it loads the workflow, before it calls the mock. A problem stops the command. The message names the scenario file (`sandbox.yml` or the path you gave) and each key that is wrong.
+A scenario names the actions of one workflow. In a project with more than one workflow, put the scenario of each workflow in its own file: `sandbox.<workflow>.yml` at the project root (for example, `sandbox.catalog.yml` for the workflow `catalog`). A sandbox run of `catalog` reads `sandbox.catalog.yml`, and a sandbox run of another workflow does not read that file. `sandbox.yml` is the scenario of each workflow that has no file of its own.
+
+Agent Actions reads and checks the scenario when it loads the workflow, before it calls the mock. A problem stops the command. The message names the scenario file (`sandbox.<workflow>.yml`, `sandbox.yml` or the path you gave) and each key that is wrong. The check of the names is strict: a name that is not an action of the workflow stops the command, also when it is an action of another workflow of the project. When the file is `sandbox.yml` and the project has more than one workflow, the message adds a line that tells you to put the scenario of one workflow in `sandbox.<workflow>.yml`.
+
+The scenario files are your configuration. `agac clean` and `agac run --fresh` do not delete them.
 
 ### Format
 
@@ -297,7 +301,7 @@ agac expect report -w my_workflow --sandbox
 
 `agac retry --sandbox` retries the failed records of a sandbox run, with the mock. It reads and writes only the sandbox output.
 
-`agac inspect --sandbox` shows the workflow as a sandbox run runs it. The action detail marks each LLM action `answered by the sandbox mock`, and each tool action that the scenario stubs `stubbed by the sandbox scenario`. The command reads `sandbox.yml` at the project root, or the scenario that `--scenario` names. It refuses a scenario that a run refuses:
+`agac inspect --sandbox` shows the workflow as a sandbox run runs it. The action detail marks each LLM action `answered by the sandbox mock`, and each tool action that the scenario stubs `stubbed by the sandbox scenario`. The command reads the scenario that a run reads: `sandbox.<workflow>.yml` or `sandbox.yml` at the project root, or the scenario that `--scenario` names. It refuses a scenario that a run refuses:
 
 ```bash
 agac inspect -w my_workflow --sandbox action summarize

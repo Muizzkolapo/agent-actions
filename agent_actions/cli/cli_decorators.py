@@ -95,7 +95,8 @@ def scenario_option() -> Callable:
             metavar="happy|chaos|PATH",
             help=(
                 "With --sandbox: the scenario the mock follows, a preset or a scenario file. "
-                "Default: sandbox.yml at the project root, else happy"
+                "Default: sandbox.<workflow>.yml at the project root, else sandbox.yml, "
+                "else happy"
             ),
         )
         @functools.wraps(func)

@@ -29,7 +29,7 @@ AUTO_APPROVE_KEY = "_sandbox_auto_approve"
 
 _active = False
 _follows_scenario = False
-# What --scenario named; None is the project's sandbox.yml, else the happy preset.
+# What --scenario named; None is the project's file for the workflow, else the happy preset.
 _scenario_flag: str | None = None
 _scenario: Scenario | None = None
 # What the scenario did over the whole command, across each load of the workflow.
@@ -69,18 +69,22 @@ def load_scenario(
     project_root: Path | None,
     llm_actions: Mapping[str, str | None],
     tools: Mapping[str, Tool] | None = None,
+    workflow: str | None = None,
 ) -> None:
     """Read and check the scenario, before any call; a command that calls no mock reads none.
 
     *llm_actions* maps each LLM action to its version group's base name, or to None.
-    *tools* are the tool actions (``tool_actions``), which a scenario can stub.
+    *tools* are the tool actions (``tool_actions``), which a scenario can stub. With no
+    ``--scenario``, the project's file for *workflow* is read (``sandbox.<workflow>.yml``,
+    else ``sandbox.yml``).
     """
     global _scenario
     if not (_active and _follows_scenario):
         return
     from agent_actions.llm.providers.agac.scenario import load
 
-    _scenario = load(_scenario_flag, project_root or Path.cwd(), llm_actions, _tally, tools)
+    root = project_root or Path.cwd()
+    _scenario = load(_scenario_flag, root, llm_actions, _tally, tools, workflow)
 
 
 def check_scenario_outputs(schemas: Mapping[str, Any], action_configs: Mapping[str, Any]) -> None:
