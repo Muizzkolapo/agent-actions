@@ -282,13 +282,62 @@ def test_a_tool_the_scenario_does_not_stub_runs_its_own_code(tmp_path, scenario)
     assert "stub" not in _said(result)
 
 
-@pytest.mark.parametrize("preset", ["happy", "chaos"])
-def test_a_preset_stubs_no_tool(tmp_path, preset):
-    root = _project(tmp_path, STUB_BOTH)
+KEPT = "the stubs come from sandbox.yml, the rest from preset"
 
-    _run(root, "--scenario", preset)
+
+@pytest.mark.parametrize("preset", ["happy", "chaos"])
+def test_a_preset_keeps_the_project_s_stubs_and_their_pin(tmp_path, preset):
+    root = _project(tmp_path, "actions:\n  search: {stub: true, pin: {origin: stubbed}}\n")
+
+    result = _run(root, "--scenario", preset)
+
+    assert _called(root) == {"lookup"}, _said(result)
+    notice = next(line for line in result.stderr.splitlines() if "stubs these tool" in line)
+    assert notice.endswith(f"search ({KEPT} {preset})"), notice
+    if preset == "happy":
+        _ok(result)
+        assert {output["origin"] for output in _stored(root, "search", "--sandbox").values()} == {
+            "stubbed"
+        }
+
+
+def test_a_preset_keeps_only_the_stub_entries_of_the_project_file(tmp_path):
+    root = _project(
+        tmp_path,
+        "defaults:\n  errors: {rate: 1.0, kinds: [server_error]}\n"
+        "actions:\n  search: {stub: true}\n  rank: {pin: {pick: from the file}}\n"
+        "records:\n  - match: {source.title: Dune}\n    actions: {rank: {error: refusal}}\n",
+    )
+
+    result = _ok(_run(root, "--scenario", "happy"))
+
+    assert _called(root) == {"lookup"}
+    assert "SANDBOX scenario happy: 0 errors" in result.stdout, _said(result)
+    assert "from the file" not in {o["pick"] for o in _stored(root, "rank", "--sandbox").values()}
+
+
+def test_a_scenario_path_does_not_take_the_project_s_stubs(tmp_path):
+    root = _project(tmp_path, STUB_BOTH)
+    path = tmp_path / "plain.yml"
+    path.write_text("seed: 3\n")
+
+    result = _ok(_run(root, "--scenario", str(path)))
 
     assert _called(root) == {"search", "lookup"}
+    assert "stubs these tool actions" not in result.stderr
+    assert "(stubbed)" not in result.stderr
+
+
+def test_a_preset_refuses_a_project_stub_the_run_cannot_follow(tmp_path):
+    root = _project(tmp_path, "actions:\n  rank: {stub: true}\n")
+
+    result = _run(root, "--scenario", "chaos")
+
+    said = _said(result)
+    assert result.returncode != 0, said
+    assert "preset chaos with the stubs of sandbox.yml" in said, said
+    assert "- actions.rank.stub: " in said, said
+    assert _called(root) == set()
 
 
 def test_a_real_run_does_not_read_the_stub(tmp_path):
@@ -381,8 +430,9 @@ def test_inspect_reads_the_scenario_a_run_would_be_given(tmp_path):
     other = tmp_path / "other.yml"
     other.write_text("actions:\n  lookup: {stub: true}\n")
 
+    assert "stubbed by the sandbox scenario" in _inspected(root, "search", "--scenario", "happy")
     assert "stubbed by the sandbox scenario" not in _inspected(
-        root, "search", "--scenario", "happy"
+        root, "search", "--scenario", str(other)
     )
     assert "stubbed by the sandbox scenario" in _inspected(
         root, "lookup", "--scenario", str(other)

@@ -2,7 +2,8 @@
 
 A scenario is the project's file for the workflow (``sandbox.<workflow>.yml`` at the
 project root, else ``sandbox.yml``), a preset (``happy``, ``chaos``) or a file named by
-``--scenario``. It is read and checked once, before any call. Every decision
+``--scenario``. A preset keeps the ``stub`` entries of the project's file. It is read and
+checked once, before any call. Every decision
 is a hash of the seed, the action, the record's input, the attempt and the decision's name,
 so a parallel run makes the decisions a serial run makes, and two runs over the same input
 make the same decisions. It also names the tool actions whose code does not run (``stub``).
@@ -229,8 +230,11 @@ class Scenario:
         tally: Tally | None = None,
         tools: Mapping[str, Tool] | None = None,
         hint: str | None = None,
+        stubs_from: str | None = None,
     ) -> None:
         self.name = name
+        # The project file whose stub entries a preset kept, or None.
+        self.stubs_from = stubs_from
         # A line every refusal of this scenario adds (``_per_workflow_hint``).
         self._hint = hint
         self.seed = data.seed
@@ -276,6 +280,14 @@ class Scenario:
 
     def stubbed(self) -> list[str]:
         return [tool for tool in self._tools if self.stubs(tool)]
+
+    @property
+    def label(self) -> str:
+        """The scenario as a refusal names it."""
+        if self.name not in PRESETS:
+            return self.name
+        kept = f" with the stubs of {self.stubs_from}" if self.stubs_from else ""
+        return f"preset {self.name}{kept}"
 
     def rules_for(self, action: str, context: Any) -> CallRules:
         """A matched record's rules over the action's over the defaults, each key whole."""
@@ -423,8 +435,7 @@ class Scenario:
                     if field not in fields
                 ]
         if problems:
-            label = f"preset {self.name}" if self.name in PRESETS else self.name
-            raise _refusal(label, list(dict.fromkeys(problems)), self._hint)
+            raise _refusal(self.label, list(dict.fromkeys(problems)), self._hint)
 
     def _entries(self) -> list[tuple[str, str, ActionRules]]:
         """Each entry that names an action: its key, the name and its rules."""
@@ -502,13 +513,21 @@ def load(
 ) -> Scenario:
     """The scenario *source* names, checked against the workflow's LLM and tool actions.
 
-    None is the project's file for *workflow* (``project_file``), else ``happy``. *groups*
-    maps each LLM action to the base name of its version group, or to None.
+    None is the project's file for *workflow* (``project_file``), else ``happy``. A preset
+    keeps the ``stub`` entries of that file, with their ``pin``, and nothing else of it; a
+    path is that file alone. *groups* maps each LLM action to the base name of its version
+    group, or to None.
     """
     own = project_file(project_root, workflow)
-    hint = None
+    hint = stubs_from = None
     if source in PRESETS:
-        name, label, raw = source, f"preset {source}", PRESETS[source]
+        name, raw = source, PRESETS[source]
+        stubs = _stub_entries(_read(own, own.name)) if own is not None else {}
+        if own is not None and stubs:
+            raw = {**raw, "actions": stubs}
+            stubs_from = own.name
+            hint = _per_workflow_hint(own, project_root, workflow)
+        label = Scenario(name, _File(), {}, stubs_from=stubs_from).label
     else:
         if source is None:
             if own is None:
@@ -533,11 +552,23 @@ def load(
         data = _File.model_validate(raw)
     except ValidationError as e:
         raise _refusal(label, [_problem(error) for error in e.errors()], hint) from None
-    scenario = Scenario(name, data, groups, tally, tools, hint)
+    scenario = Scenario(name, data, groups, tally, tools, hint, stubs_from)
     problems = _unknown_names(data, groups, tools or {}) + scenario.tool_problems()
     if problems:
         raise _refusal(label, problems, hint)
     return scenario
+
+
+def _stub_entries(raw: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    """Each ``actions`` entry of *raw* that sets ``stub``, with only its ``stub`` and ``pin``."""
+    actions = raw.get("actions")
+    if not isinstance(actions, dict):
+        return {}
+    return {
+        name: {key: entry[key] for key in ("stub", "pin") if key in entry}
+        for name, entry in actions.items()
+        if isinstance(entry, dict) and "stub" in entry
+    }
 
 
 def _per_workflow_hint(own: Path | None, project_root: Path, workflow: str | None) -> str | None:

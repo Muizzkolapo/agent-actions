@@ -155,6 +155,21 @@ def stubbed_tools() -> list[str]:
     return followed.stubbed() if followed is not None else []
 
 
+def stub_notice() -> str | None:
+    """The line that names the stubbed tool actions, and where a preset took the stubs from."""
+    followed = scenario()
+    stubbed = followed.stubbed() if followed is not None else []
+    if followed is None or not stubbed:
+        return None
+    names = ", ".join(stubbed)
+    line = f"the scenario stubs these tool actions, so their code does not run: {names}"
+    if followed.stubs_from is not None:
+        line += (
+            f" (the stubs come from {followed.stubs_from}, the rest from preset {followed.name})"
+        )
+    return line
+
+
 def scenario_summary(only_after_calls: bool = False) -> str | None:
     """The line that counts what the scenario did in this command; the count then restarts.
 

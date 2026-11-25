@@ -91,13 +91,9 @@ def load_workflow_configs(
         sandbox.load_scenario(
             config.project_root, mocked, sandbox.tool_actions(action_configs), workflow_name
         )
-        stubbed = sandbox.stubbed_tools()
-        if stubbed:
-            console.print(
-                "[bold yellow]SANDBOX[/bold yellow]: the scenario stubs these tool actions, "
-                f"so their code does not run: {escape(', '.join(stubbed))}",
-                soft_wrap=True,
-            )
+        notice = sandbox.stub_notice()
+        if notice is not None:
+            console.print(f"[bold yellow]SANDBOX[/bold yellow]: {escape(notice)}", soft_wrap=True)
     action_indices = {action: i for i, action in enumerate(execution_order)}
 
     # Add idx and workflow_config_path fields to each action config

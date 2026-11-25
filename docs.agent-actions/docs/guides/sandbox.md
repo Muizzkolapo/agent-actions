@@ -57,7 +57,7 @@ A scenario makes the mock fail, change or delay some calls on purpose. Use it to
 | Command | Scenario |
 |---------|----------|
 | `agac run -w my_workflow --sandbox` | `sandbox.my_workflow.yml` at the project root. If there is no such file, `sandbox.yml` at the project root. If there is neither file, the `happy` preset |
-| `agac run -w my_workflow --sandbox --scenario chaos` | The `happy` or the `chaos` preset |
+| `agac run -w my_workflow --sandbox --scenario chaos` | The `happy` or the `chaos` preset, with the `stub` entries of the project file. See [Presets](#presets) |
 | `agac run -w my_workflow --sandbox --scenario path/to/faults.yml` | That file |
 
 `agac retry --sandbox` and `agac inspect --sandbox` take `--scenario` too. Without `--sandbox`, `--scenario` is an error. The other read commands do not read a scenario.
@@ -168,9 +168,15 @@ SANDBOX: the scenario stubs these tool actions, so their code does not run: retr
   ✓ retrieve_candidates  3 records in 0.0s (stubbed)
 ```
 
+With a preset, the notice also names the file that the stubs come from:
+
+```
+SANDBOX: the scenario stubs these tool actions, so their code does not run: retrieve_candidates (the stubs come from sandbox.yml, the rest from preset chaos)
+```
+
 `agac inspect --sandbox action retrieve_candidates` marks the tool `stubbed by the sandbox scenario` after its function name.
 
-The `happy` and `chaos` presets stub no tool. A real run does not read the scenario, so the tool runs its own code there. `agac retry --sandbox` follows the same scenario, so it does not call a stubbed tool.
+A preset keeps the `stub` entries of the project file. See [Presets](#presets). A real run does not read the scenario, so the tool runs its own code there. `agac retry --sandbox` follows the same scenario, so it does not call a stubbed tool.
 
 #### What the checks refuse for a tool action {/* #stub-refusals */}
 
@@ -236,6 +242,10 @@ A batch reports `in_progress` for its first `polls_until_complete` status checks
 |--------|----------|
 | `happy` | No faults. The judge passes |
 | `chaos` | `seed: 0`. Each LLM action: `errors {rate: 0.1, kinds: [rate_limit, timeout, truncated, empty], heal_on_attempt: 2}`, `break_rules {rules: all, rate: 0.2, heal_on_attempt: 2}` and `judge {pass_rate: 0.7}`. Batch: `polls_until_complete: 1` (the first status check of each batch reports `in_progress`) and `drop_rate: 0.1` |
+
+A preset keeps the tool stubs of the project. With `--scenario happy` or `--scenario chaos`, the run reads the file that it reads without `--scenario` (`sandbox.<workflow>.yml`, else `sandbox.yml`). It keeps each entry under `actions` that sets `stub`, with the `pin` of that entry. It keeps nothing else of the file: the faults, `defaults`, `records` and `batch` come from the preset. Thus `--scenario chaos` does not call a tool that the project stubs. The stub notice names the file. A problem in a kept entry stops the command, and the message names `preset chaos with the stubs of sandbox.yml`.
+
+`--scenario path/to/faults.yml` uses only that file. It does not keep the stubs of the project file. To stub a tool in such a run, put the `stub` entry in that file.
 
 Each fault of `chaos` stops at the second attempt of its record. A `chaos` run completes when each LLM action has both of these:
 

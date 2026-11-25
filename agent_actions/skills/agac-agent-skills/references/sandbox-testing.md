@@ -98,8 +98,11 @@ batch:
 | `chaos` | Transport errors, cut-off and empty answers, broken rules, judge pass rate 0.7, a delayed batch and dropped batch results. Each fault heals on the second attempt |
 
 `chaos` completes only when each LLM action has `retry:` with two attempts or more and an
-`expect:` block with `repair: auto`. A preset stubs no tool and does not read `sandbox.yml`.
-To combine faults with stubs, write the faults and the `stub` entries in one scenario file.
+`expect:` block with `repair: auto`. A preset keeps the tool stubs of the project: it reads
+`sandbox.{workflow}.yml` (else `sandbox.yml`) and keeps each `actions` entry that sets `stub`,
+with its `pin`, and nothing else. So `--scenario chaos` does not call a stubbed tool, and the
+stub notice names the file the stubs come from. `--scenario <path>` uses only that file: put
+the `stub` entries in it.
 
 ## Read the results
 

@@ -118,7 +118,7 @@ python3 scripts/run_health.py -w <workflow> --sandbox --min-records 1
 1. The `chaos` preset sends transport errors, cut-off and empty answers, broken rules and dropped batch results. Each fault heals on the second attempt of its record.
 2. A `chaos` run completes only when each LLM action has `retry:` with two attempts or more and `expect:` with `repair: auto`. A record that fails shows a gap in your retry or repair settings.
 3. The run prints one line that counts the faults, for example `SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped`. The exit codes are those of a real run.
-4. A preset does not read `sandbox.yml`, and it stubs no tool. A tool action runs its own code. If a tool calls a service, write a scenario file with the faults and `stub: true` on that tool, and give `--scenario <file>`.
+4. A preset keeps the tool stubs of the project: the `stub` entries (with their `pin`) of `sandbox.<workflow>.yml`, else `sandbox.yml`, and nothing else of that file. A tool that the project does not stub runs its own code. If a tool calls a service, put `stub: true` on it in the project file. A scenario file given as `--scenario <file>` is used alone, so put the `stub` entries in it.
 5. To rehearse one recovery, script the faults in a scenario file. See [references/recovery.md](references/recovery.md), section 5.
 
 A sandbox run says nothing about cost, quota, real latency or the quality of the answers. Its data is fake. Test those on a small real sample (Rule 2). The `agac-agent-skills` skill has the full scenario format in `references/sandbox-testing.md`.

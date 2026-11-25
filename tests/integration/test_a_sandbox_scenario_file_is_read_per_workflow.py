@@ -156,3 +156,17 @@ def test_sandbox_catalog_yml_is_refused_without_the_hint(tmp_path):
 
     assert "Scenario sandbox.catalog.yml has 1 problem(s)" in said, said
     assert HINT not in said, said
+
+
+def test_a_preset_keeps_the_stubs_of_the_workflow_s_own_file(tmp_path):
+    root = _two_workflows(
+        tmp_path,
+        {"sandbox.catalog.yml": STUB_SEARCH, "sandbox.yml": "actions:\n  find: {stub: true}\n"},
+    )
+
+    catalog = _run(root, "catalog", "--scenario", "chaos")
+    other = _ok(_run(root, OTHER, "--scenario", "happy"))
+
+    assert _called(root) == {"lookup"}, _said(catalog)
+    assert "the stubs come from sandbox.catalog.yml, the rest from preset chaos" in _said(catalog)
+    assert "the stubs come from sandbox.yml, the rest from preset happy" in _said(other)
