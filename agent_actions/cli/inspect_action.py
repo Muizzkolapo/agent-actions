@@ -101,6 +101,8 @@ class ActionCommand(BaseInspectCommand):
         model = _escape_markup(str(action_config.get("model_name") or "—"))
         if sandbox.is_active() and action_config.get("model_vendor") == sandbox.SANDBOX_VENDOR:
             model += "  ·  [dim]answered by the sandbox mock[/dim]"
+        elif sandbox.stubs(self.action_name):
+            model += "  ·  [dim]stubbed by the sandbox scenario: its code does not run[/dim]"
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
         guard_label = (

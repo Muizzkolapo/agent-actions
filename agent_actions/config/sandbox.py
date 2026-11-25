@@ -248,8 +248,10 @@ def tool_actions(action_configs: Mapping[str, Mapping[str, Any]]) -> dict[str, T
                 "and the mock builds one record for one input record"
             )
         elif not config.get("json_output_schema"):
+            # A dispatched schema is chosen per record, so the load holds none.
             cannot_stub = (
-                "has no output schema (schema:), so the mock has nothing to build its output from"
+                "has no output schema that is known before the run, so the mock has "
+                "nothing to build its output from"
             )
         tools[name] = Tool(group=_version_group(config), cannot_stub=cannot_stub)
     return tools

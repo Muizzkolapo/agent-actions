@@ -127,6 +127,22 @@ class TestActionDetail:
         assert "✓ flat  3 records in 1.0s" in out
         assert "(" not in out
 
+    def test_a_tool_the_sandbox_scenario_stubs_says_so(self, rendered):
+        """Its code did not run, so its line must not read as a tool that ran."""
+        event = _complete("flat", kind="tool", vendor="tool", model="flat")
+        event.data["stubbed"] = True
+        out = rendered(
+            StepStartEvent(step_index=0, total_steps=1, actions=["flat"], pending=["flat"]),
+            event,
+        )
+        assert "✓ flat  3 records in 1.0s (stubbed)\n" in out
+
+    def test_the_event_of_a_stubbed_tool_carries_the_fact(self):
+        stubbed = ActionCompleteEvent(action_name="flat", kind="tool", stubbed=True)
+
+        assert stubbed.data["stubbed"] is True
+        assert ActionCompleteEvent(action_name="flat", kind="tool").data["stubbed"] is False
+
     def test_a_hitl_action_shows_no_model(self, rendered):
         out = rendered(
             StepStartEvent(step_index=0, total_steps=1, actions=["ok"], pending=["ok"]),

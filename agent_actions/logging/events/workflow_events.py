@@ -165,6 +165,8 @@ class ActionCompleteEvent(BaseEvent):
     checks_failed: int = 0
     # A built-in router's rows per case, in the router's order.
     cases: dict[str, int] = field(default_factory=dict)
+    # A tool action the sandbox scenario stubs: the mock built its output, its code did not run.
+    stubbed: bool = False
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -190,6 +192,7 @@ class ActionCompleteEvent(BaseEvent):
             "guard_skipped": self.guard_skipped,
             "checks_failed": self.checks_failed,
             "cases": self.cases,
+            "stubbed": self.stubbed,
         }
 
     @property
