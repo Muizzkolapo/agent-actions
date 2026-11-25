@@ -22,7 +22,7 @@ The run prints these lines:
 |------|------|--------|
 | `SANDBOX: the offline mock answers every LLM action. ...` | When the run starts | stderr |
 | `SANDBOX: the scenario stubs these tool actions, ...` | When the scenario stubs tool actions | stderr |
-| `SANDBOX run: no model was called. ...` | After the result of the run | stdout |
+| `SANDBOX run: no model was called. ...` | After the result of the run. With `--wait`, after the result of each pass | stdout |
 | `SANDBOX scenario <name>: ...` | At the end of the command. It counts the faults of the [scenario](#scenario) | stdout |
 
 The progress lines of the actions also go to stderr.
@@ -73,7 +73,9 @@ A scenario makes the mock fail, change or delay some calls on purpose. Use it to
 | `agac run -w my_workflow --sandbox --scenario chaos` | The `happy` or the `chaos` preset, with the `stub` entries of the project file. See [Presets](#presets) |
 | `agac run -w my_workflow --sandbox --scenario path/to/faults.yml` | That file |
 
-`agac retry --sandbox` and `agac inspect --sandbox` take `--scenario` too. Without `--sandbox`, `--scenario` is an error. The other read commands do not read a scenario.
+`agac retry --sandbox`, `agac inspect --sandbox` and `agac sandbox check` take `--scenario` too. Without `--sandbox`, `--scenario` is an error. The other read commands do not read a scenario. The `agac batch` commands have no `--sandbox` option.
+
+`--scenario happy` and `--scenario chaos` always mean the preset, also when a file of that name exists. To use such a file, give a path, for example `--scenario ./chaos`. A relative `--scenario` path is from the current directory. `sandbox.<workflow>.yml` and `sandbox.yml` are always at the project root.
 
 A scenario names the actions of one workflow. In a project with more than one workflow, put the scenario of each workflow in its own file: `sandbox.<workflow>.yml` at the project root (for example, `sandbox.catalog.yml` for the workflow `catalog`). A sandbox run of `catalog` reads `sandbox.catalog.yml`, and a sandbox run of another workflow does not read that file. `sandbox.yml` is the scenario of each workflow that has no file of its own.
 
@@ -151,6 +153,9 @@ The checks refuse these entries:
 - An action name that is not an LLM action, a tool action or the base name of a version group.
 - An unknown error kind, or an unknown rule type in `break_rules.rules`.
 - A rate outside 0 to 1, a `heal_on_attempt` less than 2, or a `latency_ms` range whose minimum is more than its maximum.
+- A negative `latency_ms`, `batch.polls_until_complete` or `batch.complete_after_seconds`.
+- An empty list in `errors.kinds` (`kinds: []`), or an empty `match` (`match: {}`) in a `records` entry.
+- A `stub` that is not `true` or `false`. A string such as `"yes"` or a number such as `1` is refused.
 - `judge` in a `records` entry. A judge call answers no record, so set `judge` under `actions` or `defaults`.
 - A `pin` field that the output schema of the action does not declare.
 - `pin` or `break_rules` under `actions` or `records` for an action with no JSON output schema (text mode). The `break_rules` of `defaults` do not apply to such an action.
@@ -202,7 +207,7 @@ With a preset, the notice also names the file that the stubs come from:
 SANDBOX: the scenario stubs these tool actions, so their code does not run: retrieve_candidates (the stubs come from sandbox.yml, the rest from preset chaos)
 ```
 
-`agac inspect --sandbox action retrieve_candidates` marks the tool `stubbed by the sandbox scenario: its code does not run` after its function name.
+`agac inspect --sandbox action retrieve_candidates` marks the tool `stubbed by the sandbox scenario: its code does not run` after its function name. `agac inspect --sandbox` prints no stub notice.
 
 A preset keeps the `stub` entries of the project file. See [Presets](#presets). A real run does not read the scenario, so the tool runs its own code there. `agac retry --sandbox` follows the same scenario, so it does not call a stubbed tool.
 
@@ -271,14 +276,15 @@ A batch reports `in_progress` for its first `polls_until_complete` status checks
 | `happy` | No faults. The judge passes |
 | `chaos` | `seed: 0`. Each LLM action: `errors {rate: 0.1, kinds: [rate_limit, timeout, truncated, empty], heal_on_attempt: 2}`, `break_rules {rules: all, rate: 0.2, heal_on_attempt: 2}` and `judge {pass_rate: 0.7}`. Batch: `polls_until_complete: 1` (the first status check of each batch reports `in_progress`) and `drop_rate: 0.1` |
 
-A preset keeps the tool stubs of the project. With `--scenario happy` or `--scenario chaos`, the run reads the file that it reads without `--scenario` (`sandbox.<workflow>.yml`, else `sandbox.yml`). It keeps each entry under `actions` that sets `stub`, with the `pin` of that entry. It keeps nothing else of the file: the faults, `defaults`, `records` and `batch` come from the preset. Thus `--scenario chaos` does not call a tool that the project stubs. The stub notice names the file. A kept entry can hold only `stub` and `pin`. A tool action makes no model call, so a key that describes one (`errors`, `break_rules`, `judge`, `latency_ms` or `error`) in a kept entry stops the command, as it does in a run without `--scenario`. A problem in a kept entry, or in the file itself, stops the command, and the message names `preset chaos with the stubs of sandbox.yml`.
+A preset keeps the tool stubs of the project. With `--scenario happy` or `--scenario chaos`, the run reads the file that it reads without `--scenario` (`sandbox.<workflow>.yml`, else `sandbox.yml`). It keeps each entry under `actions` that sets `stub`, with the `pin` of that entry. It keeps nothing else of the file: the faults, `defaults`, `records` and `batch` come from the preset. Thus `--scenario chaos` does not call a tool that the project stubs. The stub notice names the file. A kept entry can hold only `stub` and `pin`. Any other key in a kept entry stops the command, as it does in a run without `--scenario`: an unknown key, and a key that describes a model call (`errors`, `break_rules`, `judge`, `latency_ms` or `error`), because a tool action makes no model call. The preset ignores the rest of the file, also when it is not valid: `seed`, `defaults`, `records`, `batch` and each entry under `actions` that does not set `stub`. Only a problem in a kept entry, or a file that cannot be read or is not a mapping, stops the command. The message names `preset chaos with the stubs of sandbox.yml`.
 
 `--scenario path/to/faults.yml` uses only that file. It does not keep the stubs of the project file. To stub a tool in such a run, put the `stub` entry in that file.
 
-Each fault of `chaos` stops at the second attempt of its record. A `chaos` run completes when each LLM action has both of these:
+Each error and each broken rule of `chaos` stops at the second attempt of its record. The judge verdict does not heal: `judge` takes no `heal_on_attempt`. A `chaos` run completes when each LLM action has these:
 
 - `retry:` with two attempts or more, for the transport faults.
 - An `expect:` block with `repair: auto`, for the cut-off and empty answers and the broken rules.
+- `severity: warn` on each `llm_judge` rule. An `llm_judge` rule with `severity: error` can fail a record in each repair round.
 
 These records fail:
 
@@ -297,6 +303,8 @@ SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped
 ```
 
 When an error stops the command after the mock answered a call, the command prints the line before the error message. The line then counts the faults up to the error. A command that stops before the first call prints no line. A retry that finds no record to retry prints no line.
+
+The line names the scenario: the preset, the file name of the project file (`sandbox.yml`), or the `--scenario` path as you typed it (`SANDBOX scenario ./faults.yml: ...`).
 
 When you give `--scenario`, the hints that name `agac run` or `agac retry` name the same `--scenario`.
 
@@ -395,7 +403,7 @@ The workflow names `model_vendor: openai`. A sandbox run sends each LLM action t
 agac sandbox check -w my_workflow
 ```
 
-The file is `sandbox_expected.<workflow>.yml` at the project root, else `sandbox_expected.yml`. `--expected PATH` names another file. It states the exit code of the run, the counts of the `SANDBOX scenario` line and, per action, its status and record counts:
+The file is `sandbox_expected.<workflow>.yml` at the project root, else `sandbox_expected.yml`. `--expected PATH` names another file. A relative `--expected` path is from the project root, not from the current directory. It states the exit code of the run, the counts of the `SANDBOX scenario` line and, per action, its status and record counts:
 
 ```yaml
 # sandbox_expected.yml
@@ -426,5 +434,5 @@ The `reset_workflow.py --full` script of the skills removes the sandbox output t
 - A tool action that you do not stub runs its own code. If that code calls a service, the sandbox run calls it too.
 - A rule that the mock cannot meet still fails, for example an `expression` rule or a custom check that the generated values do not pass. The mock logs a warning for each such field.
 - A rule that `break_rules` cannot break, for example an `llm_judge` rule or a rule type that the action does not check, stays as it is. The mock logs one warning for each action and rule.
-- `agac usage --sandbox` counts the calls of the mock under the model `agac-mock`, with zero tokens.
+- `agac usage --sandbox` counts an online call of the mock under the model `agac-mock`, with zero tokens. A batch action shows the `model_name` of the action and the token counts that the mock batch provider gives.
 - `agac export` has no `--sandbox` option.

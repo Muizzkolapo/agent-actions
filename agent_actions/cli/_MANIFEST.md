@@ -149,7 +149,7 @@
 | `RunCommand.execute()` | `agent_io/target/run_results.json` | Writes | — |
 | `RunCommand.execute()` | `agent_io/store/{workflow}.sandbox.db`, `agent_io/sandbox/` | Writes, in place of the real store, status file, logs and target folder | `--sandbox` |
 | `sandbox_option()` | `agent_io/store/{workflow}.sandbox.db`, `agent_io/sandbox/.agent_status.json` | Reads (`status`, `records`, `traces`, `usage`, `preview`, `dispositions`, `expect report`) | `--sandbox` |
-| `scenario_option()` | `sandbox.<workflow>.yml` or `sandbox.yml`, or the file `--scenario` names | Reads, through `config.sandbox.load_scenario` (`run`, `retry`, `inspect`) | `--scenario` |
+| `scenario_option()` | `sandbox.<workflow>.yml` or `sandbox.yml`, or the file `--scenario` names | Reads, through `config.sandbox.load_scenario` (`run`, `retry`, `inspect`, `sandbox check`) | `--scenario` |
 | `RunCommand.execute()` | `agent_io/_remote_cache/database/` | Writes | `--refresh-input` |
 | `RunCommand._write_outputs()` | database tables named in `agent_config/{workflow}.yml` | Writes | `outputs` |
 | `RetryCommand._retry()` | database tables named in `agent_config/{workflow}.yml` | Writes | `outputs` |
