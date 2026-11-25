@@ -69,6 +69,7 @@ logging:
 | `tool_path` | The directories to scan for custom tools |
 | `seed_data_path` | The directory for static reference data (default: `seed_data`) |
 | `seed_data_paths` | Shared seed folders, relative to the project root. Agent Actions searches them after the folder of the workflow and the folder of the project. See [Seed Data](../context/seed-data#shared-folders) |
+| `connections` | Named databases that a workflow reads its input from or writes its results to. Each entry has a `type` (`sqlite`, `duckdb`, `postgres`, `mysql`, `redshift`, `snowflake`, `bigquery` or `databricks`) and the settings of that type. Write each credential as `${NAME}`: the load refuses a credential that is written in the file. See [Databases](../data-io/databases.md#connections) |
 | `endpoints` | OpenAI-compatible servers with structured output. Each server has a `url`, an `auth` source and optional `headers`. An action selects one with `model_vendor: <name>`. See [Endpoints](./endpoints) |
 | `prices` | The price of one million tokens for each model. `input` and `output` are required. `cache_read`, `cache_write` and `batch_discount` are optional. `batch_discount` is the part, from 0 to 1, that the provider removes from the price of a batch call. Agent Actions has no built-in prices. [`agac usage`](../cli/usage#estimated-cost) reads this block to estimate a cost. A run does not read it. |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required, unless they are marked `optional: true`. When `false` (default), they are optional, unless they are marked `required: true`. This applies to the full project. A schema that declares its own `required_by_default` overrides it. |
@@ -111,6 +112,7 @@ The top level accepts only these keys, and refuses all other keys. Without this 
 | `actions` | The actions (required) |
 | `tool_path` | The location of the tools of this workflow. It has priority over the default config and over `tool_path` in `agent_actions.yml` |
 | `batch_preparation_concurrency` | Optional. The maximum number of batch actions of one step that prepare at the same time (1-50). If you omit it, only `--concurrency-limit` applies. See [Batch preparation concurrency](#batch-preparation-concurrency) |
+| `outputs` | Optional. The database tables that the records of an action are written to when `agac run` or `agac retry` finishes with each action complete. Each entry has an `action`, a `connection` and a `table`, and optionally a `mode` (`merge`, `append` or `replace`), a `key` and a `carry` list. See [Databases](../data-io/databases.md#writing-results) |
 | `storage` | Maintenance settings: `prompt_trace_retention_runs` and `source_data_ttl_days`. The unit of the first setting is **calendar days**, not runs, although its name says runs. `0` means never prune. If you omit a key, the framework default applies. For traces, the framework default is 10 days, and it does prune |
 
 Model settings, for example `model_vendor`, go under `defaults:`, not at the top level.

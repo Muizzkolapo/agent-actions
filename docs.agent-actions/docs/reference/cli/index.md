@@ -166,6 +166,7 @@ The tables give each command, in groups by the purpose of the command:
 | Command | Description |
 |---------|-------------|
 | [`run`](./run) | Run a workflow |
+| [`export`](./export) | Write the declared `outputs:` of a workflow to their database tables again, with no model call |
 | [`batch`](./batch) | Manage batch processing operations |
 
 **Inspect and debug:**

@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'Document the database feature where readers look for it: an `agac export` CLI page, `--refresh-input` in the `agac run` options, how `agac retry` checks and writes `outputs:`, `connections` and `outputs` in the configuration reference, a database source in the data I/O overview, the driver extras on the installation page, and the example and capability in the README.'
+time: 2026-11-25T09:00:00.000000000+00:00
