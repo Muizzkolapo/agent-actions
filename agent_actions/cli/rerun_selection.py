@@ -40,6 +40,8 @@ class Selection:
 
     action: str
     considered: int
+    # The actions the rerun starts at: the action, or each version of a versioned one.
+    starts: list[str] = field(default_factory=list)
     matched: list[str] = field(default_factory=list)
     named: set[str] = field(default_factory=set)
     unevaluated: int = 0
@@ -53,7 +55,7 @@ class Selection:
         why = f"selected for rerun from {self.action}"
         return [
             {
-                "action_name": self.action,
+                "action_name": self.starts[0] if self.starts else self.action,
                 "record_id": record_id,
                 "disposition": SELECTED,
                 "reason": why,
@@ -106,10 +108,12 @@ def select_records(
     would clear and re-answer below the action while the action itself ran nothing.
     """
     stored = [row for row in rows if isinstance(row, dict) and row.get("source_guid")]
-    selection = Selection(action=action, considered=len(stored))
+    # A versioned action stores one row a version for each record.
+    selection = Selection(action=action, considered=len({row["source_guid"] for row in stored}))
     wanted = set(record_filter.record_ids or ())
     found: set[str] = set()
     matched_rows: list[dict[str, Any]] = []
+    chosen: set[str] = set()
     for row in stored:
         guid = row["source_guid"]
         if wanted:
@@ -119,7 +123,9 @@ def select_records(
             found |= named_by
         if record_filter.where and not _matches(row, record_filter.where, selection):
             continue
-        matched_rows.append(row)
+        if guid not in chosen:
+            chosen.add(guid)
+            matched_rows.append(row)
 
     unknown = sorted(wanted - found)
     if unknown:
@@ -132,7 +138,7 @@ def select_records(
             f"name no record that '{action}' stored or was made from: {shown}. "
             f"List the ids with: agac records -A {action}"
         )
-    if record_filter.where and selection.unevaluated == selection.considered > 0:
+    if record_filter.where and stored and selection.unevaluated == len(stored):
         raise click.ClickException(
             f"--where could not be evaluated on any record of '{action}': {selection.first_error}"
         )

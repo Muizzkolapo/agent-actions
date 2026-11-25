@@ -139,3 +139,16 @@ def test_an_expression_that_does_not_parse_is_refused():
         refuse_an_expression_that_does_not_parse("classify.label ==")
 
     refuse_an_expression_that_does_not_parse('classify.label IN ["a", "b"] AND source.id > 3')
+
+
+def test_a_versioned_action_stores_a_row_a_version_and_a_record_is_chosen_once():
+    rows = [
+        {"source_guid": "a", "content": {"score_1": {"urgency": 5}}},
+        {"source_guid": "b", "content": {"score_1": {"urgency": 1}}},
+        {"source_guid": "a", "content": {"score_2": {"urgency": 5}}},
+        {"source_guid": "b", "content": {"score_2": {"urgency": 2}}},
+    ]
+
+    selection = select_records(rows, "score", RecordFilter(record_ids=("a",)), _all_held)
+
+    assert (selection.considered, selection.matched, selection.kept) == (2, ["a"], 1)

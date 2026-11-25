@@ -379,7 +379,9 @@ class RetryCommand:
                 return None
             # The plan is the selection alone: a record that failed elsewhere keeps its
             # failure for `agac retry`, as every record this rerun did not name keeps its row.
-            failures = {self._selection.action: self._selection.as_plan_rows()}
+            first = self._selection.starts[0]
+            self.args = self.args.model_copy(update={"from_action": first})
+            failures = {first: self._selection.as_plan_rows()}
 
         if not failures:
             found = self._failures_when_none_is_recorded(
@@ -430,8 +432,9 @@ class RetryCommand:
         if self._selection is not None:
             # Only what reads the action: a branch beside it holds the same records
             # and would answer them again for nothing.
-            below = set(actions_below(backend, from_action))
-            downstream_actions = [a for a in downstream_actions if a == from_action or a in below]
+            starts = set(self._selection.starts)
+            below = {a for start in starts for a in actions_below(backend, start)}
+            downstream_actions = [a for a in downstream_actions if a in starts or a in below]
             self._file_tools = self._file_tools_something_reads(
                 downstream_actions, workflow.services.core.action_runner.action_configs or {}
             )
@@ -1420,13 +1423,16 @@ class RetryCommand:
         from agent_actions.prompt.context.scope_inference import expand_version_base_names
 
         action = self.args.from_action or ""
-        if action not in execution_order:
+        # A versioned action is stored under each version's name, as `--rerun` reads it.
+        starts = [name for name in expand_version_base_names([action], execution_order)]
+        starts = [name for name in execution_order if name in starts]
+        if not starts:
             raise click.ClickException(
                 f"Action '{action}' not found in execution order: {execution_order}"
             )
         configs = workflow.services.core.action_runner.action_configs or {}
         upstream = expand_version_base_names(
-            list((configs.get(action) or {}).get("dependencies") or []), execution_order
+            list((configs.get(starts[0]) or {}).get("dependencies") or []), execution_order
         )
 
         def held_by_input(record_ids: Sequence[str]) -> set[str]:
@@ -1440,9 +1446,9 @@ class RetryCommand:
                 if row.get("source_guid") in wanted
             }
 
-        selection = select_records(
-            _stored_rows(backend, action), action, record_filter, held_by_input
-        )
+        stored = (row for start in starts for row in _stored_rows(backend, start))
+        selection = select_records(stored, action, record_filter, held_by_input)
+        selection.starts = starts
         if not selection.considered:
             raise click.ClickException(
                 f"'{action}' holds no stored record to choose from. Run the workflow first."

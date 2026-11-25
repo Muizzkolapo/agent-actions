@@ -290,6 +290,9 @@ mistake.
 - Each action that reads `ACTION`, directly or through another action, runs again for the
   same records. An action in another branch does not run.
 - The actions before `ACTION` do not run.
+- For a [versioned action](../execution/versions.md), give the name as the configuration writes
+  it (`--rerun score`). Each version then runs again for the matching records. Give one
+  version (`--rerun score_1`) to run only that version again.
 - The run writes the declared [`outputs:`](../data-io/databases.md#writing-results) at its end.
 
 To get the ids for `--records`, use `--dry-run`, or [`agac records`](./records).
