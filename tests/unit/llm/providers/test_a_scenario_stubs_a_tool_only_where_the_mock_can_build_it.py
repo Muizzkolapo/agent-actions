@@ -4,8 +4,8 @@
 on a tool the mock cannot build an output for, and refuses on a tool action each key that
 describes a model call. ``pin`` on a tool action needs ``stub: true``. ``stub`` is
 ``true`` or ``false``: a string or a number is refused, not read as a boolean. A preset
-keeps the ``stub`` and ``pin`` of each project-file entry that sets ``stub``, and refuses a
-model-call key there as a run without a preset does.
+keeps each project-file entry that sets ``stub``, and refuses any key but ``stub`` and
+``pin`` there as a run without a preset does.
 """
 
 from __future__ import annotations
@@ -137,13 +137,30 @@ def test_a_preset_refuses_error_in_a_kept_entry_as_a_run_without_one_does(tmp_pa
     assert "preset happy with the stubs of sandbox.yml" in str(caught.value)
 
 
+def test_a_preset_refuses_an_unknown_key_in_a_kept_entry_as_a_run_without_one_does(tmp_path):
+    text = "actions:\n  search: {stub: true, bogus: 1}\n"
+    without = _refused(tmp_path, text)
+
+    with pytest.raises(ConfigurationError) as caught:
+        _under_a_preset(tmp_path, text, "chaos")
+
+    assert "- actions.search.bogus: unknown key" in without, without
+    assert "- actions.search.bogus: unknown key" in str(caught.value), str(caught.value)
+    assert "preset chaos with the stubs of sandbox.yml" in str(caught.value)
+
+
 def test_a_preset_keeps_only_the_stub_and_pin_of_a_kept_entry(tmp_path):
     scenario = _under_a_preset(
-        tmp_path, "actions:\n  search: {stub: true, pin: {source: x}, note: from the file}\n"
+        tmp_path,
+        "defaults: {errors: {rate: 1}, bogus: 1}\n"
+        "actions:\n  search: {stub: true, pin: {source: x}}\n"
+        "  extract: {latency_ms: -1}\n"
+        "records: not a list\n",
     )
 
     assert scenario.stubbed() == ["search"]
     assert scenario.rules_for("search", {}).pin == {"source": "x"}
+    assert scenario.rules_for("extract", {}).errors.rate == 0.0
 
 
 def test_a_preset_ignores_an_entry_without_stub(tmp_path):

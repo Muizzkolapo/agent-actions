@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Under `agac run --sandbox --scenario happy` or `--scenario chaos`, an unknown key in a `stub` entry of the project scenario file (for example `bogus: 1`) now stops the command with the same message as a run without `--scenario`. Before, the preset dropped that key without a word. A `stub` entry takes only `stub` and `pin`. The rest of the file under a preset (`defaults`, `records`, `batch`, entries without `stub`) stays ignored.'
+time: 2026-11-25T21:00:00Z
