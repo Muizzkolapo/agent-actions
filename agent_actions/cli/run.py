@@ -501,6 +501,32 @@ class RunCommand:
     ),
 )
 @click.option(
+    "--where",
+    metavar="EXPRESSION",
+    default=None,
+    help=(
+        "With one --rerun ACTION: answer again only the records of ACTION that this guard "
+        "expression matches, there and at what reads it. Every other record keeps its "
+        "answers. It reads the fields ACTION stored, e.g. 'classify.label == \"other\"'"
+    ),
+)
+@click.option(
+    "--records",
+    metavar="FILE",
+    default=None,
+    type=click.Path(dir_okay=False),
+    help=(
+        "With one --rerun ACTION: answer again only the records FILE lists, one "
+        "source_guid a line. With --where too, a record must be listed and match"
+    ),
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="With --where / --records: print the count and the ids, and call no model",
+)
+@click.option(
     "--verify-keys",
     is_flag=True,
     default=False,
@@ -550,6 +576,9 @@ def run(
     fresh: bool = False,
     refresh_input: bool = False,
     rerun: tuple[str, ...] = (),
+    where: str | None = None,
+    records: str | None = None,
+    dry_run: bool = False,
     verify_keys: bool = False,
     wait: bool = False,
     poll: int | None = None,
@@ -571,6 +600,8 @@ def run(
         agac run -a my_agent --refresh-input
         agac run -a my_agent --rerun classify
         agac run -a my_agent --rerun classify --rerun summarize
+        agac run -a my_agent --rerun classify --where 'classify.label == "other"'
+        agac run -a my_agent --rerun write --records ids.txt --dry-run
         agac run -a my_agent --record-limit 2 --file-limit 1
         agac run -a my_agent --wait --poll 60 --wait-timeout 86400
         agac run -a my_agent --sandbox
@@ -590,10 +621,70 @@ def run(
         fresh=fresh,
         refresh_input=refresh_input,
         rerun=rerun,
+        where=where,
+        records=records,
+        dry_run=dry_run,
         verify_keys=verify_keys,
         wait=wait,
         poll=poll,
         wait_timeout=wait_timeout,
     )
+    if where is not None or records is not None or dry_run:
+        rerun_selected_records(args, project_root)
+        return
     command = RunCommand(args)
     command.execute(project_root=project_root)
+
+
+def rerun_selected_records(args: RunCommandArgs, project_root: Path | None) -> None:
+    """`--rerun ACTION --where/--records`: answer the matching records again, and no other.
+
+    Runs on the retry path, which narrows a run to named records and carries every
+    other record's stored row and disposition through each rewritten file.
+    """
+    if args.where is None and args.records is None:
+        raise click.UsageError("--dry-run shows what --where or --records selects; give one.")
+    if len(args.rerun) != 1:
+        raise click.UsageError(
+            "--where and --records choose records of one action: give exactly one --rerun ACTION."
+        )
+    refused = {
+        "--fresh": args.fresh,
+        "--refresh-input": args.refresh_input,
+        "--record-limit": args.record_limit is not None,
+        "--file-limit": args.file_limit is not None,
+    }
+    for flag, given in refused.items():
+        if given:
+            raise click.UsageError(
+                f"{flag} does not go with --where / --records: a filtered rerun answers "
+                "the records it names and leaves every other record as it is."
+            )
+    # Deferred: retry imports this module.
+    from agent_actions.cli.args import RetryCommandArgs
+    from agent_actions.cli.rerun_selection import (
+        RecordFilter,
+        read_record_ids,
+        refuse_an_expression_that_does_not_parse,
+    )
+    from agent_actions.cli.retry import RetryCommand
+
+    if args.where is not None:
+        refuse_an_expression_that_does_not_parse(args.where)
+    record_filter = RecordFilter(
+        where=args.where,
+        record_ids=read_record_ids(args.records) if args.records is not None else None,
+        records_from=args.records,
+    )
+    retry_args = RetryCommandArgs(
+        agent=args.agent, from_action=args.rerun[0], dry_run=args.dry_run
+    )
+    try:
+        RetryCommand(retry_args, record_filter).execute(project_root=project_root)
+    except SystemExit as stopped:
+        paused = stopped.code == EXIT_CODES[RunOutcome.PAUSED_FOR_BATCH]
+        if not args.wait or args.dry_run or not paused:
+            raise
+        # The batch holds only the selected records, and a plain run collects it.
+        waiting = args.model_copy(update={"rerun": (), "where": None, "records": None})
+        RunCommand(waiting).execute(project_root=project_root)

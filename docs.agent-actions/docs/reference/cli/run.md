@@ -56,6 +56,9 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--fresh` | Before execution, clear the stored results, the dispositions, the prompt traces, the status, the stored token usage and the event logs (`events.json`, `errors.json` and their rotations from earlier runs). Also discard the data that the provider recorded locally about each batch that this workflow submitted, collected or not. This flag gives a clean start for debugging. |
 | `--refresh-input` | Read the query of each `database` data source again. Rows that did not change keep their answers. New and changed rows are answered. Rows that the query no longer returns are forgotten. If a batch is still open, the run stops before it starts, because the batch answers the rows that it was sent. With `--fresh`, an open batch does not stop it, because `--fresh` discards the batches. `--fresh` alone does not read the query again: it keeps the snapshot. See [Databases](../data-io/databases.md#the-snapshot) |
 | `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Give the flag more than one time to run more than one action again in the same run (`--rerun classify --rerun summarize`). Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have a name, the run stops before it starts, and names each name that it does not have |
+| `--where EXPRESSION` | With one `--rerun ACTION`: answer again only the records of `ACTION` that the expression matches, at `ACTION` and at each action that reads it. Each other record keeps its answers. The expression is a [guard](../execution/guards.md) condition. See [Rerun selected records](#rerun-selected-records) |
+| `--records FILE` | With one `--rerun ACTION`: answer again only the records that `FILE` lists. `FILE` has one `source_guid` on each line. With `--where` also, a record must be in the list and match the expression. See [Rerun selected records](#rerun-selected-records) |
+| `--dry-run` | With `--where` or `--records`: print the count and the ids of the records that match. The command changes nothing and calls no model |
 | `--verify-keys` | Verify the API keys before execution. The command probes each vendor one time for each endpoint. For an `openai` action with `base_url`, the probe uses `models.list()` at that URL. For an action without `base_url`, the probe uses the OpenAI endpoint. If a server does not answer, the command logs a warning and the run continues. A local server may serve `/v1/models` without a check of the key (llamafile 0.10.6 does this). Thus a passing probe there shows that the server is reachable, not that the key is correct. Each [declared endpoint](../configuration/endpoints.md#verify-an-endpoint) that the workflow uses also gets one structured-output request. For that request, three conditions are errors. They are a refused credential, a server that cannot be reached, and a reply that does not match the schema of the probe |
 | `--wait` | While the run is paused for a batch, wait and run the workflow again until no batch is open. Then exit with the code of the final status. See [Wait for batch jobs](#wait-for-batch-jobs) |
 | `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs, in whole seconds. The minimum is 1 (default: 60). With `--sandbox`, the default is no wait. See [Wait for batch jobs](#wait-for-batch-jobs) |
@@ -248,6 +251,91 @@ You do not need `--fresh` to read new input. `--rerun` answers each record again
 The two flags do not limit [`agac retry`](./retry). A repair walks each file that holds a record that the repair
 named. If the repair stopped before one of these files, the cleared disposition of that record would stay unwritten.
 A limit exists to prevent this type of erasure.
+
+## Rerun selected records {/* #rerun-selected-records */}
+
+`--rerun ACTION` answers each record of `ACTION` again. To answer only some records again,
+add `--where` or `--records`. The other records keep their answers at each action, and the
+run calls no model for them.
+
+```bash
+# The records that a field selects
+agac run -a my_workflow --rerun write_reply --where 'classify.category == "billing"'
+
+# The records that a file lists, one source_guid on each line
+agac run -a my_workflow --rerun write_reply --records ids.txt
+
+# Look before you pay: print the count and the ids, call no model
+agac run -a my_workflow --rerun write_reply --where 'source.ticket_id <= 100' --dry-run
+```
+
+Use this after a full run, when only one group of records must change. For example, a prompt
+edit applies to one category only, or a review finds bad answers for 100 of 500 records.
+
+### What the filter reads
+
+The run evaluates `--where` on the records that `ACTION` stored. A stored record holds the
+fields of `ACTION` and of each action before it, and the staged row under `source`. Thus the
+expression can read `source.<field>`, `<earlier_action>.<field>` and `<ACTION>.<field>`.
+The syntax is the syntax of a [guard condition](../execution/guards.md): `==`, `!=`, `<`,
+`IN [...]`, `AND`, `OR`.
+
+A record that does not have the field does not match, and the run says how many records it
+could not evaluate. If no record has the field, the run stops, because the name is probably a
+mistake.
+
+### What runs again
+
+- `ACTION` runs again for the matching records.
+- Each action that reads `ACTION`, directly or through another action, runs again for the
+  same records. An action in another branch does not run.
+- The actions before `ACTION` do not run.
+- The run writes the declared [`outputs:`](../data-io/databases.md#writing-results) at its end.
+
+To get the ids for `--records`, use `--dry-run`, or [`agac records`](./records).
+
+### An action that makes several records from one
+
+Some actions make new records with new ids, for example a File tool that makes three slots
+from each ticket. Such an action can only run on the records that it reads. Thus, when the
+filter matches a slot, `ACTION` runs again on the ticket that the slot came from, and the
+actions below answer the matching slots again.
+
+A [File tool](../execution/granularity.md) always gets the whole of each file that the rerun
+reaches. If the tool writes a row differently, the actions below answer that row again also,
+whether the filter matched it or not. If the tool writes a row the same, the row keeps its
+answers. The run says so at its end.
+
+### What stops the rerun
+
+Each of these conditions stops the command before it changes anything:
+
+| Cause | What to do |
+|-------|------------|
+| No record matches | Nothing. The command prints `No record matches` and exits 0 |
+| An id in `FILE` names no record of `ACTION` | Correct the file. The error names the ids |
+| The expression is not a guard condition | Correct the expression. The exit code is 2 |
+| More than one `--rerun`, or none | Give one `--rerun ACTION` |
+| `--fresh`, `--refresh-input`, `--record-limit` or `--file-limit` | Remove the flag. A filtered rerun does not accept new work and does not clear the store |
+| A batch of the workflow is not collected | Run `agac run` to collect it first |
+
+### After the rerun
+
+- A record that fails in the rerun is a failed record. The exit code is `3`, and
+  [`agac retry`](./retry) repairs the record.
+- A record that failed before, and that the filter did not match, stays failed.
+- In batch mode, the rerun submits a batch that holds only the matching records, and exits
+  `4`. Run `agac run` to collect the batch, or give `--wait` to the rerun.
+- If the rerun stops before its end, run `agac run`. The run completes the same records.
+- The rerun uses the configuration as it is now, for the matching records only. For example,
+  if you added a guard, the guard can filter a matching record, and the record then loses its
+  earlier answer. A record that the filter did not match keeps its answer, even if the new
+  guard would filter it.
+- If you edited `ACTION` before the rerun, `ACTION` now holds answers from two versions of
+  its configuration. Each later run says so until `--rerun ACTION` answers each record again.
+- An output with `mode: append` skips a key that the table holds. Thus the table keeps the
+  earlier answer of a record that the rerun answered again. Use `mode: merge` for a table
+  that must follow the store.
 
 ## When you edit the workflow
 

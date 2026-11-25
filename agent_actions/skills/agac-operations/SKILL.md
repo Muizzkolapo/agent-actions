@@ -26,7 +26,7 @@ Use this skill when a workflow runs over many records (hundreds to many thousand
 2. **Test the run mode that the full run uses.** Run a small sample in batch mode before a full batch run. Do not assume that an online test predicts a batch run.
 3. **Never edit the staging input of a workflow that can resume.** A changed or new staging file changes the plan. Use `--fresh` for new input, or add new input as a new file. A `database` data source reads its query once into a snapshot; to pick up new rows, use `--refresh-input`, which answers only the rows that are new or changed.
 4. **Never change the agent-actions code that a live run imports.** A run started from an editable install reads the code at each import.
-5. **Keep paid output.** To change one action, use `agac run -w <workflow> --rerun <action>`. It runs that action and every action that reads it again on every record. The other actions keep their output. `--fresh` throws away all output.
+5. **Keep paid output.** To change one action, use `agac run -w <workflow> --rerun <action>`. It runs that action and every action that reads it again on every record. The other actions keep their output. To change only some records, add `--where '<guard expression>'` or `--records ids.txt`: the records that do not match keep their answers at every action, and `--dry-run` shows the count first. `--fresh` throws away all output.
 6. **Rehearse a large run offline first.** Run `agac run -w <workflow> -u tools --sandbox --scenario chaos --wait` before you pay. It tests retry, repair and recovery with no model call (see [Rehearse offline](#rehearse-offline)).
 
 ## Commands
@@ -37,6 +37,8 @@ All commands run from the project root. `-u tools` is needed when the workflow h
 agac run -w <workflow> -u tools                    # run, or resume from the last finished action
 agac run -w <workflow> -u tools --wait             # wait for open batches, then exit with the final code
 agac run -w <workflow> -u tools --rerun <action>   # run <action> and its readers again; keep the rest
+agac run -w <workflow> -u tools --rerun <action> --where '<guard expression>'   # only the matching records; --dry-run counts them first
+agac run -w <workflow> -u tools --rerun <action> --records ids.txt             # only the listed source_guids
 agac retry -w <workflow> --all                     # retry from the earliest failure until no pass helps
 agac retry -w <workflow> --filter <action>:<record_id> --reason "<why>"   # stop retrying one record
 agac run -w <workflow> -u tools --refresh-input    # read a database source's query again (refused while a batch is open)
