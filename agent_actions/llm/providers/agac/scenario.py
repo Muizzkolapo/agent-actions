@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 import yaml
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictBool, ValidationError
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.utils import deep_json
@@ -118,7 +118,7 @@ class ActionRules(_Strict):
 
 class NamedActionRules(ActionRules):
     # A tool action only: its code does not run, and the mock builds its output.
-    stub: bool | None = None
+    stub: StrictBool | None = None
 
 
 class RecordActionRules(ActionRules):

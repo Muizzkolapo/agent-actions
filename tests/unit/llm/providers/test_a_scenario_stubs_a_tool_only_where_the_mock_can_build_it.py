@@ -2,7 +2,8 @@
 
 ``stub`` is a key of a tool action under ``actions``. The load refuses it anywhere else,
 on a tool the mock cannot build an output for, and refuses on a tool action each key that
-describes a model call. ``pin`` on a tool action needs ``stub: true``.
+describes a model call. ``pin`` on a tool action needs ``stub: true``. ``stub`` is
+``true`` or ``false``: a string or a number is refused, not read as a boolean.
 """
 
 from __future__ import annotations
@@ -60,6 +61,21 @@ def test_a_tool_action_named_with_no_stub_runs_its_own_code(tmp_path):
     scenario = _load(tmp_path, "actions:\n  search: {}\n  plain: {stub: false}\n")
 
     assert scenario.stubbed() == []
+
+
+@pytest.mark.parametrize(("value", "stubbed"), [("true", ["search"]), ("false", [])])
+def test_stub_takes_true_or_false(tmp_path, value, stubbed):
+    scenario = _load(tmp_path, f"actions:\n  search: {{stub: {value}}}\n")
+
+    assert scenario.stubbed() == stubbed
+
+
+@pytest.mark.parametrize("value", ['"yes"', '"true"', "1", "0"])
+def test_stub_that_is_not_a_boolean_is_refused_naming_the_file_and_key(tmp_path, value):
+    message = _refused(tmp_path, f"actions:\n  search: {{stub: {value}}}\n")
+
+    assert "sandbox.yml" in message, message
+    assert "- actions.search.stub: Input should be a valid boolean" in message, message
 
 
 def test_a_version_base_name_stubs_each_version(tmp_path):
