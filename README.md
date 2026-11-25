@@ -84,6 +84,7 @@ You will, until you have 15 steps, 3 models, batch retry, and a teammate asks wh
 | [Book Catalog Enrichment](examples/book_catalog_enrichment) | Multi-step enrichment | BISAC classification, marketing copy, SEO metadata, reading level |
 | [Incident Triage](examples/incident_triage) | Parallel consensus | Severity classification, impact assessment, team assignment, response plan |
 | [Support Resolution](examples/support_resolution) | Non-JSON pipeline | Classify, route, and draft responses using `output_field` — works with any model including local Ollama |
+| [Ticket Triage Warehouse](examples/ticket_triage_warehouse) | Database in, tables out | Reads tickets from a database query, writes the results back as tables; runs offline on SQLite |
 
 ## Providers
 
@@ -100,6 +101,7 @@ Switch providers per-action by changing `model_vendor`.
 - **Pre-flight validation** — schemas, dependencies, templates, and credentials checked before any LLM call
 - **Batch processing** — route thousands of records through provider batch APIs
 - **User-defined functions** — Python tools for pre/post-processing and custom logic
+- **Databases** — read input rows from a query and write results to tables on SQLite, DuckDB, Postgres, MySQL, Redshift, Snowflake, BigQuery or Databricks ([docs](docs.agent-actions/docs/reference/data-io/databases.md))
 - **Expectations** — declare rules the output must satisfy; failures are regenerated with the rule's feedback
 - **Observability** — per-action timing, token counts, and structured event logs
 - **Interactive docs** — `agac docs` builds and serves a visual workflow dashboard

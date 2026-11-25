@@ -52,6 +52,16 @@ defaults:
     file_type: [json, csv]
 ```
 
+You can also make the workflow read its input rows from a database query, and write the results of an action to a database table. Each row of the query becomes one record. See [Databases](./databases.md).
+
+```yaml
+defaults:
+  data_source:
+    type: database
+    connection: warehouse
+    sql: SELECT id, title, body FROM tickets
+```
+
 The output of each input file is stored under its path, with the suffix replaced by `.json`. Thus `page.csv` and `page.json` in the same folder would share one name. The run refuses such a folder before it processes anything, and it names the two files. Rename or remove one of the two files.
 
 ### source_data (table)

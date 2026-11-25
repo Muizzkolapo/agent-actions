@@ -60,6 +60,7 @@ const sidebars: SidebarsConfig = {
           },
           items: [
             'reference/cli/run',
+            'reference/cli/export',
             'reference/cli/batch',
             'reference/cli/inspect',
             'reference/cli/utilities',
