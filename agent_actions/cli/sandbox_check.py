@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,10 +27,16 @@ from agent_actions.cli.cli_decorators import (
 )
 from agent_actions.config import sandbox as sandbox_state
 
+logger = logging.getLogger(__name__)
+
 EXPECTED_FILE = "sandbox_expected.yml"
 EXIT_PASSED = 0
+# A value does not hold, or the run wrote no result.
 EXIT_MISMATCH = 1
-EXIT_BAD_EXPECTATIONS = 2
+# The expectations file is not valid, or the check could not run.
+EXIT_NOT_CHECKED = 2
+# What the CLI exits with on Ctrl-C; its SIGINT handler raises SystemExit with it.
+EXIT_INTERRUPTED = 130
 
 SCENARIO_KEYS = {
     "errors": "errors",
@@ -266,6 +273,10 @@ def run_in_sandbox(
     try:
         RunCommand(args).execute(project_root=project_root, holding_the_lock=holding_the_lock)
     except SystemExit as stop:
+        if stop.code == EXIT_INTERRUPTED:
+            raise
+        if stop.code is None:
+            return EXIT_SUCCESS
         return stop.code if isinstance(stop.code, int) else EXIT_FAILED
     except AgentActionsError as error:
         if not getattr(error, "_already_displayed", False):
@@ -287,16 +298,22 @@ def run_and_read(
     an earlier run's: the run stopped before it loaded the workflow, so it wrote no result.
     """
     from agent_actions.config.project_paths import ProjectPathsFactory
+    from agent_actions.errors import AgentActionsError
 
-    io_dir = ProjectPathsFactory.create_project_paths(
-        workflow, workflow, auto_create=False, project_root=project_root
-    ).io_dir
-    status = sandbox_state.status_file(io_dir)
-    before = _file_identity(status)
+    try:
+        io_dir = ProjectPathsFactory.create_project_paths(
+            workflow, workflow, auto_create=False, project_root=project_root
+        ).io_dir
+    except AgentActionsError:
+        # The run resolves the same folders first, so it stops on this and says why.
+        io_dir = None
+    before = None if io_dir is None else _file_identity(sandbox_state.status_file(io_dir))
     read: list[tuple[dict[str, str], dict[str, dict[str, int | None]]]] = []
 
     def read_holding_the_lock() -> None:
-        written = _file_identity(status)
+        if io_dir is None:
+            return
+        written = _file_identity(sandbox_state.status_file(io_dir))
         if written is not None and written != before:
             read.append(read_output(io_dir, workflow))
 
@@ -421,8 +438,9 @@ def check(
     output only. Read that output after the check with --sandbox.
 
     \b
-    Exit codes: 0 every expectation holds, 1 one or more do not hold,
-    2 the expectations file is missing or not valid.
+    Exit codes: 0 every expectation holds, 1 one or more do not hold or the
+    run wrote no result, 2 the expectations file is missing or not valid or
+    the check could not run, 130 interrupted.
 
     \b
     Examples:
@@ -436,13 +454,20 @@ def check(
         wanted = load_expected(path)
     except ExpectationsError as error:
         click.echo(f"Error: {error}", err=True)
-        raise SystemExit(EXIT_BAD_EXPECTATIONS) from None
-    actual, actions = run_and_read(workflow, project_root, user_code, execution_mode)
+        raise SystemExit(EXIT_NOT_CHECKED) from None
+    try:
+        actual, actions = run_and_read(workflow, project_root, user_code, execution_mode)
+    except Exception as error:
+        logger.debug("sandbox check could not run", exc_info=True)
+        click.echo(
+            f"Error: sandbox check could not run: {type(error).__name__}: {error}", err=True
+        )
+        raise SystemExit(EXIT_NOT_CHECKED) from None
     try:
         rows = compare(wanted, actual, actions)
     except ExpectationsError as error:
         click.echo(f"Error: {path.name}: {error}", err=True)
-        raise SystemExit(EXIT_BAD_EXPECTATIONS) from None
+        raise SystemExit(EXIT_NOT_CHECKED) from None
     code = report(rows, workflow, path.name)
     if code != EXIT_PASSED:
         raise SystemExit(code)

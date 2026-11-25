@@ -389,7 +389,7 @@ The workflow names `model_vendor: openai`. A sandbox run sends each LLM action t
 
 ## Check the Result of a Sandbox Run {/* #sandbox-check */}
 
-`agac sandbox check` runs a workflow in the sandbox and compares the result with the expected outcomes in a file. It exits 0 when each expected value holds, 1 when one or more values do not hold or the run wrote no result, and 2 when the file is missing or not valid:
+`agac sandbox check` runs a workflow in the sandbox and compares the result with the expected outcomes in a file. It exits 0 when each expected value holds, 1 when one or more values do not hold or the run wrote no result, 2 when the file is missing or not valid or the check could not run, and 130 when you interrupt it:
 
 ```bash
 agac sandbox check -w my_workflow

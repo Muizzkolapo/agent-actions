@@ -135,7 +135,8 @@ takes `--scenario`, `-u` and `-e` as `agac run` does. It prints one row per stat
 |------|---------|
 | 0 | Each stated value holds |
 | 1 | One or more values do not hold; the `FAIL` rows name each: `classify filtered: expected 2, got 1`. Also when the run wrote no result: `run: wrote no result (the run stopped with exit code 1)` |
-| 2 | The file is missing, is not YAML, has an unknown key or an action entry with no value (`classify: {}`), or names an action the workflow does not have. The file is checked before the run |
+| 2 | The file is missing, is not YAML, has an unknown key or an action entry with no value (`classify: {}`), or names an action the workflow does not have. The file is checked before the run. Also when the check could not run (an unexpected error, one `Error:` line) |
+| 130 | Interrupted (Ctrl-C) |
 
 ```yaml
 # sandbox_expected.yml: only what you state is checked
