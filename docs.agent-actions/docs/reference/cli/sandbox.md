@@ -20,7 +20,7 @@ The command does these steps:
 
 1. It reads and checks the expectations file. A problem stops the command with exit code 2, before the run.
 2. It runs the workflow as `agac run -w my_workflow --sandbox --fresh --wait` does, in the same process. The run follows the scenario that a sandbox run reads. See [The scenario file](../../guides/sandbox.md#scenario).
-3. It reads the result from the sandbox output: the status of each action, the counts of the sandbox store and the counts of the `SANDBOX scenario` line.
+3. It reads the result from the sandbox output before the run releases the run lock: the status of each action, the counts of the sandbox store and the counts of the `SANDBOX scenario` line.
 4. It prints one row for each value that the file states, and a `PASS` or `FAIL` line.
 
 ```
@@ -34,6 +34,20 @@ FAIL: 1 of 4 expectations do not hold:
 ```
 
 The output of the run comes before the table.
+
+### A Run That Wrote No Result {/* #no-result */}
+
+The check reads only a result that its own run wrote. The run writes the status file of the sandbox output when it loads the workflow. A run can stop before that, for example when the scenario or the workflow configuration does not load, or when another command holds the run lock. The sandbox output then holds the result of an earlier run, and the check does not read it. It compares only `exit_code`, prints a row that does not hold, and fails with exit code 1, whatever the file states:
+
+```
+Sandbox check of support_desk against sandbox_expected.yml:
+  ✓ exit code  1
+  ✗ run        wrote no result (the run stopped with exit code 1)
+FAIL: 1 of 2 expectations do not hold:
+  run: wrote no result (the run stopped with exit code 1)
+```
+
+The error of the run comes before the table.
 
 ### Options
 
@@ -88,7 +102,7 @@ The check refuses these entries with exit code 2. The message names the file and
 
 - An unknown key, at the top level, under `scenario` or under an action.
 - A count that is not a whole number 0 or more, and a status that is not in the list.
-- An action that the workflow does not have. The check finds this after the run. When the run stops before the workflow loads, the check does not refuse a name: each value of that action is none and does not hold.
+- An action that the workflow does not have. The check finds this after the run, in the status file that the run wrote. When the run wrote no result, the check does not read the actions, so it does not refuse a name. The check fails, as [A run that wrote no result](#no-result) says.
 
 The mock and the scenario decide in the same way for the same input, also in a parallel run. Thus a sandbox run gives the same values each time, and a file can state them exactly. See [Each decision is per record](../../guides/sandbox.md#each-decision-is-per-record).
 
@@ -101,7 +115,7 @@ agac dispositions -w my_workflow --sandbox
 agac records -w my_workflow -A classify --sandbox
 ```
 
-The run holds the run lock of the workflow, as `agac run` does. A check and a run of the same workflow cannot run at the same time.
+The run holds the run lock of the workflow, as `agac run` does, and the check reads the result before the lock is released. A check and a run of the same workflow cannot run at the same time, and no other run can change the result before the check reads it.
 
 ### Examples
 

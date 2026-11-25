@@ -389,7 +389,7 @@ The workflow names `model_vendor: openai`. A sandbox run sends each LLM action t
 
 ## Check the Result of a Sandbox Run {/* #sandbox-check */}
 
-`agac sandbox check` runs a workflow in the sandbox and compares the result with the expected outcomes in a file. It exits 0 when each expected value holds, 1 when one or more values do not hold, and 2 when the file is missing or not valid:
+`agac sandbox check` runs a workflow in the sandbox and compares the result with the expected outcomes in a file. It exits 0 when each expected value holds, 1 when one or more values do not hold or the run wrote no result, and 2 when the file is missing or not valid:
 
 ```bash
 agac sandbox check -w my_workflow
@@ -408,7 +408,7 @@ actions:
 
 The mock and the scenario decide in the same way for the same input. Thus each value is the same in each run, also with `-e parallel`, and the file can state it exactly. To write the file for your workflow, run the workflow in the sandbox, read the counts with `agac dispositions -w my_workflow --sandbox`, and write the counts that matter. A key that is not in the file is not checked.
 
-The check runs the workflow as `agac run --sandbox --fresh --wait` does. It clears and writes only the sandbox output, and it does not read or change the output of a real run. The output stays after the check: read it with `--sandbox`. Run the check in CI to catch a change that breaks the wiring of a workflow. The framework runs the starter project in this way as its own end-to-end test.
+The check runs the workflow as `agac run --sandbox --fresh --wait` does. It clears and writes only the sandbox output, and it does not read or change the output of a real run. The output stays after the check: read it with `--sandbox`. The check reads only a result that its own run wrote. When the run stops before it loads the workflow, for example on a scenario or a configuration that does not load, the check fails with the row `run: wrote no result`, whatever the file states. Run the check in CI to catch a change that breaks the wiring of a workflow. The framework runs the starter project in this way as its own end-to-end test.
 
 See [sandbox check](../reference/cli/sandbox.md) for each key of the file and each option.
 

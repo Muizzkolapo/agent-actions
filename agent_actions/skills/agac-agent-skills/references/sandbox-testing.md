@@ -134,7 +134,7 @@ takes `--scenario`, `-u` and `-e` as `agac run` does. It prints one row per stat
 | Exit | Meaning |
 |------|---------|
 | 0 | Each stated value holds |
-| 1 | One or more values do not hold; the `FAIL` rows name each: `classify filtered: expected 2, got 1` |
+| 1 | One or more values do not hold; the `FAIL` rows name each: `classify filtered: expected 2, got 1`. Also when the run wrote no result: `run: wrote no result (the run stopped with exit code 1)` |
 | 2 | The file is missing, is not YAML, has an unknown key, or names an action the workflow does not have. The file is checked before the run |
 
 ```yaml
@@ -158,6 +158,11 @@ To write the file: run the workflow with `--sandbox --fresh --wait`, read
 counts that prove the wiring (what a guard filters, what a router sends where, what a loop
 runs again). The values are deterministic, also with `-e parallel`. The check writes only the
 sandbox output and leaves it for the read commands. Run it in CI.
+
+The check reads only what its own run wrote, before the run lock is released. A run that stops
+before it loads the workflow (a scenario or a config that does not load, the lock held by
+another command) wrote no result: the check compares only `exit_code` and fails, whatever the
+file states, so a stale sandbox output can never pass.
 
 ## The starter project
 

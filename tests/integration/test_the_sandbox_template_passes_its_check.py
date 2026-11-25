@@ -94,3 +94,62 @@ def test_an_unknown_key_exits_2_before_any_run(project):
     assert result.returncode == 2, result.stdout + result.stderr
     assert "actions.classify: unknown key 'filterd'" in result.stderr
     assert "Starting agent run" not in result.stdout
+
+
+def _expect_only_action_values(project: Path) -> None:
+    (project / "f.yml").write_text(
+        "actions:\n  classify: {status: completed, success: 4, filtered: 1}\n"
+    )
+
+
+def _assert_no_result_fails(result) -> None:
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "  ✗ run" in result.stdout, result.stdout
+    assert "wrote no result" in result.stdout
+    assert "FAIL:" in result.stdout
+    assert "PASS" not in result.stdout
+    # The rows of the previous run's output are not read, so none of them is shown.
+    assert "classify" not in result.stdout
+
+
+def test_a_run_that_stops_before_it_writes_fails_and_shows_no_earlier_output(project):
+    _expect_only_action_values(project)
+    assert _check(project, "--expected", "f.yml").returncode == 0
+
+    result = _check(project, "--expected", "f.yml", "--scenario", "nope.yml")
+
+    assert "no scenario file nope.yml" in result.stderr
+    _assert_no_result_fails(result)
+
+
+def test_a_workflow_that_does_not_load_fails_the_check(project):
+    _expect_only_action_values(project)
+    assert _check(project, "--expected", "f.yml").returncode == 0
+    config = project / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+    config.write_text(config.read_text().replace("$support_desk.Classify", "$support_desk.Nope"))
+
+    _assert_no_result_fails(_check(project, "--expected", "f.yml"))
+
+
+def test_a_run_lock_held_by_another_command_fails_the_check(project):
+    from agent_actions.storage.run_lock import hold_run_lock
+
+    _expect_only_action_values(project)
+    assert _check(project, "--expected", "f.yml").returncode == 0
+
+    with hold_run_lock(project / "agent_workflow" / WORKFLOW / "agent_io", WORKFLOW):
+        result = _check(project, "--expected", "f.yml")
+
+    assert "is in progress" in result.stderr
+    _assert_no_result_fails(result)
+
+
+def test_the_exit_code_of_a_run_that_wrote_no_result_is_compared_and_the_check_fails(project):
+    (project / "f.yml").write_text("exit_code: 1\n")
+
+    result = _check(project, "--expected", "f.yml", "--scenario", "nope.yml")
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "  ✓ exit code  1" in result.stdout, result.stdout
+    assert "  ✗ run" in result.stdout
+    assert "FAIL: 1 of 2" in result.stdout

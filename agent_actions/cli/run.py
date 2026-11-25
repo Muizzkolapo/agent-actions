@@ -196,7 +196,16 @@ class RunCommand:
         else:
             workflow.run()
 
-    def execute(self, project_root: Path | None = None) -> None:
+    def execute(
+        self,
+        project_root: Path | None = None,
+        holding_the_lock: Callable[[], None] | None = None,
+    ) -> None:
+        """Run the workflow; *holding_the_lock* is called last, before the run lock is released.
+
+        It is called however the run ends once the lock is held, and not when the lock is
+        refused.
+        """
         click.echo(f"Starting agent run for: {self.args.agent}")
 
         if project_root is not None:
@@ -213,13 +222,17 @@ class RunCommand:
         # load_workflow, so a later lock would wipe a run in progress before refusing.
         try:
             with hold_run_lock(paths.io_dir, self.agent_name):
-                started = time.monotonic()
-                if self.args.refresh_input:
-                    self._refresh_input(paths)
-                outcome = self._run_holding_the_lock(paths, project_root)
-                if self.args.wait:
-                    outcome = self._wait_for_batches(outcome, paths, project_root, started)
-                ended = True
+                try:
+                    started = time.monotonic()
+                    if self.args.refresh_input:
+                        self._refresh_input(paths)
+                    outcome = self._run_holding_the_lock(paths, project_root)
+                    if self.args.wait:
+                        outcome = self._wait_for_batches(outcome, paths, project_root, started)
+                    ended = True
+                finally:
+                    if holding_the_lock is not None:
+                        holding_the_lock()
         except ProviderQuotaStop as stop:
             report_quota_stop(stop)
             outcome = RunOutcome.QUOTA_STOP

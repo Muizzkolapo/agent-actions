@@ -85,19 +85,30 @@ def test_an_action_the_workflow_does_not_have_is_refused():
         _rows({"actions": {"clasify": {"success": 4}}})
 
 
-def test_with_no_action_status_the_rows_are_reported_and_no_name_is_refused():
-    actual = _actual(exit_code=1, statuses={}, counts={})
+def test_a_run_that_wrote_no_result_is_one_row_that_does_not_hold_after_the_exit_code():
+    actual = _actual(exit_code=1, wrote_result=False)
 
     rows = compare(
-        parse_expected({"exit_code": 0, "actions": {"clasify": {"success": 4}}}, "f"),
+        parse_expected({"exit_code": 1, "actions": {"clasify": {"success": 4}}}, "f"),
         actual,
         [],
     )
 
-    assert [(row.what, row.actual) for row in rows] == [
-        ("exit code", 1),
-        ("clasify success", None),
-    ]
+    assert [(row.what, row.holds) for row in rows] == [("exit code", True), ("run", False)]
+    assert rows[1].mismatch == "wrote no result (the run stopped with exit code 1)"
+
+
+def test_a_run_that_wrote_no_result_fails_the_report(capsys):
+    rows = compare(
+        parse_expected({"exit_code": 1}, "f"), _actual(exit_code=1, wrote_result=False), []
+    )
+
+    code = report(rows, "wf", "f.yml")
+
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "FAIL: 1 of 2 expectations do not hold:" in out
+    assert "  run: wrote no result (the run stopped with exit code 1)" in out
 
 
 @pytest.mark.parametrize(

@@ -81,6 +81,8 @@ class Actual:
     scenario: dict[str, int] | None
     statuses: dict[str, str]
     counts: dict[str, dict[str, int | None]]
+    # False when the run wrote no status file: what the sandbox output holds is not its own.
+    wrote_result: bool = True
 
 
 @dataclass(frozen=True)
@@ -88,10 +90,16 @@ class Row:
     what: str
     expected: Any
     actual: Any
+    # Shown in place of "expected ..., got ..." when the row does not hold.
+    note: str | None = None
 
     @property
     def holds(self) -> bool:
         return bool(self.expected == self.actual)
+
+    @property
+    def mismatch(self) -> str:
+        return self.note or f"expected {self.expected}, got {self.actual}"
 
 
 def expectations_path(project_root: Path, workflow: str, given: str | None) -> Path:
@@ -173,17 +181,23 @@ def _count(value: Any, where: str) -> int:
 
 
 def compare(expected: Expected, actual: Actual, workflow_actions: list[str]) -> list[Row]:
-    """One row for each value the file states, in the file's order."""
+    """One row for each value the file states, in the file's order.
+
+    When the run wrote no result, only the exit code is compared, and a row that does not
+    hold says so: the sandbox output is an earlier run's, so no value of it is compared.
+    """
+    rows: list[Row] = []
+    if expected.exit_code is not None:
+        rows.append(Row("exit code", expected.exit_code, actual.exit_code))
+    if not actual.wrote_result:
+        note = f"wrote no result (the run stopped with exit code {actual.exit_code})"
+        return [*rows, Row("run", "a result", None, note=note)]
     unknown = [action for action in expected.actions if action not in workflow_actions]
-    # With no action status, the run stopped before the workflow loaded: nothing to name.
-    if unknown and workflow_actions:
+    if unknown:
         raise ExpectationsError(
             f"actions: {', '.join(unknown)} is not an action of the workflow. "
             f"Its actions: {', '.join(workflow_actions)}"
         )
-    rows: list[Row] = []
-    if expected.exit_code is not None:
-        rows.append(Row("exit code", expected.exit_code, actual.exit_code))
     for key, value in expected.scenario.items():
         counted = None if actual.scenario is None else actual.scenario.get(SCENARIO_KEYS[key])
         rows.append(Row(f"scenario {key}", value, counted))
@@ -203,7 +217,7 @@ def report(rows: list[Row], workflow: str, source: str) -> int:
     width = max(len(row.what) for row in rows)
     for row in rows:
         mark = "✓" if row.holds else "✗"
-        shown = row.actual if row.holds else f"expected {row.expected}, got {row.actual}"
+        shown = row.actual if row.holds else row.mismatch
         click.echo(f"  {mark} {row.what:<{width}}  {shown}")
     failed = [row for row in rows if not row.holds]
     if not failed:
@@ -211,12 +225,16 @@ def report(rows: list[Row], workflow: str, source: str) -> int:
         return EXIT_PASSED
     click.echo(f"FAIL: {len(failed)} of {len(rows)} expectations do not hold:")
     for row in failed:
-        click.echo(f"  {row.what}: expected {row.expected}, got {row.actual}")
+        click.echo(f"  {row.what}: {row.mismatch}")
     return EXIT_MISMATCH
 
 
 def run_in_sandbox(
-    workflow: str, project_root: Path, user_code: str | None, execution_mode: str
+    workflow: str,
+    project_root: Path,
+    user_code: str | None,
+    execution_mode: str,
+    holding_the_lock: Callable[[], None] | None = None,
 ) -> int:
     """`agac run --sandbox --fresh --wait` in this process; its exit code."""
     from agent_actions.cli.args import RunCommandArgs
@@ -242,7 +260,7 @@ def run_in_sandbox(
         wait_timeout=None,
     )
     try:
-        RunCommand(args).execute(project_root=project_root)
+        RunCommand(args).execute(project_root=project_root, holding_the_lock=holding_the_lock)
     except SystemExit as stop:
         return stop.code if isinstance(stop.code, int) else EXIT_FAILED
     except AgentActionsError as error:
@@ -256,17 +274,61 @@ def run_in_sandbox(
     return EXIT_SUCCESS
 
 
-def read_result(workflow: str, project_root: Path, exit_code: int) -> tuple[Actual, list[str]]:
-    """What the sandbox run left: action statuses, record counts, the scenario counts."""
-    from agent_actions.cli.dispositions import dispositions_report
+def run_and_read(
+    workflow: str, project_root: Path, user_code: str | None, execution_mode: str
+) -> tuple[Actual, list[str]]:
+    """Run in the sandbox, and read what the run wrote while it still holds the run lock.
+
+    A status file the run did not write, missing or the same file as before the run, is
+    an earlier run's: the run stopped before it loaded the workflow, so it wrote no result.
+    """
     from agent_actions.config.project_paths import ProjectPathsFactory
+
+    io_dir = ProjectPathsFactory.create_project_paths(
+        workflow, workflow, auto_create=False, project_root=project_root
+    ).io_dir
+    status = sandbox_state.status_file(io_dir)
+    before = _file_identity(status)
+    read: list[tuple[dict[str, str], dict[str, dict[str, int | None]]]] = []
+
+    def read_holding_the_lock() -> None:
+        written = _file_identity(status)
+        if written is not None and written != before:
+            read.append(read_output(io_dir, workflow))
+
+    exit_code = run_in_sandbox(
+        workflow, project_root, user_code, execution_mode, read_holding_the_lock
+    )
+    if not read:
+        return Actual(exit_code, None, {}, {}, wrote_result=False), []
+    statuses, counts = read[0]
+    actual = Actual(
+        exit_code=exit_code,
+        scenario=sandbox_state.reported_counts(),
+        statuses=statuses,
+        counts=counts,
+    )
+    return actual, list(statuses)
+
+
+def _file_identity(path: Path) -> tuple[int, int, int] | None:
+    """What changes each time the file is written; it is replaced whole, so its inode too."""
+    try:
+        held = path.stat()
+    except OSError:
+        return None
+    return (held.st_ino, held.st_mtime_ns, held.st_size)
+
+
+def read_output(
+    io_dir: Path, workflow: str
+) -> tuple[dict[str, str], dict[str, dict[str, int | None]]]:
+    """The action statuses and the record counts the sandbox output holds."""
+    from agent_actions.cli.dispositions import dispositions_report
     from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
-    paths = ProjectPathsFactory.create_project_paths(
-        workflow, workflow, auto_create=False, project_root=project_root
-    )
     try:
-        held = json.loads(sandbox_state.status_file(paths.io_dir).read_text(encoding="utf-8"))
+        held = json.loads(sandbox_state.status_file(io_dir).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         held = {}
     statuses = {
@@ -276,7 +338,7 @@ def read_result(workflow: str, project_root: Path, exit_code: int) -> tuple[Actu
     }
     actions = list(statuses)
     counts: dict[str, dict[str, int | None]] = {}
-    store = sandbox_state.store_file(paths.io_dir, workflow)
+    store = sandbox_state.store_file(io_dir, workflow)
     if store.exists() and actions:
         backend = SQLiteBackend.create_readonly(store)
         try:
@@ -289,13 +351,7 @@ def read_result(workflow: str, project_root: Path, exit_code: int) -> tuple[Actu
                 }
         finally:
             backend.close()
-    actual = Actual(
-        exit_code=exit_code,
-        scenario=sandbox_state.reported_counts(),
-        statuses=statuses,
-        counts=counts,
-    )
-    return actual, actions
+    return statuses, counts
 
 
 def _in_sandbox(func: Callable) -> Callable:
@@ -377,8 +433,7 @@ def check(
     except ExpectationsError as error:
         click.echo(f"Error: {error}", err=True)
         raise SystemExit(EXIT_BAD_EXPECTATIONS) from None
-    exit_code = run_in_sandbox(workflow, project_root, user_code, execution_mode)
-    actual, actions = read_result(workflow, project_root, exit_code)
+    actual, actions = run_and_read(workflow, project_root, user_code, execution_mode)
     try:
         rows = compare(wanted, actual, actions)
     except ExpectationsError as error:
