@@ -25,7 +25,10 @@ from agent_actions.cli.cli_decorators import (
     scenario_option,
     workflow_option,
 )
+from agent_actions.cli.dispositions import COUNT_KEYS as DISPOSITION_COUNTS
+from agent_actions.cli.exit_codes import EXIT_CODES
 from agent_actions.config import sandbox as sandbox_state
+from agent_actions.workflow.managers.state import ActionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -43,30 +46,10 @@ SCENARIO_KEYS = {
     "rules_broken": "rules_broken",
     "batch_results_dropped": "dropped",
 }
-ACTION_STATUSES = (
-    "completed",
-    "completed_with_failures",
-    "failed",
-    "skipped",
-    "pending",
-    "batch_submitted",
-)
-# Counts of `agac dispositions --json`, and what the store holds for the action.
-COUNT_KEYS = (
-    "records",
-    "total",
-    "sent_elsewhere",
-    "success",
-    "failed_checks",
-    "failed",
-    "exhausted",
-    "guard_skipped",
-    "unprocessed",
-    "passthrough",
-    "filtered",
-    "skipped",
-    "deferred",
-)
+ACTION_STATUSES = tuple(status.value for status in ActionStatus)
+RUN_EXIT_CODES = tuple(sorted(set(EXIT_CODES.values())))
+# What `agac dispositions --json` gives for an action: its record counts, then each count.
+COUNT_KEYS = ("records", "total", "sent_elsewhere", *DISPOSITION_COUNTS)
 ACTION_KEYS = ("status", *COUNT_KEYS)
 
 
@@ -134,6 +117,11 @@ def parse_expected(data: Any, name: str) -> Expected:
     exit_code = data.get("exit_code")
     if exit_code is not None:
         exit_code = _count(exit_code, f"{name}: exit_code")
+        if exit_code not in RUN_EXIT_CODES:
+            raise ExpectationsError(
+                f"{name}: exit_code: {exit_code} is not an exit code of agac run. "
+                f"Its exit codes: {', '.join(str(code) for code in RUN_EXIT_CODES)}"
+            )
     scenario = _mapping(data.get("scenario"), f"{name}: scenario")
     _refuse_unknown(scenario, tuple(SCENARIO_KEYS), f"{name}: scenario")
     actions: dict[str, dict[str, Any]] = {}

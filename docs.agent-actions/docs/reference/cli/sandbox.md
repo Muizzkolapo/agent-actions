@@ -91,9 +91,9 @@ The check compares only the values that the file states. Each key is optional, b
 
 | Key | Value |
 |-----|-------|
-| `exit_code` | The exit code of the run: 0, 1, 3, 4 or 5, as [`agac run`](./run.md) gives it |
+| `exit_code` | The exit code of the run: 0, 1, 3, 4 or 5, as [`agac run`](./run.md) gives it. Another number is refused |
 | `scenario.errors`, `scenario.rules_broken`, `scenario.batch_results_dropped` | The three counts of the line `SANDBOX scenario <name>: <n> errors, <m> rules broken, <k> batch results dropped`. With no such line (the run stopped before the mock answered a call), each count is none and does not hold |
-| `actions.<action>.status` | The status of the action at the end of the run: `completed`, `completed_with_failures`, `failed`, `skipped`, `pending` or `batch_submitted` |
+| `actions.<action>.status` | The status of the action at the end of the run, as the status file holds it: `pending`, `running`, `batch_submitted`, `checking_batch`, `completed`, `completed_with_failures`, `failed`, `skipped` or `interrupted` |
 | `actions.<action>.records` | The records that the action stored, as the `Records` column of [`agac dispositions`](./dispositions.md) |
 | `actions.<action>.<count>` | A disposition count of the action, as `agac dispositions --json` gives it: `total`, `sent_elsewhere`, `success`, `failed_checks`, `failed`, `exhausted`, `guard_skipped`, `unprocessed`, `passthrough`, `filtered`, `skipped`, `deferred` |
 
@@ -102,7 +102,7 @@ Name an action as `agac dispositions` names it: each version (`score_1`, `score_
 The check refuses these entries with exit code 2. The message names the file and the key:
 
 - An unknown key, at the top level, under `scenario` or under an action.
-- A count that is not a whole number 0 or more, and a status that is not in the list.
+- A count that is not a whole number 0 or more, a status that is not in the list, and an `exit_code` that `agac run` does not give.
 - An action entry that states no value, such as `classify:` or `classify: {}`.
 - An action that the workflow does not have. The check finds this after the run, in the status file that the run wrote. When the run wrote no result, the check does not read the actions, so it does not refuse a name. The check fails, as [A run that wrote no result](#no-result) says.
 

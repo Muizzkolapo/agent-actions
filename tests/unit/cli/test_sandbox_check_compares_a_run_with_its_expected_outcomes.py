@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.cli.dispositions import COUNT_KEYS as DISPOSITION_COUNTS
+from agent_actions.cli.exit_codes import EXIT_CODES
 from agent_actions.cli.sandbox_check import (
     Actual,
     ExpectationsError,
@@ -20,7 +22,9 @@ from agent_actions.cli.sandbox_check import (
     parse_expected,
     report,
 )
+from agent_actions.workflow.managers.state import ActionStatus
 
+REPO = Path(__file__).resolve().parents[3]
 ACTIONS = ["read_ticket", "classify"]
 
 
@@ -117,7 +121,7 @@ def test_a_run_that_wrote_no_result_fails_the_report(capsys):
         ({"exit_code": 0, "exit": 0}, "unknown key 'exit'"),
         ({"scenario": {"errors": 1, "dropped": 0}}, "scenario: unknown key 'dropped'"),
         ({"actions": {"classify": {"sucess": 4}}}, "actions.classify: unknown key 'sucess'"),
-        ({"actions": {"classify": {"status": "done"}}}, "'done' is not one of completed"),
+        ({"actions": {"classify": {"status": "done"}}}, "'done' is not one of pending, running"),
         ({"actions": {"classify": {"success": -1}}}, "-1 is not a whole number 0 or more"),
         ({"actions": {"classify": {"success": True}}}, "True is not a whole number"),
         ({"actions": {"classify": {"success": "4"}}}, "'4' is not a whole number"),
@@ -177,3 +181,44 @@ def test_the_report_names_each_row_that_does_not_hold(capsys):
     assert "FAIL: 2 of 3 expectations do not hold:" in out
     assert "  exit code: expected 3, got 0" in out
     assert "  classify filtered: expected 2, got 1" in out
+
+
+# The values the file takes come from the code that makes them, so they cannot drift.
+
+
+@pytest.mark.parametrize("status", [status.value for status in ActionStatus])
+def test_each_action_status_the_state_manager_writes_is_accepted(status):
+    expected = parse_expected({"actions": {"classify": {"status": status}}}, "f")
+
+    assert expected.actions == {"classify": {"status": status}}
+
+
+@pytest.mark.parametrize("key", ["records", "total", "sent_elsewhere", *DISPOSITION_COUNTS])
+def test_each_count_of_agac_dispositions_is_accepted(key):
+    expected = parse_expected({"actions": {"classify": {key: 0}}}, "f")
+
+    assert expected.actions == {"classify": {key: 0}}
+
+
+@pytest.mark.parametrize("code", sorted(set(EXIT_CODES.values())))
+def test_each_exit_code_of_agac_run_is_accepted(code):
+    assert parse_expected({"exit_code": code}, "f").exit_code == code
+
+
+@pytest.mark.parametrize("code", [2, 6, 130])
+def test_an_exit_code_agac_run_does_not_return_is_refused(code):
+    with pytest.raises(ExpectationsError, match=f"exit_code: {code} is not an exit code of agac"):
+        parse_expected({"exit_code": code}, "f")
+
+
+def test_the_reference_lists_each_status_and_each_exit_code():
+    page = (REPO / "docs.agent-actions/docs/reference/cli/sandbox.md").read_text()
+    rows = {
+        line.split("|")[1].strip(): line for line in page.splitlines() if line.startswith("| `")
+    }
+
+    statuses = rows["`actions.<action>.status`"]
+    assert all(f"`{status.value}`" in statuses for status in ActionStatus), statuses
+    codes = rows["`exit_code`"]
+    listed = ", ".join(str(code) for code in sorted(set(EXIT_CODES.values())))
+    assert listed in codes.replace(" or ", ", "), codes

@@ -149,8 +149,10 @@ actions:                                  # names as agac dispositions shows the
   tag_reply: {records: 4}
 ```
 
-Per action: `status` (`completed`, `completed_with_failures`, `failed`, `skipped`, `pending`,
-`batch_submitted`), `records` (stored), and the counts of `agac dispositions --json`:
+`exit_code` is one of 0, 1, 3, 4, 5 (the exit codes of `agac run`). Per action: `status`
+(`pending`, `running`, `batch_submitted`, `checking_batch`, `completed`,
+`completed_with_failures`, `failed`, `skipped`, `interrupted`), `records` (stored), and the
+counts of `agac dispositions --json`:
 `total`, `sent_elsewhere`, `success`, `failed_checks`, `failed`, `exhausted`, `guard_skipped`,
 `unprocessed`, `passthrough`, `filtered`, `skipped`, `deferred`.
 
