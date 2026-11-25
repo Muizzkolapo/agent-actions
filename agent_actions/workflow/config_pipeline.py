@@ -87,7 +87,7 @@ def load_workflow_configs(
     action_configs = manager.get_all_agent_configs_as_dicts()
     if sandbox.is_active():
         mocked = sandbox.point_at_mock(action_configs)
-        sandbox.load_scenario(config.project_root, mocked)
+        sandbox.load_scenario(config.project_root, mocked, sandbox.tool_actions(action_configs))
     action_indices = {action: i for i, action in enumerate(execution_order)}
 
     # Add idx and workflow_config_path fields to each action config
