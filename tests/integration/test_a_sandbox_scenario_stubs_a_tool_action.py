@@ -221,11 +221,13 @@ def test_an_action_downstream_reads_what_the_mock_built(tmp_path):
     assert len({output["shelf"] for output in found.values()}) > 1
 
 
-def test_the_run_says_which_tools_are_stubbed_and_does_not_show_them_as_run(tmp_path):
+@pytest.mark.parametrize("mode", ["sequential", "parallel"])
+def test_the_run_says_which_tools_are_stubbed_and_does_not_show_them_as_run(tmp_path, mode):
     root = _project(tmp_path, STUB_SEARCH)
 
-    result = _ok(_run(root))
+    result = _ok(_run(root, "--execution-mode", mode))
 
+    assert mode in result.stdout
     notice = "SANDBOX: the scenario stubs these tool actions, so their code does not run: search"
     assert notice in result.stderr.splitlines(), result.stderr
     lines = {line.split()[1]: line for line in result.stderr.splitlines() if "records in" in line}
