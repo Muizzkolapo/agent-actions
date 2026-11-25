@@ -119,3 +119,32 @@ def test_a_built_in_tool_is_not_held_to_return_its_required_fields():
     assert find_dag_schema_compatibility_gaps({"rounds": pick, "check": tool}) == {
         "check": ["passed"]
     }
+
+
+def test_the_loop_name_takes_no_rule_of_the_result(tmp_path, monkeypatch):
+    # A rule of the result reads the last iteration's names; a record that left the loop
+    # early holds none of them, so the loop's name keeps the fields and drops the rules.
+    ruled = (
+        "name: verdict\nfields:\n"
+        "  - id: passed\n    type: boolean\n    required: true\n"
+        "    expectations:\n      - {id: is_set, type: not_null}\n"
+        "  - {id: note, type: string}\n"
+        "expectations:\n"
+        "  - id: a_note_when_failed\n    type: expression\n"
+        '    params: {condition: "passed or note IS NOT NULL"}\n'
+    )
+    monkeypatch.setitem(SCHEMAS, "verdict", ruled)
+
+    actions = _render(tmp_path)
+    schema = actions["rounds"]["schema"]
+
+    assert [(f["id"], f.get("required", False)) for f in schema["fields"]] == [
+        ("passed", True),
+        ("note", False),
+    ]
+    assert "expectations" not in schema
+    assert all("expectations" not in field for field in schema["fields"])
+    # The result itself keeps its rules.
+    result = actions["rounds_iter2__check"]["schema"]
+    assert result["expectations"][0]["id"] == "a_note_when_failed"
+    assert result["fields"][0]["expectations"][0]["id"] == "is_set"

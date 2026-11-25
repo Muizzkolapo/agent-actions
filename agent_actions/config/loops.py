@@ -437,9 +437,30 @@ def finish_loops(data: Any, workflow_file: str, project_root: Path | None = None
         last = instance_name(pick["name"], settings["max_iterations"])
         schema = by_name.get(f"{last}__{settings['result']}", {}).get("schema")
         if isinstance(schema, dict) and not pick.get("schema"):
-            pick["schema"] = {**copy.deepcopy(schema), "name": f"{pick['name']}_result"}
+            pick["schema"] = {**_without_rules(schema), "name": f"{pick['name']}_result"}
     _refuse_file_granularity(data, members, workflow_file, project_root)
     _refuse_outside_reads(by_name, members, workflow_file)
+
+
+def _without_rules(schema: dict[str, Any]) -> dict[str, Any]:
+    """A copy of *schema* with no ``expectations``, of the schema or of a field.
+
+    Its rules read the names of the last iteration, which a record that left the loop
+    early does not hold; the join drops them for the same reason.
+    """
+    copied = copy.deepcopy(schema)
+    shape = copied.get("items") if copied.get("type") == "array" else copied
+    fields = shape.get("fields") if isinstance(shape, dict) else None
+    properties = shape.get("properties") if isinstance(shape, dict) else None
+    for owner in [
+        copied,
+        shape,
+        *(fields if isinstance(fields, list) else []),
+        *(properties.values() if isinstance(properties, dict) else []),
+    ]:
+        if isinstance(owner, dict):
+            owner.pop("expectations", None)
+    return copied
 
 
 def _declared_fields(schema: Any) -> list[str] | None:
