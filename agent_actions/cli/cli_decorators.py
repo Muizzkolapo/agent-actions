@@ -85,20 +85,17 @@ def sandbox_option(
     return decorator
 
 
-def scenario_option() -> Callable:
-    """``--scenario``: the faults the sandbox mock follows; it needs ``--sandbox`` above it."""
+SCENARIO_HELP = (
+    "The scenario the mock follows, a preset or a scenario file. Default: "
+    "sandbox.<workflow>.yml at the project root, else sandbox.yml, else happy"
+)
+
+
+def scenario_option(help: str = f"With --sandbox: {SCENARIO_HELP}") -> Callable:
+    """``--scenario``: the faults the sandbox mock follows; it needs sandbox mode above it."""
 
     def decorator(func: Callable) -> Callable:
-        @click.option(
-            "--scenario",
-            default=None,
-            metavar="happy|chaos|PATH",
-            help=(
-                "With --sandbox: the scenario the mock follows, a preset or a scenario file. "
-                "Default: sandbox.<workflow>.yml at the project root, else sandbox.yml, "
-                "else happy"
-            ),
-        )
+        @click.option("--scenario", default=None, metavar="happy|chaos|PATH", help=help)
         @functools.wraps(func)
         def wrapper(*args: Any, scenario: str | None = None, **kwargs: Any) -> Any:
             from agent_actions.config import sandbox

@@ -18,6 +18,7 @@ import click
 import yaml
 
 from agent_actions.cli.cli_decorators import (
+    SCENARIO_HELP,
     handles_user_errors,
     requires_project,
     scenario_option,
@@ -330,7 +331,7 @@ def sandbox() -> None:
     ),
 )
 @_in_sandbox
-@scenario_option()
+@scenario_option(help=SCENARIO_HELP)
 @click.option(
     "-u",
     "--user-code",
