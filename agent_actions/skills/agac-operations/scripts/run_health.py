@@ -5,13 +5,15 @@ A workflow can end with exit code 0 and keep a small part of its records: a judg
 votes FAIL on every record, the repair rounds are used up, and the last output is
 kept. This script reads the public counts (``agac dispositions --json``) and the
 action status file (``agent_io/.agent_status.json``), and reports each finished
-action whose share of bad records is above a limit.
+action whose share of bad records is above a limit. With ``--sandbox`` it reads the
+output of sandbox runs (``agac run --sandbox``) instead.
 
 Usage (from the project root):
 
     python3 run_health.py -w <workflow>
     python3 run_health.py -w <workflow> --max-bad 0.2 --min-records 20
     python3 run_health.py -w <workflow> --counts counts.json   # counts saved before
+    python3 run_health.py -w <workflow> --sandbox              # sandbox runs
 
 Exit codes: 0 = no action above the limit, 1 = at least one action above it,
 2 = the counts or the status file cannot be read.
@@ -40,13 +42,25 @@ def find_project_root(start: Path) -> Path | None:
     return None
 
 
-def read_counts(workflow: str, counts_file: str | None) -> dict[str, Any]:
+def status_path(io_dir: Path, sandbox: bool) -> Path:
+    """The action status file of real runs, or of sandbox runs."""
+    try:
+        from agent_actions.config.sandbox import sandbox_mode, status_file
+    except ImportError:
+        # A plain python3 usually cannot import the framework: the path it writes.
+        run_dir = io_dir / "sandbox" if sandbox else io_dir
+        return run_dir / ".agent_status.json"
+    with sandbox_mode(sandbox):
+        return status_file(io_dir)
+
+
+def read_counts(workflow: str, counts_file: str | None, sandbox: bool = False) -> dict[str, Any]:
     """The ``agac dispositions --json`` report, from a file or from the command."""
     if counts_file:
         report: dict[str, Any] = json.loads(Path(counts_file).read_text(encoding="utf-8"))
         return report
     done = subprocess.run(
-        ["agac", "dispositions", "-w", workflow, "--json"],
+        ["agac", "dispositions", "-w", workflow, "--json", *(["--sandbox"] if sandbox else [])],
         capture_output=True,
         text=True,
         check=False,
@@ -105,6 +119,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--status", help="Path of .agent_status.json (default: found from the project)"
     )
+    parser.add_argument(
+        "--sandbox", action="store_true", help="Check the output of sandbox runs (--sandbox)"
+    )
     args = parser.parse_args(argv)
 
     if args.status:
@@ -114,9 +131,10 @@ def main(argv: list[str] | None = None) -> int:
         if root is None:
             sys.stderr.write("health: no agent_actions.yml at or above this folder\n")
             return 2
-        status_file = root / "agent_workflow" / args.workflow / "agent_io" / ".agent_status.json"
+        io_dir = root / "agent_workflow" / args.workflow / "agent_io"
+        status_file = status_path(io_dir, args.sandbox)
     try:
-        report = read_counts(args.workflow, args.counts)
+        report = read_counts(args.workflow, args.counts, args.sandbox)
         finished = finished_actions(status_file)
     except (OSError, ValueError, RuntimeError) as exc:
         sys.stderr.write(f"health: cannot read the counts or the status: {exc}\n")
@@ -132,7 +150,8 @@ def main(argv: list[str] | None = None) -> int:
     if any(row["above_limit"] for row in rows):
         sys.stdout.write(
             f"health: STOP. An action has more than {args.max_bad:.0%} bad records. "
-            "Read 'agac dispositions -w <workflow> --quarantined' before you run again.\n"
+            f"Read 'agac dispositions -w {args.workflow} --quarantined"
+            f"{' --sandbox' if args.sandbox else ''}' before you run again.\n"
         )
         return 1
     return 0
