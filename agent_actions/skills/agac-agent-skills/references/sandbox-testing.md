@@ -53,8 +53,9 @@ A scenario makes the mock fail, change or delay calls on purpose. Put it in
 `sandbox.{workflow}.yml` or `sandbox.yml` at the project root, or give `--scenario <path>`
 to `run`, `retry`, `inspect` or `sandbox check`. A relative `<path>` is from the current
 directory. `--scenario happy` and `--scenario chaos` always mean the preset, also when a
-file of that name exists. The `agac batch` commands have no `--sandbox`. A sandbox run of `{workflow}` reads `sandbox.{workflow}.yml`
-when it exists, else `sandbox.yml`, else the `happy` preset. A real run does not read it.
+file of that name exists. The `agac batch` commands have no `--sandbox`. A sandbox run of
+`{workflow}` reads `sandbox.{workflow}.yml` when it exists, else `sandbox.yml`, else the
+`happy` preset. A real run does not read it.
 Each decision is per record and repeats run to run.
 
 The names in a scenario are checked strictly against the workflow that runs: a name of

@@ -149,7 +149,9 @@ def test_a_preset_refuses_an_unknown_key_in_a_kept_entry_as_a_run_without_one_do
     assert "preset chaos with the stubs of sandbox.yml" in str(caught.value)
 
 
-def test_a_preset_keeps_only_the_stub_and_pin_of_a_kept_entry(tmp_path):
+def test_a_preset_takes_the_stub_and_pin_of_a_kept_entry_and_ignores_the_rest_of_the_file(
+    tmp_path,
+):
     scenario = _under_a_preset(
         tmp_path,
         "defaults: {errors: {rate: 1}, bogus: 1}\n"
