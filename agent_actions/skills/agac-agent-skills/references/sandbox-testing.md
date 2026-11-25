@@ -105,8 +105,10 @@ batch:
 `chaos` completes only when each LLM action has `retry:` with two attempts or more and an
 `expect:` block with `repair: auto`. A preset keeps the tool stubs of the project: it reads
 `sandbox.{workflow}.yml` (else `sandbox.yml`) and keeps each `actions` entry that sets `stub`,
-with its `pin`, and nothing else. So `--scenario chaos` does not call a stubbed tool, and the
-stub notice names the file the stubs come from. `--scenario <path>` uses only that file: put
+with its `pin`, and nothing else. A kept entry that also sets a model-call key (`errors`,
+`break_rules`, `judge`, `latency_ms`, `error`) stops the command, as it does without a preset.
+So `--scenario chaos` does not call a stubbed tool, and the stub notice names the file the
+stubs come from. `--scenario <path>` uses only that file: put
 the `stub` entries in it.
 
 ## Read the results

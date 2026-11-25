@@ -514,9 +514,9 @@ def load(
     """The scenario *source* names, checked against the workflow's LLM and tool actions.
 
     None is the project's file for *workflow* (``project_file``), else ``happy``. A preset
-    keeps the ``stub`` entries of that file, with their ``pin``, and nothing else of it; a
-    path is that file alone. *groups* maps each LLM action to the base name of its version
-    group, or to None.
+    keeps the ``stub`` entries of that file, with their ``pin``, and nothing else of it (a
+    model-call key in such an entry is refused); a path is that file alone. *groups* maps
+    each LLM action to the base name of its version group, or to None.
     """
     own = project_file(project_root, workflow)
     hint = stubs_from = None
@@ -560,12 +560,13 @@ def load(
 
 
 def _stub_entries(raw: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
-    """Each ``actions`` entry of *raw* that sets ``stub``, with only its ``stub`` and ``pin``."""
+    """Each ``actions`` entry of *raw* that sets ``stub``: its ``stub`` and ``pin``, and any
+    model-call key, kept so that the load refuses it as it does without a preset."""
     actions = raw.get("actions")
     if not isinstance(actions, dict):
         return {}
     return {
-        name: {key: entry[key] for key in ("stub", "pin") if key in entry}
+        name: {key: entry[key] for key in ("stub", "pin", *MODEL_CALL_KEYS) if key in entry}
         for name, entry in actions.items()
         if isinstance(entry, dict) and "stub" in entry
     }
