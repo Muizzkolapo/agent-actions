@@ -39,6 +39,7 @@ EVERY_COMMAND = [
     "records",
     "retry",
     "run",
+    "sandbox",
     "schema",
     "skills",
     "status",

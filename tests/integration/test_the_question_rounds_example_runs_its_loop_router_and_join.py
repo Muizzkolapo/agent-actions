@@ -61,6 +61,8 @@ def test_inspect_shows_the_loop_the_router_and_the_join(project):
     assert "verdict route on round.outcome: passed → publish · default → flag_for_review" in output
     assert "bank join of publish, flag_for_review" in output
     assert "round_iter" not in output.split("Pre-flight")[0]
+    # The loop's name, the router and the join run no code of the project: nothing to fit.
+    assert "dag-fit" not in output, output
 
 
 def test_each_round_takes_only_the_records_that_failed_the_one_before(project, run):

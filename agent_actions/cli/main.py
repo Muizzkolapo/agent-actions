@@ -49,6 +49,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "Retry failed/exhausted records from a specific action forward.",
     ),
     "run": ("agent_actions.cli.run:run", "Run agents with a specified agent configuration."),
+    "sandbox": ("agent_actions.cli.sandbox_check:sandbox", "Test a workflow with sandbox runs."),
     "batch": (
         "agent_actions.llm.batch.batch_cli:batch",
         "CLI command group for batch processing operations.",

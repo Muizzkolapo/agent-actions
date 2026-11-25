@@ -26,6 +26,8 @@ agac run -w {workflow} -u tools --sandbox --scenario chaos      # a preset, or a
 agac run -w {workflow} -u tools --sandbox --wait                # batch actions: run every pass
 agac retry -w {workflow} --sandbox                              # retry the failed sandbox records
 agac inspect -w {workflow} -u tools --sandbox action {action}   # the action as the sandbox runs it
+agac sandbox check -w {workflow} -u tools                       # run --sandbox --fresh --wait, compare with sandbox_expected.yml
+agac init my_sandbox --template sandbox                         # a starter project that uses each feature once
 ```
 
 ## What is mocked and what is real
@@ -121,6 +123,68 @@ the `stub` entries in it.
 3. Give `--sandbox` to the read commands: `agac status`, `agac records`, `agac traces`,
    `agac dispositions`, `agac preview`, `agac usage`, `agac expect report`.
 4. `agac usage --sandbox` shows the model `agac-mock` with zero tokens.
+
+## Assert the outcome: `agac sandbox check`
+
+`agac sandbox check -w {workflow}` runs the workflow as `agac run --sandbox --fresh --wait`
+in the same process, then compares the result with `sandbox_expected.{workflow}.yml`, else
+`sandbox_expected.yml`, at the project root (`--expected <path>` names another file). It
+takes `--scenario`, `-u` and `-e` as `agac run` does. It prints one row per stated value.
+
+| Exit | Meaning |
+|------|---------|
+| 0 | Each stated value holds |
+| 1 | One or more values do not hold; the `FAIL` rows name each: `classify filtered: expected 2, got 1`. Also when the run wrote no result: `run: wrote no result (the run stopped with exit code 1)` |
+| 2 | The file is missing, is not YAML, has an unknown key or an action entry with no value (`classify: {}`), or names an action the workflow does not have. The file is checked before the run. Also when the check could not run (outside a project, or an unexpected error; one `Error:` line) |
+| 130 | Interrupted (Ctrl-C) |
+
+```yaml
+# sandbox_expected.yml: only what you state is checked
+exit_code: 0                              # the exit code of the run
+scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 2}   # the SANDBOX scenario line
+actions:                                  # names as agac dispositions shows them
+  classify: {status: completed, success: 4, filtered: 1}
+  score_1: {success: 4}                   # each version by its own name
+  reply_round_iter2__draft_reply: {success: 2, sent_elsewhere: 2}  # each loop iteration
+  tag_reply: {records: 4}
+```
+
+`exit_code` is one of 0, 1, 3, 4, 5 (the exit codes of `agac run`). Per action: `status`
+(`pending`, `running`, `batch_submitted`, `checking_batch`, `completed`,
+`completed_with_failures`, `failed`, `skipped`, `interrupted`), `records` (stored), and the
+counts of `agac dispositions --json`:
+`total`, `sent_elsewhere`, `success`, `failed_checks`, `failed`, `exhausted`, `guard_skipped`,
+`unprocessed`, `passthrough`, `filtered`, `skipped`, `deferred`.
+
+To write the file: run the workflow with `--sandbox --fresh --wait`, read
+`agac dispositions -w {workflow} --sandbox` and the `SANDBOX scenario` line, and state the
+counts that prove the wiring (what a guard filters, what a router sends where, what a loop
+runs again). The values are deterministic, also with `-e parallel`. The check writes only the
+sandbox output and leaves it for the read commands. Run it in CI.
+
+The check reads only what its own run wrote, before the run lock is released. A run that stops
+before it loads the workflow (a scenario or a config that does not load, the lock held by
+another command) wrote no result: the check compares only `exit_code` and fails, whatever the
+file states, so a stale sandbox output can never pass.
+
+## The starter project
+
+`agac init my_sandbox --template sandbox` creates the workflow `support_desk`, which uses each
+feature once and passes `agac sandbox check -w support_desk` offline in a few seconds:
+
+| Action | Feature |
+|--------|---------|
+| `read_ticket` | Tool action (pure Python, no network) |
+| `classify` | Guard (filters spam), `expect:` with `repair: auto`, `llm_judge` with `severity: warn` |
+| `score` → `merge_scores` | Versions (`score_1`, `score_2`) and their merge |
+| `reply_round` | Loop of `branches/reply_round.yml`: write, then check |
+| `by_queue` → `assigned` | Router and join |
+| `approve_reply` | HITL (auto-approved in a sandbox run) |
+| `tag_reply` | `run_mode: batch`, guarded on the HITL status |
+
+Its `sandbox.yml` breaks `classify`'s regex rule once per record (repair heals it), gives each
+rater one rate limit (retry heals it) and drops half the first batch results (the retry batch
+gets them). Copy its patterns into a new workflow, or change it and run the check.
 
 ## Testing recipes
 

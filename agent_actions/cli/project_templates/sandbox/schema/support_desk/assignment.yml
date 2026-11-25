@@ -1,0 +1,5 @@
+name: assignment
+fields:
+  - {id: ticket_id, type: string, required: true}
+  - {id: team, type: string, required: true}
+  - {id: urgency, type: integer, required: true}

@@ -1,0 +1,6 @@
+name: reply_check
+fields:
+  - {id: passed, type: boolean, required: true}
+  - {id: reasons, type: string, required: true}
+  - {id: tries, type: integer, required: true}
+  - {id: reply, type: string, required: true}
