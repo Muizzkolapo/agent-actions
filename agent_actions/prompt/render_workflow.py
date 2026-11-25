@@ -765,8 +765,10 @@ def render_pipeline_with_templates(
     if compile_schemas and data:
         _compile_workflow_schemas(data, schema_dir, strict=strict, project_root=project_root)
     rename_schema_judge_contexts(data)
-    _with_file(workflow_file, finish_routes, data, workflow_file)
+    # Loops first: a loop's name is a pick, and the join step gives a pick with no schema
+    # the union of its sources, none of them required, in place of the result's schema.
     _with_file(workflow_file, finish_loops, data, workflow_file, project_root)
+    _with_file(workflow_file, finish_routes, data, workflow_file)
 
     # Step 6: Every name an action reads is final here, so the branch boundary is checked now
     check_include_reads(data, inclusions, project_root=project_root)
