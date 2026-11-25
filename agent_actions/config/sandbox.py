@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND, MODEL_VENDOR_KEY
 
 if TYPE_CHECKING:
-    from agent_actions.llm.providers.agac.scenario import Scenario, Tally
+    from agent_actions.llm.providers.agac.scenario import Scenario, Tally, Tool
     from agent_actions.storage.backend import StorageBackend
 
 SANDBOX_VENDOR = "agac-provider"
@@ -65,23 +65,29 @@ def scenario_choice(source: str | None) -> Iterator[None]:
         _follows_scenario, _scenario_flag, _scenario, _tally = previous
 
 
-def load_scenario(project_root: Path | None, llm_actions: Mapping[str, str | None]) -> None:
+def load_scenario(
+    project_root: Path | None,
+    llm_actions: Mapping[str, str | None],
+    tools: Mapping[str, Tool] | None = None,
+) -> None:
     """Read and check the scenario, before any call; a command that calls no mock reads none.
 
     *llm_actions* maps each LLM action to its version group's base name, or to None.
+    *tools* are the tool actions (``tool_actions``), which a scenario can stub.
     """
     global _scenario
     if not (_active and _follows_scenario):
         return
     from agent_actions.llm.providers.agac.scenario import load
 
-    _scenario = load(_scenario_flag, project_root or Path.cwd(), llm_actions, _tally)
+    _scenario = load(_scenario_flag, project_root or Path.cwd(), llm_actions, _tally, tools)
 
 
 def check_scenario_outputs(schemas: Mapping[str, Any], action_configs: Mapping[str, Any]) -> None:
     """Refuse a scenario ``pin`` or ``break_rules`` an action's output schema cannot take.
 
     *schemas* are the workflow's ``ActionSchema`` objects by action, as pre-flight reads them.
+    The actions checked are each LLM action and each tool action the scenario stubs.
     """
     followed = scenario()
     if followed is None:
@@ -91,9 +97,11 @@ def check_scenario_outputs(schemas: Mapping[str, Any], action_configs: Mapping[s
     declared: dict[str, set[str] | None] = {}
     for name, schema in schemas.items():
         config = action_configs.get(name) or {}
-        if config.get(MODEL_VENDOR_KEY) != SANDBOX_VENDOR:
+        stubbed = followed.stubs(name)
+        if config.get(MODEL_VENDOR_KEY) != SANDBOX_VENDOR and not stubbed:
             continue
-        if schema.is_schemaless or config.get("json_mode") is False:
+        # json_mode is a setting of a model call; a tool's output is its schema's.
+        if schema.is_schemaless or (config.get("json_mode") is False and not stubbed):
             declared[name] = None
         elif not schema.is_dynamic:
             declared[name] = {
@@ -130,6 +138,17 @@ def forget_attempts(
 
 def scenario() -> Scenario | None:
     return _scenario if _active else None
+
+
+def stubs(action: str) -> bool:
+    """Whether the loaded scenario stubs tool *action*: the mock builds its output."""
+    followed = scenario()
+    return followed is not None and followed.stubs(action)
+
+
+def stubbed_tools() -> list[str]:
+    followed = scenario()
+    return followed.stubbed() if followed is not None else []
 
 
 def scenario_summary(only_after_calls: bool = False) -> str | None:
@@ -192,16 +211,58 @@ def point_at_mock(action_configs: dict[str, dict[str, Any]]) -> dict[str, str | 
     """Send each LLM action to the mock and approve each HITL review.
 
     Returns each LLM action with the base name of its version group, or None. The model
-    name stays, for display. Tool actions and the other kinds are left as they are.
+    name stays, for display. Tool actions and the other kinds are left as they are: a
+    tool the scenario stubs is skipped where it would be called, not here.
     """
     mocked: dict[str, str | None] = {}
     for name, config in action_configs.items():
-        kind = config.get("kind") or DEFAULT_ACTION_KIND
-        kind = getattr(kind, "value", kind)
+        kind = _kind(config)
         if kind == DEFAULT_ACTION_KIND:
             config[MODEL_VENDOR_KEY] = SANDBOX_VENDOR
-            group = config.get("version_base_name") if config.get("is_versioned_agent") else None
-            mocked[name] = group if isinstance(group, str) and group else None
+            mocked[name] = _version_group(config)
         elif kind == "hitl":
             config[AUTO_APPROVE_KEY] = True
     return mocked
+
+
+def tool_actions(action_configs: Mapping[str, Mapping[str, Any]]) -> dict[str, Tool]:
+    """Each tool action as a scenario is checked against it; no config is changed.
+
+    The mock builds a stubbed tool's output from its output schema, one record for one
+    input record, so only a RECORD tool that declares a schema and runs a project UDF
+    can be stubbed.
+    """
+    from agent_actions.llm.providers.agac.scenario import Tool
+    from agent_actions.llm.providers.tools.builtin import builtin_tool
+
+    tools: dict[str, Tool] = {}
+    for name, config in action_configs.items():
+        if _kind(config) != "tool":
+            continue
+        cannot_stub = None
+        if builtin_tool(config) is not None:
+            cannot_stub = "is a built-in tool: it runs no code of the project"
+        elif str(config.get("granularity") or "").lower() == "file":
+            cannot_stub = (
+                "has granularity File: a FILE tool decides how many records it returns, "
+                "and the mock builds one record for one input record"
+            )
+        elif not config.get("json_output_schema"):
+            # A dispatched schema is chosen per record, so the load holds none.
+            cannot_stub = (
+                "has no output schema that is known before the run, so the mock has "
+                "nothing to build its output from"
+            )
+        tools[name] = Tool(group=_version_group(config), cannot_stub=cannot_stub)
+    return tools
+
+
+def _kind(config: Mapping[str, Any]) -> Any:
+    kind = config.get("kind") or DEFAULT_ACTION_KIND
+    return getattr(kind, "value", kind)
+
+
+def _version_group(config: Mapping[str, Any]) -> str | None:
+    """The base name of the version group *config* is a version of, or None."""
+    group = config.get("version_base_name") if config.get("is_versioned_agent") else None
+    return group if isinstance(group, str) and group else None

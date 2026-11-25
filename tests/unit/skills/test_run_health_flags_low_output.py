@@ -8,6 +8,7 @@ reset can still show the counts of the old run until it runs again.
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -65,3 +66,26 @@ def test_exit_codes(health, tmp_path):
     assert health.main([*args, str(bad)]) == 1
     assert health.main([*args, str(good)]) == 0
     assert health.main([*args, str(tmp_path / "missing.json")]) == 2
+
+
+def test_sandbox_reads_the_counts_and_status_of_sandbox_runs(health, tmp_path, monkeypatch):
+    io_dir = tmp_path / "agent_workflow" / "wf" / "agent_io"
+    (io_dir / "sandbox").mkdir(parents=True)
+    (tmp_path / "agent_actions.yml").write_text("")
+    (io_dir / ".agent_status.json").write_text(json.dumps({"write": {"status": "running"}}))
+    (io_dir / "sandbox" / ".agent_status.json").write_text(
+        json.dumps({"write": {"status": "completed"}})
+    )
+    commands = []
+
+    def dispositions(command, **_):
+        commands.append(command)
+        report = json.dumps(_report(write={"success": 10, "exhausted": 90}))
+        return subprocess.CompletedProcess(command, 0, stdout=report, stderr="")
+
+    monkeypatch.setattr(health.subprocess, "run", dispositions)
+    monkeypatch.chdir(tmp_path)
+    assert health.main(["-w", "wf", "--sandbox"]) == 1
+    assert commands[0][1:] == ["dispositions", "-w", "wf", "--json", "--sandbox"]
+    assert health.main(["-w", "wf"]) == 0
+    assert commands[1][1:] == ["dispositions", "-w", "wf", "--json"]

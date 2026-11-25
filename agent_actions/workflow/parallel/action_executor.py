@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from agent_actions.config import sandbox
 from agent_actions.errors import ProviderQuotaStop, WorkflowError, get_error_detail
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.logging.core.manager import fire_event, get_manager
@@ -337,6 +338,7 @@ class ActionLevelOrchestrator:
                     model_vendor=config.get("model_vendor") or "",
                     model_name=config.get("model_name") or "",
                     kind=config.get("kind") or DEFAULT_ACTION_KIND,
+                    stubbed=sandbox.stubs(action_name),
                 )
             )
         elif not result.success:

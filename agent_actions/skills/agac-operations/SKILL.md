@@ -1,6 +1,6 @@
 ---
 name: agac-operations
-description: Run large agent-actions workflows safely and find a run that ends with no error but with bad output. Triggers on batch or online mode, run_mode, resume after a crash, --rerun, retry --all, --wait, exit codes, agac usage, agac dispositions --json, cost, memory, context window limits, oversized inputs, or "the run succeeded but the output is wrong or too small".
+description: Run large agent-actions workflows safely and find a run that ends with no error but with bad output. Triggers on batch or online mode, run_mode, resume after a crash, --rerun, retry --all, --wait, exit codes, agac usage, agac dispositions --json, cost, memory, context window limits, oversized inputs, a sandbox rehearsal, or "the run succeeded but the output is wrong or too small".
 ---
 
 # Agent Actions Operations
@@ -27,6 +27,7 @@ Use this skill when a workflow runs over many records (hundreds to many thousand
 3. **Never edit the staging input of a workflow that can resume.** A changed or new staging file changes the plan. Use `--fresh` for new input, or add new input as a new file. A `database` data source reads its query once into a snapshot; to pick up new rows, use `--refresh-input`, which answers only the rows that are new or changed.
 4. **Never change the agent-actions code that a live run imports.** A run started from an editable install reads the code at each import.
 5. **Keep paid output.** To change one action, use `agac run -w <workflow> --rerun <action>`. It runs that action and every action that reads it again on every record. The other actions keep their output. `--fresh` throws away all output.
+6. **Rehearse a large run offline first.** Run `agac run -w <workflow> -u tools --sandbox --scenario chaos --wait` before you pay. It tests retry, repair and recovery with no model call (see [Rehearse offline](#rehearse-offline)).
 
 ## Commands
 
@@ -43,6 +44,8 @@ agac export -w <workflow>                          # write the workflow's `outpu
 agac dispositions -w <workflow> --json             # counts per action, for scripts
 agac status -w <workflow> --json                   # status of each action and of the run
 agac usage -w <workflow>                           # model calls and tokens per action
+agac run -w <workflow> -u tools --sandbox --scenario chaos --wait   # offline rehearsal with faults
+agac retry -w <workflow> --sandbox --all           # retry the failed records of sandbox runs
 ```
 
 Exit codes of `agac run` and `agac retry`:
@@ -84,6 +87,7 @@ To recover from a bad action without paying again for the actions before it, rea
 ```bash
 python3 scripts/run_health.py -w <workflow>                    # default limits
 python3 scripts/run_health.py -w <workflow> --max-bad 0.2 --min-records 20
+python3 scripts/run_health.py -w <workflow> --sandbox          # the output of sandbox runs
 ```
 
 1. For each action, it counts `success` against `failed`, `failed_checks` and `exhausted`.
@@ -101,6 +105,23 @@ python3 .claude/skills/agac-operations/scripts/run_health.py -w my_workflow || e
 Calibrate `--max-bad` on a good run of your own workflow. Some actions fail many records on purpose (a strict filter), so set the limit per workflow, not from this file.
 
 The health check reads counts. It does not read the content of the output. For a content rate (for example, the share of outputs with at least one extracted line item), add a small tool action that counts it, and guard or check on that count.
+
+## Rehearse offline
+
+`agac run --sandbox` runs the workflow with the offline mock `agac-provider` in place of each LLM action. It needs no API key, costs nothing and takes seconds. Its output goes to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`, never mixed with real runs. Give `--sandbox` to `retry`, `status`, `records`, `traces`, `dispositions` and `usage` to act on it. A sandbox run and a real run of one workflow share the run lock.
+
+```bash
+agac run -w <workflow> -u tools --sandbox --scenario chaos --wait
+python3 scripts/run_health.py -w <workflow> --sandbox --min-records 1
+```
+
+1. The `chaos` preset sends transport errors, cut-off and empty answers, broken rules and dropped batch results. Each fault heals on the second attempt of its record.
+2. A `chaos` run completes only when each LLM action has `retry:` with two attempts or more and `expect:` with `repair: auto`. A record that fails shows a gap in your retry or repair settings.
+3. The run prints one line that counts the faults, for example `SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped`. The exit codes are those of a real run.
+4. A preset does not read `sandbox.yml`, and it stubs no tool. A tool action runs its own code. If a tool calls a service, write a scenario file with the faults and `stub: true` on that tool, and give `--scenario <file>`.
+5. To rehearse one recovery, script the faults in a scenario file. See [references/recovery.md](references/recovery.md), section 5.
+
+A sandbox run says nothing about cost, quota, real latency or the quality of the answers. Its data is fake. Test those on a small real sample (Rule 2). The `agac-agent-skills` skill has the full scenario format in `references/sandbox-testing.md`.
 
 ## Scale limits
 

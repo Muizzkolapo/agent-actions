@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 
+from agent_actions.config import sandbox
 from agent_actions.errors import ProviderQuotaStop, get_error_detail
 from agent_actions.llm.config.vendor import effective_run_mode
 from agent_actions.logging.core.manager import fire_event, get_manager
@@ -188,6 +189,7 @@ class WorkflowEventLogger:
                     model_vendor=config.get("model_vendor") or "",
                     model_name=config.get("model_name") or "",
                     kind=config.get("kind") or DEFAULT_ACTION_KIND,
+                    stubbed=sandbox.stubs(params.action_name),
                 )
             )
         elif not params.result.success:

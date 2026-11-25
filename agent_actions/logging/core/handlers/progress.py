@@ -186,6 +186,8 @@ class ProgressRenderer(ConsoleEventHandler):
         model = self._model(event)
         if model:
             detail.append(f"({model})")
+        if event.data.get("stubbed"):
+            detail.append("(stubbed)")
         failed_checks = event.data.get("checks_failed", 0)
         # A record shipped with a failing verdict is a success by design; the icon and
         # the count are what say it did not pass.

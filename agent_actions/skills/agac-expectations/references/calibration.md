@@ -7,6 +7,7 @@ A rule that blocks good outputs costs money twice: the repair rounds, and the re
 1. Take 5 to 20 outputs that people already accept as good. Examples: support-ticket summaries that an agent approved, invoice extractions that match the invoice, catalog descriptions already published.
 2. Add 3 to 10 outputs that you know are bad for the reason the rule targets.
 3. Keep them in a small staging file of a test workflow, not in the production staging folder.
+4. Use real outputs only. A sandbox run (`agac run --sandbox`) generates fake outputs and fake judge verdicts. It shows that the rule is wired, not that the rule is right.
 
 ## 2 Run the rule in warn mode
 

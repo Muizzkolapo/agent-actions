@@ -6,11 +6,18 @@ functions (UDFs) as part of the agent-actions LLM invocation pipeline.
 """
 
 import json
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
+from agent_actions.config import sandbox
 from agent_actions.llm.providers.tools.builtin import builtin_tool, run_builtin
 from agent_actions.utils.constants import MODEL_NAME_KEY
-from agent_actions.utils.udf_management.tooling import execute_user_defined_function
+from agent_actions.utils.udf_management.tooling import (
+    execute_user_defined_function,
+    output_schema_errors,
+)
+
+if TYPE_CHECKING:
+    from agent_actions.llm.providers.agac.scenario import Scenario
 
 
 class ToolClient:
@@ -102,6 +109,25 @@ class ToolClient:
         return renamed
 
     @staticmethod
+    def _stub(
+        followed: "Scenario", agent_config: dict[str, Any], context_data: Any, udf_name: str
+    ) -> Any:
+        """What a tool the sandbox scenario stubs stores: the mock's record, not the UDF's.
+
+        The UDF is not called. Its output schema checks the record as it checks the
+        UDF's own output, so a value the schema refuses fails the record the same way.
+        """
+        # Imported here: the client registry loads this module in every run, and only a
+        # sandbox run that stubs a tool builds a mock record.
+        from agent_actions.llm.providers.agac.tool_stub import stub_output
+
+        response = stub_output(followed, agent_config, context_data)
+        errors = output_schema_errors(udf_name, response, agent_config["json_output_schema"])
+        if errors:
+            raise errors[0][1]
+        return response
+
+    @staticmethod
     def invoke(
         agent_config: dict[str, Any],
         context_data: str | dict,
@@ -128,6 +154,10 @@ class ToolClient:
                     "agent_config_keys": list(agent_config.keys()),
                 },
             )
+
+        followed = sandbox.scenario()
+        if followed is not None and followed.stubs(str(agent_config.get("name"))):
+            return ToolClient._stub(followed, agent_config, context_data, model_name)
 
         # Strip internal metadata fields before passing to UDF
         clean_context = ToolClient._with_short_names(

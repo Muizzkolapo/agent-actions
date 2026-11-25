@@ -61,8 +61,9 @@ Do not run the expensive action again. Add a tool action that rebuilds the field
 
 1. Find the cause on a few records first: `agac records -w <workflow> -A <action>` and `agac traces -w <workflow> -A <action>`.
 2. Fix the cause in the config or the tool, not only the symptom.
-3. Run the fix on a small sample (`record_limit: N` on the first action, or a small staging file in a test project).
-4. Run `scripts/run_health.py` after the rerun. Compare the bad share with the earlier run.
+3. Check the wiring of the fix offline: `agac run -w <workflow> -u tools --sandbox --rerun <action>`. It calls no model (section 5).
+4. Run the fix on a small sample (`record_limit: N` on the first action, or a small staging file in a test project).
+5. Run `scripts/run_health.py` after the rerun. Compare the bad share with the earlier run.
 
 ## 4 Stops in the middle of a run
 
@@ -73,3 +74,26 @@ Do not run the expensive action again. Add a tool action that rebuilds the field
 | Quota or credit used up (exit code 5) | Every finished record | Add credit, then run again |
 
 Do not submit a provider batch by hand for a paused run. agent-actions does not know its id, so it never collects the results, and you pay twice.
+
+## 5 Rehearse a recovery offline
+
+A sandbox scenario makes the offline mock fail on purpose. Use it to see a recovery work before a real run needs it. Write the faults in a scenario file, or in `sandbox.yml` at the project root.
+
+```yaml
+# faults.yml
+actions:
+  classify_document:
+    errors: {rate: 1.0, kinds: [server_error], heal_on_attempt: 3}
+```
+
+```bash
+agac run -w <workflow> -u tools --sandbox --scenario faults.yml --fresh   # exits 1 or 3
+agac retry -w <workflow> --sandbox --scenario faults.yml                  # heals, exits 0
+```
+
+1. `heal_on_attempt` is the attempt of a record from which the fault stops. The sandbox store counts the attempts, so `agac retry --sandbox` continues the count. With `retry: {max_attempts: 2}`, `heal_on_attempt: 3` fails the run and heals in the retry.
+2. `records: [{match: {source.id: r7}, actions: {classify_document: {error: refusal}}}]` fails one record on each attempt. Use it to rehearse `agac retry --filter`.
+3. For a batch action, `batch: {drop_rate: 0.5}` leaves results out of the first batch, and the retry batch gets them. `batch: {fail: [classify_document]}` fails the batch of that action at the provider.
+4. `break_rules: {rules: all, rate: 1.0, heal_on_attempt: 2}` breaks a rule of each record once, so the repair round heals it.
+
+A rehearsal checks that the recovery path is wired. It says nothing about cost, quota or real latency.

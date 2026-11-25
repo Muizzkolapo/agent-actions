@@ -1,6 +1,6 @@
 ---
 name: agac-agent-skills
-description: Build, run, inspect, and debug agent-actions workflows. Triggers on workflow YAML, UDFs, observe/passthrough/drop, guards, versions, schemas, seed data, prompts, HITL, running or resetting a pipeline, or debugging empty/filtered output.
+description: Build, run, inspect, and debug agent-actions workflows. Triggers on workflow YAML, UDFs, observe/passthrough/drop, guards, versions, schemas, seed data, prompts, HITL, running or resetting a pipeline, debugging empty/filtered output, sandbox, offline, mock, scenario, sandbox.yml, stub, chaos, or testing a workflow without an API key.
 ---
 
 # Agent Actions Workflow Builder
@@ -16,6 +16,7 @@ description: Build, run, inspect, and debug agent-actions workflows. Triggers on
 5. **Guard fields carry their action's name.** Write `upstream.field == value`, not `field == value`. A guard reads the record as stored, so the field does not have to be in observe; observing it only to guard on it sends it to the model for nothing.
 6. **A record tool reads by action name; a FILE tool reads flat keys.** A record tool gets `data["action_name"]["field"]`, one level, version merges included. A FILE tool gets a list of items holding the observed fields as flat keys: `item["field"]` for a field named in observe, and `item["action_name.field"]` only where two observed names really collide (two named fields with one name, or a wildcard field with the same name as a named field, which keeps the bare key).
 7. **Seed data needs no observe.** Use `{{ seed.key }}` directly in prompts.
+8. **Test offline first.** After each change, run `agac run -w {workflow} -u tools --sandbox` before a real run. The offline mock answers every LLM action, with no API key and no cost, and the run checks the wiring. See [references/sandbox-testing.md](references/sandbox-testing.md).
 
 ## Workflow Structure
 
@@ -26,10 +27,12 @@ agent_workflow/{name}/
     staging/                 # input data (JSON files)
     store/                   # SQLite DB (state, traces)
     target/                  # per-action output
+    sandbox/                 # output of sandbox runs (agac run --sandbox)
   seed_data/                 # reference data for grounded prompts
 prompt_store/{name}.md       # all prompts for this workflow
 schema/{name}/               # output schemas (when complex)
 tools/{tool-group}/          # UDF implementations
+sandbox.yml                  # optional scenario of sandbox runs
 ```
 
 ## Config
@@ -78,6 +81,7 @@ Detailed guidance — loaded on demand:
 - [references/pooling-approach.md](references/pooling-approach.md) — sequential vs parallel pooling, selection action design, pooling vs versioning
 - [references/prompt-engineering.md](references/prompt-engineering.md) — one unit of outcome, distil before generating, seed data, output contracts, version diversity
 - [references/database-io.md](references/database-io.md) — `connections:`, a `database` data source and its snapshot, `outputs:` tables and their modes, `--refresh-input`, `agac export`
+- [references/sandbox-testing.md](references/sandbox-testing.md) — `agac run --sandbox`, what the mock answers, the `sandbox.yml` scenario (faults, `pin`, tool `stub`), presets, testing recipes, limits
 
 Related skills:
 
@@ -334,6 +338,12 @@ agac run -w {workflow} -u tools
 # Fresh run (clears all state first)
 agac run -w {workflow} -u tools --fresh
 
+# Sandbox run: the offline mock answers every LLM action (no API key, no cost)
+agac run -w {workflow} -u tools --sandbox
+
+# Sandbox run with faults, to test retry and repair
+agac run -w {workflow} -u tools --sandbox --scenario chaos
+
 # Per-record status across all actions
 agac dispositions -w {workflow} -u tools
 
@@ -342,6 +352,8 @@ agac usage -w {workflow}
 ```
 
 Use `record_limit: N` on any action in the YAML to test cheaply on a subset of its records — on the first action to shrink the whole run, further down to shrink one step. To shrink a run without editing the YAML, pass `--record-limit N` or `--file-limit N` to `agac run`, or set `AGAC_RECORD_LIMIT` / `AGAC_FILE_LIMIT` — the first bounds records per input file, the second how many files are walked.
+
+To test with no cost at all, add `--sandbox` to `agac run`. The offline mock answers every LLM action, and the output goes to `agent_io/sandbox/`, apart from real runs. Give `--sandbox` to `agac status`, `records`, `traces`, `dispositions` and `preview` to read it. See [references/sandbox-testing.md](references/sandbox-testing.md).
 
 `retry` and `expect` are separate concerns — keep them distinct:
 ```yaml

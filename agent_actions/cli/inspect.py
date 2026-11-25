@@ -19,6 +19,7 @@ from agent_actions.cli.cli_decorators import (
     _format_project_root_display,
     handles_user_errors,
     sandbox_option,
+    scenario_option,
     workflow_option,
 )
 from agent_actions.cli.inspect_base import branch_of, render_title_row
@@ -106,6 +107,7 @@ def _note(config: dict[str, Any]) -> str | None:
     help="Show the workflow as agac run --sandbox runs it: each LLM action on the offline mock",
     note="each LLM action is shown as the offline mock answers it",
 )
+@scenario_option()
 @click.option("-u", "--user-code", required=False, help="Path to user code directory")
 @click.pass_context
 @handles_user_errors("inspect")
