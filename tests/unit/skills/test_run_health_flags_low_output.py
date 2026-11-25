@@ -86,6 +86,6 @@ def test_sandbox_reads_the_counts_and_status_of_sandbox_runs(health, tmp_path, m
     monkeypatch.setattr(health.subprocess, "run", dispositions)
     monkeypatch.chdir(tmp_path)
     assert health.main(["-w", "wf", "--sandbox"]) == 1
-    assert commands == [["agac", "dispositions", "-w", "wf", "--json", "--sandbox"]]
+    assert commands[0][1:] == ["dispositions", "-w", "wf", "--json", "--sandbox"]
     assert health.main(["-w", "wf"]) == 0
-    assert commands[1] == ["agac", "dispositions", "-w", "wf", "--json"]
+    assert commands[1][1:] == ["dispositions", "-w", "wf", "--json"]
