@@ -1,0 +1,3 @@
+name: merged_score
+fields:
+  - {id: urgency, type: integer, required: true, minimum: 1, maximum: 5}

@@ -1,0 +1,3 @@
+name: reply
+fields:
+  - {id: reply, type: string, required: true}

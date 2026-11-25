@@ -1,0 +1,6 @@
+name: tags
+fields:
+  - id: tags
+    type: array
+    required: true
+    items: {type: string}

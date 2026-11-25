@@ -10,6 +10,8 @@ sidebar_position: 6
 
 Use a sandbox run to test the connections of a workflow: the dependencies, guards, `context_scope`, versions, routers, loops, batch actions, repair loops and HITL actions. A sandbox run takes seconds and costs nothing. It does not wait for a provider. See [No wait for a provider](#no-wait).
 
+To start, create the [starter project](#starter-project) with `agac init my_sandbox --template sandbox`. To test that a sandbox run gives the result that you expect, use [`agac sandbox check`](#sandbox-check).
+
 ```bash
 agac run -w my_workflow --sandbox
 ```
@@ -354,6 +356,61 @@ agac run -w my_workflow --sandbox --wait
 In a sandbox run, `--wait` does not wait between two passes when you do not give `--poll`. It prints `Checking the batch job(s) again...` and runs the next pass immediately. A real run waits 60 seconds.
 
 A scenario can hold each batch for a time (`batch.complete_after_seconds`). Then `--wait` waits that time between two passes, at most 1 second, and prints the time: `Waiting 1s before checking the batch job(s) again...`. A `--poll` that you give is used as given, also in a sandbox run.
+
+## The Starter Project {/* #starter-project */}
+
+`agac init <project-name> --template sandbox` creates a small project that uses each feature once. Use it to learn the features, to see a sandbox run that completes, or as a start for your own workflow:
+
+```bash
+agac init my_sandbox --template sandbox
+cd my_sandbox
+agac sandbox check -w support_desk
+```
+
+The workflow `support_desk` triages five support tickets. It has these actions:
+
+| Action | Feature |
+|--------|---------|
+| `read_ticket` | A tool action. Plain Python in `tools/support_desk/`, with no network. It marks spam and picks a queue |
+| `classify` | A guard that filters the spam ticket. An `expect:` block with `repair: auto` and an `llm_judge` rule with `severity: warn` |
+| `score`, `merge_scores` | Versions: two raters, `score_1` and `score_2`, and the merge of the two (`version_consumption`) |
+| `reply_round` | A loop: write a reply, then check it. A high-priority reply passes its check in round 2 |
+| `by_queue`, `assigned` | A router that sends each ticket to `billing_team` or `support_team`, and the join of the two branches |
+| `approve_reply` | A HITL action. A sandbox run approves each record |
+| `tag_reply` | A batch action (`run_mode: batch`), with a guard on the HITL status |
+
+Its `sandbox.yml` makes faults that heal, so the run completes:
+
+- `break_rules` breaks the `matches_regex` rule of `classify` in the first answer of each record. The repair round passes.
+- `errors` gives a rate limit to the first call of each rater. `retry:` sends the call again.
+- `batch` reports the batch of `tag_reply` in progress once and leaves out half of its results. The retry batch gets them.
+
+The workflow names `model_vendor: openai`. A sandbox run sends each LLM action to the mock, so the project needs no key. To run it with a real model, set `OPENAI_API_KEY` and run it without `--sandbox`. With no key, a real run stops at preflight, before the first action.
+
+## Check the Result of a Sandbox Run {/* #sandbox-check */}
+
+`agac sandbox check` runs a workflow in the sandbox and compares the result with the expected outcomes in a file. It exits 0 when each expected value holds, 1 when one or more values do not hold or the run wrote no result, 2 when the file is missing or not valid or the check could not run, and 130 when you interrupt it:
+
+```bash
+agac sandbox check -w my_workflow
+```
+
+The file is `sandbox_expected.<workflow>.yml` at the project root, else `sandbox_expected.yml`. `--expected PATH` names another file. It states the exit code of the run, the counts of the `SANDBOX scenario` line and, per action, its status and record counts:
+
+```yaml
+# sandbox_expected.yml
+exit_code: 0
+scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 2}
+actions:
+  classify: {status: completed, success: 4, filtered: 1}   # the guard filters one record
+  billing_team: {success: 2, sent_elsewhere: 2}            # the router sends two records here
+```
+
+The mock and the scenario decide in the same way for the same input. Thus each value is the same in each run, also with `-e parallel`, and the file can state it exactly. To write the file for your workflow, run the workflow in the sandbox, read the counts with `agac dispositions -w my_workflow --sandbox`, and write the counts that matter. A key that is not in the file is not checked.
+
+The check runs the workflow as `agac run --sandbox --fresh --wait` does. It clears and writes only the sandbox output, and it does not read or change the output of a real run. The output stays after the check: read it with `--sandbox`. The check reads only a result that its own run wrote. When the run stops before it loads the workflow, for example on a scenario or a configuration that does not load, the check fails with the row `run: wrote no result`, whatever the file states. Run the check in CI to catch a change that breaks the wiring of a workflow. The framework runs the starter project in this way as its own end-to-end test.
+
+See [sandbox check](../reference/cli/sandbox.md) for each key of the file and each option.
 
 ## Remove the Sandbox Output
 

@@ -7,6 +7,7 @@ import logging
 import time
 import traceback
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -196,7 +197,16 @@ class RunCommand:
         else:
             workflow.run()
 
-    def execute(self, project_root: Path | None = None) -> None:
+    def execute(
+        self,
+        project_root: Path | None = None,
+        holding_the_lock: Callable[[], AbstractContextManager[object]] | None = None,
+    ) -> None:
+        """Run the workflow inside *holding_the_lock*, which is entered once the run lock is held.
+
+        It exits however the run ends, before the lock is released; it is not entered when
+        the lock is refused.
+        """
         click.echo(f"Starting agent run for: {self.args.agent}")
 
         if project_root is not None:
@@ -212,7 +222,10 @@ class RunCommand:
         # Before anything loads, clears or submits: `--fresh` clears the store inside
         # load_workflow, so a later lock would wipe a run in progress before refusing.
         try:
-            with hold_run_lock(paths.io_dir, self.agent_name):
+            with (
+                hold_run_lock(paths.io_dir, self.agent_name),
+                holding_the_lock() if holding_the_lock is not None else nullcontext(),
+            ):
                 started = time.monotonic()
                 if self.args.refresh_input:
                     self._refresh_input(paths)

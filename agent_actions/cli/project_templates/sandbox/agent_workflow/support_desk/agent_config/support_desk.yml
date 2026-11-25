@@ -1,0 +1,175 @@
+# support_desk: triage support tickets.
+#
+# A small workflow that uses each feature once, so that `agac sandbox check` can
+# test the wiring of all of them in a few seconds, offline:
+#
+#   read_ticket   tool action (plain Python, no model)
+#   classify      guard, expect rules with repair: auto, an llm_judge rule
+#   score         versions: two raters run in parallel
+#   merge_scores  the merge of the two raters (version_consumption)
+#   reply_round   loop: write a reply, check it, write it again
+#   by_queue      router, with a join (assigned) after its two branches
+#   approve_reply HITL review (a sandbox run approves each record)
+#   tag_reply     batch action (run_mode: batch)
+#
+# The vendor is real (openai), so the project is also a start for real runs.
+# `agac run --sandbox` swaps each LLM action to the offline mock: no key, no cost.
+
+name: support_desk
+description: "Triage support tickets with each workflow feature once"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+  context_scope:
+    seed:
+      teams: $file:teams.json        # seed_data/teams.json
+  # A rate limit or a timeout is sent again once.
+  retry:
+    enabled: true
+    max_attempts: 2
+
+actions:
+  # Tool action: plain Python in tools/support_desk/. It marks spam and picks a queue.
+  - name: read_ticket
+    kind: tool
+    impl: read_ticket
+    intent: "Read the ticket, mark spam and pick its queue"
+    schema: ticket
+    context_scope:
+      observe: [source.*]
+
+  # Guard: a spam ticket is filtered here and goes no further.
+  # expect: three rules check each answer. With repair: auto, a record that fails a
+  # rule is sent again with the reason, up to max_iterations answers in all.
+  # llm_judge: a model judges the summary. severity: warn records the verdict and
+  # does not block the record.
+  - name: classify
+    dependencies: [read_ticket]
+    intent: "Classify the ticket and summarise it"
+    prompt: $support_desk.Classify
+    schema: classification
+    guard:
+      condition: 'read_ticket.is_spam == false'
+      on_false: filter
+    context_scope:
+      observe: [read_ticket.ticket_id, read_ticket.text]
+    expect:
+      repair: auto
+      max_iterations: 2
+      expectations:
+        - id: known_category
+          type: accepted_values
+          field: category
+          params: {values: [billing, technical, account]}
+        - id: reference_format
+          type: matches_regex
+          field: reference
+          params: {pattern: '^REF-[0-9]{4}$'}
+          hint: "REF- and then four digits, for example REF-0042"
+        - id: summary_is_faithful
+          type: llm_judge
+          field: summary
+          severity: warn
+          params:
+            rule: "The summary states only what the ticket says."
+
+  # Versions: the action runs once per value of `rater`, as score_1 and score_2.
+  - name: score
+    dependencies: [classify]
+    intent: "Rate how urgent the ticket is"
+    prompt: $support_desk.Score
+    schema: score
+    versions:
+      param: rater
+      range: [1, 2]
+    context_scope:
+      observe: [read_ticket.text, classify.category]
+
+  # The merge: one record that reads both raters.
+  - name: merge_scores
+    dependencies: [score]
+    kind: tool
+    impl: merge_scores
+    intent: "Take the higher of the two urgency ratings"
+    schema: merged_score
+    version_consumption:
+      source: score
+      pattern: merge
+    context_scope:
+      observe: [score_1.urgency, score_2.urgency]
+
+  # Loop: run branches/reply_round.yml (write, then check) up to two times.
+  # A record leaves the loop when its check passes.
+  - loop: reply_round
+    include: reply_round
+    max_iterations: 2
+    inputs: {ticket: read_ticket, rating: merge_scores}
+    feedback: {prior: check_reply}
+    until: check_reply.passed == true
+    result: check_reply
+
+  # Router: each record goes to one branch, by the queue that read_ticket picked.
+  - route: by_queue
+    on: read_ticket.queue
+    cases:
+      billing: [billing_team]
+    default: [support_team]
+
+  - name: billing_team
+    dependencies: [merge_scores]
+    kind: tool
+    impl: assign_team
+    intent: "Assign the billing team"
+    schema: assignment
+    context_scope:
+      observe: [read_ticket.*, merge_scores.urgency, seed.teams]
+
+  - name: support_team
+    dependencies: [merge_scores]
+    kind: tool
+    impl: assign_team
+    intent: "Assign the support team"
+    schema: assignment
+    context_scope:
+      observe: [read_ticket.*, merge_scores.urgency, seed.teams]
+
+  # Join: the two branches meet again under one name.
+  - join: assigned
+    of: [billing_team, support_team]
+
+  # HITL: a person approves each reply in a browser. A sandbox run approves each
+  # record and opens no browser.
+  - name: approve_reply
+    dependencies: [assigned, reply_round]
+    kind: hitl
+    granularity: file
+    intent: "A person approves each reply before it goes out"
+    hitl:
+      instructions: "Approve the reply, or reject it with a comment."
+      timeout: 300
+    context_scope:
+      observe: [assigned.*, reply_round.reply]
+
+  # Batch action: the requests go to the provider as one batch. Run with --wait to
+  # wait for the batch in the same command. Only an approved reply is tagged.
+  - name: tag_reply
+    dependencies: [approve_reply]
+    run_mode: batch
+    intent: "Tag the approved reply for the help centre"
+    prompt: $support_desk.Tag
+    schema: tags
+    guard:
+      condition: 'approve_reply.hitl_status == "approved"'
+      on_false: filter
+    context_scope:
+      observe: [reply_round.reply, approve_reply.hitl_status, classify.category]

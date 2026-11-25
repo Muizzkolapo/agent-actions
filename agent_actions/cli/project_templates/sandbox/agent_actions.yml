@@ -1,0 +1,7 @@
+project_name: __PROJECT_NAME__
+default_agent_config:
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+schema_path: schema
+tool_path: ["tools"]
+seed_data_path: seed_data

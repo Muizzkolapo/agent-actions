@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from agent_actions.llm.providers.tools.builtin import runs_udf
+
 DAG_FIT_REMEDY = (
     "return the field from the tool on every path, or mark it optional in the tool's "
     "output schema — the tool's output is validated exactly as it returns it, so a "
@@ -32,11 +34,12 @@ def find_dag_schema_compatibility_gaps(
     the action's ``defaults:`` is taken as returned. Fields nested inside a root
     key are not checked: the tool computes a key it returns whole, and a key it
     does not return is reported itself when required, or never checked when not.
+    A built-in tool (a router, a join, a loop's name) runs no code of the project.
     """
     synthesized = synthesized or {}
     gaps: dict[str, list[str]] = {}
     for name, config in action_configs.items():
-        if config.get("kind") != "tool":
+        if not runs_udf(config):
             continue
         if name in synthesized and synthesized[name] is None:
             continue

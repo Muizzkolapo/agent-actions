@@ -1,0 +1,26 @@
+# One round of the reply_round loop: write a reply, then check it.
+branch: reply_round
+description: Write a reply to the ticket, then check it
+inputs:
+  ticket: the ticket that read_ticket read
+  rating: the merged urgency rating
+  prior: the check of the previous round (none in the first round)
+outputs: [check_reply]
+actions:
+  - name: draft_reply
+    intent: Write a reply to the ticket, and fix what the last check found
+    prompt: $support_desk.Draft_Reply
+    schema: reply
+    dependencies: [ticket, rating]
+    context_scope:
+      observe: [ticket.ticket_id, ticket.text, rating.urgency, prior.*]
+
+  # A tool stands in for a real reviewer: a high-priority reply passes in round 2.
+  - name: check_reply
+    kind: tool
+    impl: check_reply
+    intent: Check the reply and say why it fails
+    schema: reply_check
+    dependencies: [draft_reply]
+    context_scope:
+      observe: [draft_reply.reply, ticket.priority, prior.*]

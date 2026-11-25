@@ -168,6 +168,7 @@ The tables give each command, in groups by the purpose of the command:
 | [`run`](./run) | Run a workflow |
 | [`export`](./export) | Write the declared `outputs:` of a workflow to their database tables again, with no model call |
 | [`batch`](./batch) | Manage batch processing operations |
+| [`sandbox check`](./sandbox) | Run a workflow in the sandbox and check the result against the expected outcomes |
 
 **Inspect and debug:**
 

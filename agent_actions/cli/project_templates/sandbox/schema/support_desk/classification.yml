@@ -1,0 +1,5 @@
+name: classification
+fields:
+  - {id: category, type: string, required: true}
+  - {id: reference, type: string, required: true}
+  - {id: summary, type: string, required: true}
