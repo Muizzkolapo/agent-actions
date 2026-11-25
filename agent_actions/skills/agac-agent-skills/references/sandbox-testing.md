@@ -42,14 +42,18 @@ agac init my_sandbox --template sandbox                         # a starter proj
 | Output | `agent_io/sandbox/` and `agent_io/store/{workflow}.sandbox.db` |
 | Run lock | Shared with real runs. A sandbox run and a real run of one workflow cannot run at the same time |
 
-A sandbox run does not wait for backoff, `Retry-After` or batch polls. A workflow with
+A sandbox run does not wait for backoff or `Retry-After`. Without `--poll`, `--wait` does
+not wait between two passes, except when the scenario sets `batch.complete_after_seconds`:
+then it waits that time, at most 1 second. A `--poll` that you give is used. A workflow with
 `outputs:` writes no database table in a sandbox run.
 
 ## The scenario file
 
 A scenario makes the mock fail, change or delay calls on purpose. Put it in
 `sandbox.{workflow}.yml` or `sandbox.yml` at the project root, or give `--scenario <path>`
-to `run`, `retry` or `inspect`. A sandbox run of `{workflow}` reads `sandbox.{workflow}.yml`
+to `run`, `retry`, `inspect` or `sandbox check`. A relative `<path>` is from the current
+directory. `--scenario happy` and `--scenario chaos` always mean the preset, also when a
+file of that name exists. The `agac batch` commands have no `--sandbox`. A sandbox run of `{workflow}` reads `sandbox.{workflow}.yml`
 when it exists, else `sandbox.yml`, else the `happy` preset. A real run does not read it.
 Each decision is per record and repeats run to run.
 
@@ -96,46 +100,55 @@ batch:
   `--rerun <action>`.
 - The run reads and checks the scenario before the first call. A wrong key stops the command
   and names the file and the key. `agac inspect -w {workflow} --sandbox` checks it with no run.
+  It prints no stub notice; `agac inspect -w {workflow} --sandbox action {tool}` marks a
+  stubbed tool `stubbed by the sandbox scenario`.
 
 ## Presets
 
 | Preset | What it does |
 |--------|--------------|
 | `happy` | No faults. The judge passes. The default when there is no `sandbox.{workflow}.yml` and no `sandbox.yml` |
-| `chaos` | Transport errors, cut-off and empty answers, broken rules, judge pass rate 0.7, a delayed batch and dropped batch results. Each fault heals on the second attempt |
+| `chaos` | Transport errors, cut-off and empty answers, broken rules, judge pass rate 0.7, a delayed batch and dropped batch results. Each error and broken rule heals on the second attempt. The judge verdict does not heal |
 
-`chaos` completes only when each LLM action has `retry:` with two attempts or more and an
-`expect:` block with `repair: auto`. A preset keeps the tool stubs of the project: it reads
-`sandbox.{workflow}.yml` (else `sandbox.yml`) and keeps each `actions` entry that sets `stub`,
-with its `pin`, and nothing else. A kept entry that also sets a model-call key (`errors`,
-`break_rules`, `judge`, `latency_ms`, `error`) stops the command, as it does without a preset.
-So `--scenario chaos` does not call a stubbed tool, and the stub notice names the file the
-stubs come from. `--scenario <path>` uses only that file: put
-the `stub` entries in it.
+`chaos` completes only when each LLM action has `retry:` with two attempts or more, an
+`expect:` block with `repair: auto`, and `severity: warn` on each `llm_judge` rule. An
+`llm_judge` rule with `severity: error` can fail a record in each repair round.
+
+A preset keeps the tool stubs of the project: it reads `sandbox.{workflow}.yml` (else
+`sandbox.yml`) and keeps each `actions` entry that sets `stub`. So `--scenario chaos` does
+not call a stubbed tool, and the stub notice names the file the stubs come from. A kept
+entry takes only `stub` and `pin`: any other key (an unknown key, or a model-call key such
+as `errors` or `latency_ms`) stops the command, as it does without a preset. The preset
+ignores the rest of the file, also when it is not valid. A file that cannot be read or is
+not a mapping stops the command. `--scenario <path>` uses only that file: put the `stub`
+entries in it.
 
 ## Read the results
 
 1. The run prints `SANDBOX` lines on stderr when it starts, and on stdout after its result.
    One line, once per command, names the stubbed tools. The last one counts the faults:
-   `SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped`.
+   `SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped`. With
+   `--scenario <path>`, the line names the path as you typed it.
 2. The exit codes are those of a real run: 0 every action succeeded, 1 the run failed,
    3 some records failed, 4 paused for a batch.
 3. Give `--sandbox` to the read commands: `agac status`, `agac records`, `agac traces`,
    `agac dispositions`, `agac preview`, `agac usage`, `agac expect report`.
-4. `agac usage --sandbox` shows the model `agac-mock` with zero tokens.
+4. `agac usage --sandbox` shows an online call under the model `agac-mock` with zero tokens.
+   A batch action shows its own `model_name` and the token counts of the mock batch provider.
 
 ## Assert the outcome: `agac sandbox check`
 
 `agac sandbox check -w {workflow}` runs the workflow as `agac run --sandbox --fresh --wait`
 in the same process, then compares the result with `sandbox_expected.{workflow}.yml`, else
-`sandbox_expected.yml`, at the project root (`--expected <path>` names another file). It
+`sandbox_expected.yml`, at the project root (`--expected <path>` names another file; a
+relative path is from the project root). It
 takes `--scenario`, `-u` and `-e` as `agac run` does. It prints one row per stated value.
 
 | Exit | Meaning |
 |------|---------|
 | 0 | Each stated value holds |
 | 1 | One or more values do not hold; the `FAIL` rows name each: `classify filtered: expected 2, got 1`. Also when the run wrote no result: `run: wrote no result (the run stopped with exit code 1)` |
-| 2 | The file is missing, is not YAML, has an unknown key or an action entry with no value (`classify: {}`), or names an action the workflow does not have. The file is checked before the run. Also when the check could not run (outside a project, or an unexpected error; one `Error:` line) |
+| 2 | The file is missing, is not YAML, has an unknown key or an action entry with no value (`classify: {}`). These are checked before the run. Also when the file names an action the workflow does not have: this is found after the run, and only when the run wrote a result. Also when the check could not run (outside a project, or an unexpected error; one `Error:` line) |
 | 130 | Interrupted (Ctrl-C) |
 
 ```yaml

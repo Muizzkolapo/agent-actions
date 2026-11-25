@@ -115,7 +115,7 @@ Key Functions
 | `ConfigManager._resolve_dotenv` | `.env` | Reads | — |
 | `sandbox.store_file`, `sandbox.run_dir`, `sandbox.status_file` | `agent_io/store/{workflow}.sandbox.db`, `agent_io/sandbox/` | Names (in sandbox mode, in place of `agent_io/store/{workflow}.db`, `agent_io/target/`, `agent_io/logs/`, `agent_io/.agent_status.json`) | `--sandbox` |
 | `sandbox.point_at_mock` | `agent_config/{workflow}.yml` | Overrides at load, in sandbox mode | `actions[].model_vendor` |
-| `sandbox.load_scenario` | `sandbox.<workflow>.yml` or `sandbox.yml`, or the file `--scenario` names | Reads (once per workflow load, in sandbox mode, on `run`, `retry` and `inspect`) | — |
+| `sandbox.load_scenario` | `sandbox.<workflow>.yml` or `sandbox.yml`, or the file `--scenario` names | Reads (once per workflow load, in sandbox mode, on `run`, `retry`, `inspect` and `sandbox check`) | — |
 | `sandbox.tool_actions` | `agent_config/{workflow}.yml` | Reads (each tool action's kind, granularity, version group and compiled output schema, at load in sandbox mode) | `actions[].kind`, `actions[].granularity`, `actions[].schema` |
 | `sandbox.forget_attempts` | `agent_io/store/` (`<workflow>.sandbox.db` `sandbox_attempts:` metadata) | Deletes (`--fresh`, each reset of an action, and each record gone from the staged input) | — |
 

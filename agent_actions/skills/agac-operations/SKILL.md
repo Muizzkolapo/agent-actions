@@ -115,8 +115,8 @@ agac run -w <workflow> -u tools --sandbox --scenario chaos --wait
 python3 scripts/run_health.py -w <workflow> --sandbox --min-records 1
 ```
 
-1. The `chaos` preset sends transport errors, cut-off and empty answers, broken rules and dropped batch results. Each fault heals on the second attempt of its record.
-2. A `chaos` run completes only when each LLM action has `retry:` with two attempts or more and `expect:` with `repair: auto`. A record that fails shows a gap in your retry or repair settings.
+1. The `chaos` preset sends transport errors, cut-off and empty answers, broken rules and dropped batch results, and the judge passes 0.7 of its calls. Each error and broken rule heals on the second attempt of its record. The judge verdict does not heal.
+2. A `chaos` run completes only when each LLM action has `retry:` with two attempts or more, `expect:` with `repair: auto`, and `severity: warn` on each `llm_judge` rule. An `llm_judge` rule with `severity: error` can fail a record in each repair round. A record that fails shows a gap in your retry or repair settings.
 3. The run prints one line that counts the faults, for example `SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped`. The exit codes are those of a real run.
 4. A preset keeps the tool stubs of the project: the `stub` entries (with their `pin`) of `sandbox.<workflow>.yml`, else `sandbox.yml`, and nothing else of that file. A tool that the project does not stub runs its own code. If a tool calls a service, put `stub: true` on it in the project file. A scenario file given as `--scenario <file>` is used alone, so put the `stub` entries in it.
 5. To rehearse one recovery, script the faults in a scenario file. See [references/recovery.md](references/recovery.md), section 5.

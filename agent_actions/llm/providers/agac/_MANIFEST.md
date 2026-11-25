@@ -13,7 +13,7 @@ Claude-branded provider adapter (AGAC) with non-blocking clients and test helper
 | `AgacBatchClient.release_batch()` | `.agac/batch_state/{batch_id}.json` | Deletes | — |
 | `AgacBatchClient.discard_partial_writes()` | `.agac/batch_state/*.tmp` | Deletes | — |
 | `AgacBatchClient.reset()` | `.agac/batch_state/` | Deletes | — |
-| `scenario.load` | `sandbox.<workflow>.yml` or `sandbox.yml`, or the file `--scenario` names | Reads (once per workflow load of `agac run --sandbox` or `agac retry --sandbox`) | — |
+| `scenario.load` | `sandbox.<workflow>.yml` or `sandbox.yml`, or the file `--scenario` names | Reads (once per workflow load of `agac run --sandbox`, `agac retry --sandbox`, `agac inspect --sandbox` or `agac sandbox check`) | — |
 | `Scenario.next_attempt` | `agent_io/store/` (`<workflow>.sandbox.db`, `workflow_metadata` keys `sandbox_attempts:<action>:<record>`) | Reads and writes (each scenario call online, each task at a batch submit) | — |
 | `rules_for` | `agent_config/{workflow}.yml`, `schema/{workflow}/{action}.yml` | Reads (through the expectation suite the run resolves, once per action in a run) | `actions[].expect` |
 | `observed_refs` | `agent_config/{workflow}.yml` | Reads (less a loop's `feedback` inputs) | `actions[].context_scope.observe`, `- loop:` `feedback` |
