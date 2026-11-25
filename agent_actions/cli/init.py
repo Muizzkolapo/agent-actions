@@ -34,6 +34,12 @@ from agent_actions.validation.project_validator import ProjectValidator
 
 logger = logging.getLogger(__name__)
 
+# A template named here is a project shipped in the package, copied whole into the new
+# project. The other templates make the empty project structure only.
+PROJECT_TEMPLATES_DIR = Path(__file__).with_name("project_templates")
+BUNDLED_TEMPLATES = ("sandbox",)
+PROJECT_NAME_PLACEHOLDER = "__PROJECT_NAME__"
+
 # ---------------------------------------------------------------------------
 # Remote examples support  (fetched from GitHub — nothing bundled in wheel)
 # ---------------------------------------------------------------------------
@@ -249,7 +255,22 @@ class InitCommand:
                 )
 
     def _get_available_templates(self) -> list[str]:
-        return ["default", "minimal", "full"]
+        return ["default", "minimal", "full", *BUNDLED_TEMPLATES]
+
+    def _copy_bundled_template(self) -> None:
+        shutil.copytree(
+            PROJECT_TEMPLATES_DIR / self.args.template,
+            self.project_dir,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+        )
+        config = self.project_dir / "agent_actions.yml"
+        config.write_text(
+            config.read_text(encoding="utf-8").replace(
+                PROJECT_NAME_PLACEHOLDER, self.args.project_name
+            ),
+            encoding="utf-8",
+        )
 
     def _create_project_directory(self) -> None:
         try:
@@ -290,6 +311,8 @@ class InitCommand:
 
     def _initialize_project(self) -> None:
         try:
+            if self.args.template in BUNDLED_TEMPLATES:
+                self._copy_bundled_template()
             initializer = ProjectInitializer(
                 project_name=self.args.project_name, base_path=self.output_dir
             )
@@ -348,7 +371,11 @@ class InitCommand:
         click.echo(f"Project created at: {self.project_dir}")
         click.echo("\nNext steps:")
         click.echo(f"  cd {self.args.project_name}")
-        click.echo("  agac run -a sample_agent")
+        if self.args.template == "sandbox":
+            click.echo("  agac sandbox check -w support_desk")
+            click.echo("  agac run -w support_desk --sandbox --wait")
+        else:
+            click.echo("  agac run -a sample_agent")
 
 
 class _InitGroup(click.Group):
@@ -373,6 +400,7 @@ def init() -> None:
     Examples:
         agac init my_project
         agac init my_project --template minimal
+        agac init my_project --template sandbox
         agac init list
         agac init example contract_reviewer my_project
     """
@@ -384,7 +412,13 @@ def init() -> None:
     "-o", "--output-dir", help="Directory to create the project in (default: current directory)"
 )
 @click.option(
-    "-t", "--template", default="default", help="Template to use for project initialization"
+    "-t",
+    "--template",
+    default="default",
+    help=(
+        "Template to use for project initialization: default, minimal, full, or sandbox "
+        "(a small project that agac sandbox check tests offline)"
+    ),
 )
 @click.option(
     "-f",

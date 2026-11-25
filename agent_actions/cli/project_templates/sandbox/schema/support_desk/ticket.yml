@@ -1,0 +1,7 @@
+name: ticket
+fields:
+  - {id: ticket_id, type: string, required: true}
+  - {id: text, type: string, required: true}
+  - {id: priority, type: string, required: true, enum: [high, normal]}
+  - {id: queue, type: string, required: true, enum: [billing, support]}
+  - {id: is_spam, type: boolean, required: true}

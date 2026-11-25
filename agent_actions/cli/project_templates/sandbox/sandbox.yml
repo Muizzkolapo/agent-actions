@@ -1,0 +1,21 @@
+# The sandbox scenario: faults the offline mock makes on purpose in
+# `agac run --sandbox`. A real run does not read this file.
+#
+# Each fault heals on the second attempt of its record, so the run completes and
+# you see the recovery paths work: retry, repair and the batch retry.
+
+seed: 7
+
+actions:
+  # The first answer of each record breaks the reference_format rule.
+  # repair: auto sends it again with the reason, and the second answer passes.
+  classify:
+    break_rules: {rules: [matches_regex], rate: 1.0, heal_on_attempt: 2}
+
+  # The first call of each rater gets a rate limit. retry: sends it again.
+  score:
+    errors: {rate: 1.0, kinds: [rate_limit], heal_on_attempt: 2}
+
+batch:
+  polls_until_complete: 1   # the first status check reports the batch in progress
+  drop_rate: 0.5            # results the first batch leaves out; the retry batch gets them
