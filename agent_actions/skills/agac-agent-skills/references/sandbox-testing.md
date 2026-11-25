@@ -20,7 +20,7 @@ with generated values.
 All commands run from the project root.
 
 ```bash
-agac run -w {workflow} -u tools --sandbox                       # sandbox.yml, else the happy preset
+agac run -w {workflow} -u tools --sandbox                       # sandbox.{workflow}.yml, else sandbox.yml, else happy
 agac run -w {workflow} -u tools --sandbox --fresh               # clear the sandbox output first
 agac run -w {workflow} -u tools --sandbox --scenario chaos      # a preset, or a file path
 agac run -w {workflow} -u tools --sandbox --wait                # batch actions: run every pass
@@ -45,9 +45,15 @@ A sandbox run does not wait for backoff, `Retry-After` or batch polls. A workflo
 
 ## The scenario file
 
-A scenario makes the mock fail, change or delay calls on purpose. Put it in `sandbox.yml`
-at the project root, or give `--scenario <path>` to `run`, `retry` or `inspect`. A real run
-does not read it. Each decision is per record and repeats run to run.
+A scenario makes the mock fail, change or delay calls on purpose. Put it in
+`sandbox.{workflow}.yml` or `sandbox.yml` at the project root, or give `--scenario <path>`
+to `run`, `retry` or `inspect`. A sandbox run of `{workflow}` reads `sandbox.{workflow}.yml`
+when it exists, else `sandbox.yml`, else the `happy` preset. A real run does not read it.
+Each decision is per record and repeats run to run.
+
+The names in a scenario are checked strictly against the workflow that runs: a name of
+another workflow's action stops the command. In a project with more than one workflow, put
+each workflow's scenario in its own `sandbox.{workflow}.yml`.
 
 ```yaml
 seed: 7                                   # another seed makes other decisions
@@ -81,6 +87,11 @@ batch:
   the count. `--fresh` starts the count again.
 - A tool action takes only `stub` and `pin`, and `pin` only with `stub: true`.
 - A `records` entry replaces `actions`, and `actions` replaces `defaults`, key by key.
+- An action in a loop has one name for each iteration. Give one entry for each
+  iteration (`round_iter1__check`, `round_iter2__check`, ...). The bare name `check` is
+  refused, and the refusal lists the valid names.
+- A change to the scenario does not run a completed action again. Use `--fresh` or
+  `--rerun <action>`.
 - The run reads and checks the scenario before the first call. A wrong key stops the command
   and names the file and the key. `agac inspect -w {workflow} --sandbox` checks it with no run.
 
@@ -88,17 +99,20 @@ batch:
 
 | Preset | What it does |
 |--------|--------------|
-| `happy` | No faults. The judge passes. The default when there is no `sandbox.yml` |
+| `happy` | No faults. The judge passes. The default when there is no `sandbox.{workflow}.yml` and no `sandbox.yml` |
 | `chaos` | Transport errors, cut-off and empty answers, broken rules, judge pass rate 0.7, a delayed batch and dropped batch results. Each fault heals on the second attempt |
 
 `chaos` completes only when each LLM action has `retry:` with two attempts or more and an
-`expect:` block with `repair: auto`. A preset stubs no tool and does not read `sandbox.yml`.
-To combine faults with stubs, write the faults and the `stub` entries in one scenario file.
+`expect:` block with `repair: auto`. A preset keeps the tool stubs of the project: it reads
+`sandbox.{workflow}.yml` (else `sandbox.yml`) and keeps each `actions` entry that sets `stub`,
+with its `pin`, and nothing else. So `--scenario chaos` does not call a stubbed tool, and the
+stub notice names the file the stubs come from. `--scenario <path>` uses only that file: put
+the `stub` entries in it.
 
 ## Read the results
 
-1. The run prints `SANDBOX` lines when it starts and after its result. The last one counts
-   the faults:
+1. The run prints `SANDBOX` lines on stderr when it starts, and on stdout after its result.
+   One line, once per command, names the stubbed tools. The last one counts the faults:
    `SANDBOX scenario chaos: 3 errors, 2 rules broken, 1 batch results dropped`.
 2. The exit codes are those of a real run: 0 every action succeeded, 1 the run failed,
    3 some records failed, 4 paused for a batch.
@@ -115,7 +129,7 @@ To combine faults with stubs, write the faults and the `stub` entries in one sce
 | `on_exhausted` and the failure path | The same `break_rules` with `heal_on_attempt: null` |
 | `agac retry` | `errors: {rate: 1.0, kinds: [server_error], heal_on_attempt: N}`, with N one more than `retry.max_attempts`. The run exits 1 or 3. Then `agac retry -w {workflow} --sandbox --scenario <file>` heals the records |
 | The paths after a judge | `judge: {pass_rate: 0.5}` on the action |
-| A network tool, offline | `stub: true` on the tool action. The line of the tool ends with `(stubbed)` |
+| A network tool, offline | `stub: true` on the tool action. The line of the tool shows `(stubbed)` after the time, then its notes, for example `(stubbed) — 1 skipped by guard` |
 | One record path | `records[].match` on an input field, with `pin` or `error` for that record |
 | Batch recovery | `run_mode: batch`, then `batch.drop_rate` or `batch.fail`, and `agac run --sandbox --wait` |
 
@@ -125,6 +139,8 @@ To combine faults with stubs, write the faults and the `stub` entries in one sce
 - An `empty` fault on a text-mode action (no JSON output schema) does not recover. The retry
   policy does not retry it, and text has no repair.
 - A FILE tool cannot be stubbed. A RECORD tool that returns a list gives one record when stubbed.
+- A stubbed tool gives the same output to two records whose observed input is the same. The
+  mock seeds the output with the action name and the observed input of the record.
 - A tool that is not stubbed runs its code. If the code calls a service, the sandbox run calls it.
 - The mock cannot meet every rule (for example an `expression` rule). It logs a warning.
 - A sandbox run says nothing about cost, quota or real latency.

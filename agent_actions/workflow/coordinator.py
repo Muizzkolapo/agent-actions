@@ -12,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from rich.console import Console
+from rich.markup import escape
 
 from agent_actions.config import sandbox
 from agent_actions.config.defaults import StorageDefaults
@@ -77,6 +78,11 @@ class AgentWorkflow:
         sandbox.check_scenario_outputs(
             schema_service.get_all_schemas() if schema_service else {}, self.action_configs
         )
+        stubs = sandbox.stub_notice()
+        if stubs is not None:
+            self.console.print(
+                f"[bold yellow]SANDBOX[/bold yellow]: {escape(stubs)}", soft_wrap=True
+            )
         strip_unreachable_drops(self.action_configs)
 
         # Storage & services

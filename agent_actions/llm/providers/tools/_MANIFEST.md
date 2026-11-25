@@ -18,7 +18,7 @@ for tool-aware workflows.
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `ToolClient.invoke` | `tools/{workflow}/*.py` | Runs (the UDF that `impl` names, once per record; not in a sandbox run whose scenario stubs the action) | `actions[].impl` |
-| `ToolClient._stub` | `sandbox.yml`, or the file `--scenario` names | Reads (through the loaded scenario, in a sandbox run) | `actions.<tool>.stub`, `actions.<tool>.pin` |
+| `ToolClient._stub` | `sandbox.<workflow>.yml` or `sandbox.yml`, or the file `--scenario` names | Reads (through the loaded scenario, in a sandbox run) | `actions.<tool>.stub`, `actions.<tool>.pin` |
 
 ## Dependencies
 

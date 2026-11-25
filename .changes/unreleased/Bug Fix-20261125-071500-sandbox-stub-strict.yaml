@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The sandbox scenario key `stub` now takes only `true` or `false`. Before, a string such as "yes" or "true" and a number such as 1 were read as a boolean, so `stub: "yes"` stubbed the tool and `stub: 0` did not. The scenario check now refuses such a value, naming the file and the key, before any call.'
+time: 2026-11-25T07:15:00Z

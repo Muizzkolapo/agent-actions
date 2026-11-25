@@ -12,6 +12,7 @@ from typing import Any
 
 from rich.console import Console
 
+from agent_actions.config import sandbox
 from agent_actions.config.project_paths import (
     ProjectPaths,
     ProjectPathsFactory,
@@ -92,7 +93,7 @@ class WorkflowInspector:
         return self.action_configs
 
     def validate(self, verify_keys: bool = False) -> None:
-        """Run preflight, populate ``schema_service``, strip dead drops."""
+        """Run preflight and the sandbox scenario's output checks, then strip dead drops."""
         self.load()
         service = PreflightService(
             agent_name=self.agent_name,
@@ -104,6 +105,10 @@ class WorkflowInspector:
         )
         service.validate()
         self.schema_service = service.schema_service
+        sandbox.check_scenario_outputs(
+            self.schema_service.get_all_schemas() if self.schema_service else {},
+            self.action_configs,
+        )
         strip_unreachable_drops(self.action_configs)
 
     def get_levels(self) -> list[list[str]]:

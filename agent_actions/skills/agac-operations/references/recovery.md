@@ -77,7 +77,7 @@ Do not submit a provider batch by hand for a paused run. agent-actions does not 
 
 ## 5 Rehearse a recovery offline
 
-A sandbox scenario makes the offline mock fail on purpose. Use it to see a recovery work before a real run needs it. Write the faults in a scenario file, or in `sandbox.yml` at the project root.
+A sandbox scenario makes the offline mock fail on purpose. Use it to see a recovery work before a real run needs it. Write the faults in a scenario file, or in `sandbox.<workflow>.yml` (else `sandbox.yml`) at the project root.
 
 ```yaml
 # faults.yml

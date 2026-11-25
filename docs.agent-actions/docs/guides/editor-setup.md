@@ -445,7 +445,7 @@ The LSP starts at the opened file and goes up through the parent directories unt
 | `schema/*.{yml,yaml,json}` | Schema files |
 | `seed_data/`, `<seed_data_paths>/` | Seed files (`$file:X`) |
 
-The LSP does not read or check `sandbox.yml`, the scenario of [sandbox runs](./sandbox.md). To check it, run `agac inspect -w <workflow> --sandbox`. The command reads the scenario as a sandbox run does. It names each key that is wrong and calls no model.
+The LSP does not read or check `sandbox.yml` or `sandbox.<workflow>.yml`, the scenario of [sandbox runs](./sandbox.md). To check it, run `agac inspect -w <workflow> --sandbox`. The command reads the scenario as a sandbox run does. It names each key that is wrong and calls no model.
 
 ### Re-indexing
 

@@ -29,11 +29,13 @@ AUTO_APPROVE_KEY = "_sandbox_auto_approve"
 
 _active = False
 _follows_scenario = False
-# What --scenario named; None is the project's sandbox.yml, else the happy preset.
+# What --scenario named; None is the project's file for the workflow, else the happy preset.
 _scenario_flag: str | None = None
 _scenario: Scenario | None = None
 # What the scenario did over the whole command, across each load of the workflow.
 _tally: Tally | None = None
+# Whether this command printed the line naming the stubbed tools.
+_stubs_noted = False
 
 
 def is_active() -> bool:
@@ -54,33 +56,38 @@ def sandbox_mode(enabled: bool) -> Iterator[None]:
 @contextmanager
 def scenario_choice(source: str | None) -> Iterator[None]:
     """Have each workflow load in this block read the scenario *source* names."""
-    global _follows_scenario, _scenario_flag, _scenario, _tally
+    global _follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted
     from agent_actions.llm.providers.agac.scenario import Tally
 
-    previous = (_follows_scenario, _scenario_flag, _scenario, _tally)
+    previous = (_follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted)
     _follows_scenario, _scenario_flag, _scenario, _tally = True, source, None, Tally()
+    _stubs_noted = False
     try:
         yield
     finally:
-        _follows_scenario, _scenario_flag, _scenario, _tally = previous
+        _follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted = previous
 
 
 def load_scenario(
     project_root: Path | None,
     llm_actions: Mapping[str, str | None],
     tools: Mapping[str, Tool] | None = None,
+    workflow: str | None = None,
 ) -> None:
     """Read and check the scenario, before any call; a command that calls no mock reads none.
 
     *llm_actions* maps each LLM action to its version group's base name, or to None.
-    *tools* are the tool actions (``tool_actions``), which a scenario can stub.
+    *tools* are the tool actions (``tool_actions``), which a scenario can stub. With no
+    ``--scenario``, the project's file for *workflow* is read (``sandbox.<workflow>.yml``,
+    else ``sandbox.yml``).
     """
     global _scenario
     if not (_active and _follows_scenario):
         return
     from agent_actions.llm.providers.agac.scenario import load
 
-    _scenario = load(_scenario_flag, project_root or Path.cwd(), llm_actions, _tally, tools)
+    root = project_root or Path.cwd()
+    _scenario = load(_scenario_flag, root, llm_actions, _tally, tools, workflow)
 
 
 def check_scenario_outputs(schemas: Mapping[str, Any], action_configs: Mapping[str, Any]) -> None:
@@ -149,6 +156,27 @@ def stubs(action: str) -> bool:
 def stubbed_tools() -> list[str]:
     followed = scenario()
     return followed.stubbed() if followed is not None else []
+
+
+def stub_notice() -> str | None:
+    """The line that names the stubbed tool actions, and where a preset took the stubs from.
+
+    Once per command: None after the first line, so a ``--wait`` pass or a ``retry --all``
+    pass, which loads the workflow again, does not repeat it.
+    """
+    global _stubs_noted
+    followed = scenario()
+    stubbed = followed.stubbed() if followed is not None else []
+    if followed is None or not stubbed or _stubs_noted:
+        return None
+    _stubs_noted = True
+    names = ", ".join(stubbed)
+    line = f"the scenario stubs these tool actions, so their code does not run: {names}"
+    if followed.stubs_from is not None:
+        line += (
+            f" (the stubs come from {followed.stubs_from}, the rest from preset {followed.name})"
+        )
+    return line
 
 
 def scenario_summary(only_after_calls: bool = False) -> str | None:

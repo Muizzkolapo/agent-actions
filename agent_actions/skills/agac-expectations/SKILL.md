@@ -143,7 +143,7 @@ With `return_last`, a rule that fails on every record does not stop the run. Eve
 
 `agac run -w <workflow> -u tools --sandbox` answers each LLM action with the offline mock, with no API key and no cost. The mock reads the action's rules and builds an output that meets the deterministic ones. A sandbox run thus checks that the rules load, run and write a verdict, and that a guard on `overall_pass` routes the records.
 
-Script the paths in a scenario file (`sandbox.yml` at the project root, or `--scenario <file>`):
+Script the paths in a scenario file (`sandbox.<workflow>.yml` or `sandbox.yml` at the project root, or `--scenario <file>`):
 
 ```yaml
 actions:

@@ -37,7 +37,7 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `references/prompt-engineering.md` | `prompt_store/{workflow}.md` | Reads | — |
 | `references/database-io.md` | `agent_actions.yml` | Reads | `connections` |
 | `references/database-io.md` | `agent_config/{workflow}.yml` | Reads | `defaults.data_source`, `outputs[]` |
-| `references/sandbox-testing.md` | `sandbox.yml` | Reads | `seed`, `defaults`, `actions.<name>` (`errors`, `break_rules`, `pin`, `judge`, `latency_ms`, `stub`), `records[]`, `batch` |
+| `references/sandbox-testing.md` | `sandbox.yml`, `sandbox.<workflow>.yml` | Reads | `seed`, `defaults`, `actions.<name>` (`errors`, `break_rules`, `pin`, `judge`, `latency_ms`, `stub`), `records[]`, `batch` |
 | `references/sandbox-testing.md` | `agent_workflow/{workflow}/agent_io/sandbox/` | Reads (via `agac ... --sandbox`) | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Writes (deletes) | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/{store,target,sandbox}/` | Writes (`--full` wipes) | — |
@@ -46,7 +46,7 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `agac-operations/scripts/run_health.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Reads | — |
 | `agac-operations/scripts/run_health.py` | `agent_workflow/{workflow}/agent_io/sandbox/.agent_status.json` | Reads (`--sandbox`) | — |
 | `agac-operations/scripts/run_health.py` | `agac dispositions -w {workflow} --json` | Reads (runs the command, with `--sandbox` when given) | — |
-| `agac-operations/references/recovery.md`, `agac-expectations/SKILL.md` | `sandbox.yml` | Reads | `actions.<name>.errors`, `break_rules`, `judge`, `batch` |
+| `agac-operations/references/recovery.md`, `agac-expectations/SKILL.md` | `sandbox.yml`, `sandbox.<workflow>.yml` | Reads | `actions.<name>.errors`, `break_rules`, `judge`, `batch` |
 
 ## Dependencies
 
