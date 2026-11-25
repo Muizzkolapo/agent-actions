@@ -4,7 +4,7 @@ A scenario is ``sandbox.yml`` at the project root, a preset (``happy``, ``chaos`
 file named by ``--scenario``. It is read and checked once, before any call. Every decision
 is a hash of the seed, the action, the record's input, the attempt and the decision's name,
 so a parallel run makes the decisions a serial run makes, and two runs over the same input
-make the same decisions.
+make the same decisions. It also names the tool actions whose code does not run (``stub``).
 """
 
 from __future__ import annotations
@@ -39,6 +39,8 @@ ERROR_KINDS = (
 )
 # "calls" is counted to know that the mock answered; the summary line does not show it.
 COUNTS = ("errors", "rules_broken", "dropped", "calls")
+# The keys that describe a model call, which a tool action does not make.
+MODEL_CALL_KEYS = ("latency_ms", "judge", "errors", "break_rules", "error")
 
 
 def _rate(value: float) -> float:
@@ -114,6 +116,11 @@ class ActionRules(_Strict):
     pin: dict[str, Any] | None = None
 
 
+class NamedActionRules(ActionRules):
+    # A tool action only: its code does not run, and the mock builds its output.
+    stub: bool | None = None
+
+
 class RecordActionRules(ActionRules):
     # Fails every attempt with this kind: ``errors`` with rate 1 and this one kind.
     error: Kind | None = None
@@ -134,7 +141,7 @@ class BatchRules(_Strict):
 class _File(_Strict):
     seed: int = 0
     defaults: Defaults = Field(default_factory=Defaults)
-    actions: dict[str, ActionRules] = Field(default_factory=dict)
+    actions: dict[str, NamedActionRules] = Field(default_factory=dict)
     records: list[RecordRule] = Field(default_factory=list)
     batch: BatchRules = Field(default_factory=BatchRules)
 
@@ -192,6 +199,15 @@ class Tally:
 
 
 @dataclass(frozen=True)
+class Tool:
+    """A tool action of the workflow, as a scenario is checked against it."""
+
+    group: str | None = None
+    # Why the mock cannot build this tool's output; None when it can.
+    cannot_stub: str | None = None
+
+
+@dataclass(frozen=True)
 class CallRules:
     """What one call of an action follows, after the precedence is applied."""
 
@@ -209,12 +225,14 @@ class Scenario:
         data: _File,
         groups: Mapping[str, str | None],
         tally: Tally | None = None,
+        tools: Mapping[str, Tool] | None = None,
     ) -> None:
         self.name = name
         self.seed = data.seed
         self.batch = data.batch
         self._data = data
-        self._groups = dict(groups)
+        self._tools = dict(tools or {})
+        self._groups = {**groups, **{tool: spec.group for tool, spec in self._tools.items()}}
         self._tally = tally or Tally()
         self._store: StorageBackend | None = None
         self._attempts: dict[str, int] = {}
@@ -245,6 +263,14 @@ class Scenario:
             return action
         group = self._groups.get(action)
         return group if group is not None and group in names else None
+
+    def stubs(self, action: str) -> bool:
+        """Whether the mock builds the output of tool *action* and its code does not run."""
+        key = self._named(self._data.actions, action)
+        return key is not None and bool(self._data.actions[key].stub)
+
+    def stubbed(self) -> list[str]:
+        return [tool for tool in self._tools if self.stubs(tool)]
 
     def rules_for(self, action: str, context: Any) -> CallRules:
         """A matched record's rules over the action's over the defaults, each key whole."""
@@ -366,20 +392,12 @@ class Scenario:
     def check_outputs(self, declared: Mapping[str, Collection[str] | None]) -> None:
         """Refuse a ``pin`` or ``break_rules`` that an action's output cannot take.
 
-        *declared* holds the output schema fields of each LLM action, or None for an
-        action with no JSON output schema (text mode). An action whose fields are not
-        known before it runs is not in it.
+        *declared* holds the output schema fields of each LLM action and each stubbed
+        tool action, or None for an action with no JSON output schema (text mode). An
+        action whose fields are not known before it runs is not in it.
         """
-        entries: list[tuple[str, str, ActionRules]] = [
-            (f"actions.{name}", name, rules) for name, rules in self._data.actions.items()
-        ]
-        entries += [
-            (f"records.{index}.actions.{name}", name, rules)
-            for index, record in enumerate(self._data.records)
-            for name, rules in record.actions.items()
-        ]
         problems: list[str] = []
-        for where, name, rules in entries:
+        for where, name, rules in self._entries():
             keys = [key for key in ("pin", "break_rules") if getattr(rules, key) is not None]
             if not keys:
                 continue
@@ -403,9 +421,60 @@ class Scenario:
             label = f"preset {self.name}" if self.name in PRESETS else self.name
             raise _refusal(label, list(dict.fromkeys(problems)))
 
+    def _entries(self) -> list[tuple[str, str, ActionRules]]:
+        """Each entry that names an action: its key, the name and its rules."""
+        entries: list[tuple[str, str, ActionRules]] = [
+            (f"actions.{name}", name, rules) for name, rules in self._data.actions.items()
+        ]
+        entries += [
+            (f"records.{index}.actions.{name}", name, rules)
+            for index, record in enumerate(self._data.records)
+            for name, rules in record.actions.items()
+        ]
+        return entries
+
     def _actions_named(self, name: str) -> list[str]:
-        """The LLM actions an entry named *name* applies to: that one, or each version."""
+        """The actions an entry named *name* applies to: that one, or each version."""
         return [action for action, group in self._groups.items() if name in (action, group)]
+
+    def tool_problems(self) -> list[str]:
+        """Each key a tool action cannot take, and each ``stub`` the run cannot follow."""
+        problems: list[str] = []
+        for where, name, rules in self._entries():
+            named = self._actions_named(name)
+            tools = [action for action in named if action in self._tools]
+            stub = getattr(rules, "stub", None)
+            if not tools:
+                if stub is not None and named:
+                    problems.append(
+                        f"{where}.stub: '{name}' is not a tool action; the mock answers an "
+                        "LLM action already, and stub is for a tool action"
+                    )
+                continue
+            problems += [
+                f"{where}.{key}: '{name}' is a tool action, and {key} describes a model call"
+                for key in MODEL_CALL_KEYS
+                if getattr(rules, key, None) is not None
+            ]
+            if stub:
+                problems += [
+                    f"{where}.stub: tool action '{tool}' {self._tools[tool].cannot_stub}"
+                    for tool in tools
+                    if self._tools[tool].cannot_stub is not None
+                ]
+            if rules.pin is not None:
+                problems += [
+                    f"{where}.pin: tool action '{tool}' is not stubbed, so its own code "
+                    "writes its output; set stub: true for it under actions"
+                    for tool in tools
+                    if not self.stubs(tool)
+                ]
+        problems += [
+            f"batch.fail: '{name}' is a tool action, and a tool action has no batch"
+            for name in self._data.batch.fail
+            if any(action in self._tools for action in self._actions_named(name))
+        ]
+        return problems
 
 
 def load(
@@ -413,8 +482,9 @@ def load(
     project_root: Path,
     groups: Mapping[str, str | None],
     tally: Tally | None = None,
+    tools: Mapping[str, Tool] | None = None,
 ) -> Scenario:
-    """The scenario *source* names, checked against the workflow's LLM actions.
+    """The scenario *source* names, checked against the workflow's LLM and tool actions.
 
     None is ``sandbox.yml`` at *project_root* when it exists, else ``happy``. *groups*
     maps each LLM action to the base name of its version group, or to None.
@@ -425,7 +495,7 @@ def load(
         if source is None:
             path = project_root / SCENARIO_FILE
             if not path.is_file():
-                return load("happy", project_root, groups, tally)
+                return load("happy", project_root, groups, tally, tools)
             name = SCENARIO_FILE
         else:
             path = Path(source)
@@ -444,10 +514,11 @@ def load(
         data = _File.model_validate(raw)
     except ValidationError as e:
         raise _refusal(label, [_problem(error) for error in e.errors()]) from None
-    problems = _unknown_names(data, groups)
+    scenario = Scenario(name, data, groups, tally, tools)
+    problems = _unknown_names(data, groups, tools or {}) + scenario.tool_problems()
     if problems:
         raise _refusal(label, problems)
-    return Scenario(name, data, groups, tally)
+    return scenario
 
 
 _HINT = (
@@ -474,6 +545,8 @@ def _read(path: Path, label: str) -> Any:
 def _problem(error: Any) -> str:
     key = ".".join(str(part) for part in error["loc"]) or "(file)"
     if error["type"] == "extra_forbidden":
+        if error["loc"][-1] == "stub":
+            return f"{key}: stub is set for one tool action, under actions.<tool action>"
         return f"{key}: unknown key"
     return f"{key}: {str(error['msg']).removeprefix('Value error, ')}"
 
@@ -486,13 +559,19 @@ def _refusal(label: str, problems: list[str]) -> ConfigurationError:
     )
 
 
-def _unknown_names(data: _File, groups: Mapping[str, str | None]) -> list[str]:
+def _unknown_names(
+    data: _File, groups: Mapping[str, str | None], tools: Mapping[str, Tool]
+) -> list[str]:
     from agent_actions.expectations import registry
 
     known = registry.known_types()
-    names = set(groups) | {group for group in groups.values() if group is not None}
-    actions = ", ".join(groups) or "none"
-    why = f"names no LLM action of the workflow (its LLM actions: {actions})"
+    every = {**groups, **{tool: spec.group for tool, spec in tools.items()}}
+    names = set(every) | {group for group in every.values() if group is not None}
+    why = (
+        "names no LLM action or tool action of the workflow "
+        f"(its LLM actions: {', '.join(groups) or 'none'}; "
+        f"its tool actions: {', '.join(tools) or 'none'})"
+    )
     problems: list[str] = []
     named: list[tuple[str, BreakRules | None]] = [("defaults", data.defaults.break_rules)]
     for name, entry in data.actions.items():
