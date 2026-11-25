@@ -1,0 +1,166 @@
+"""`agac sandbox check` reads a strict expectations file and compares it with a sandbox run.
+
+The file states only what a sandbox run makes deterministic: the exit code, the counts of
+the scenario line, and per action its status and record counts. A key the check does not
+know is refused by name, as a scenario key is, so a typo cannot pass as a check that holds.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from agent_actions.cli.sandbox_check import (
+    Actual,
+    ExpectationsError,
+    compare,
+    expectations_path,
+    load_expected,
+    parse_expected,
+    report,
+)
+
+ACTIONS = ["read_ticket", "classify"]
+
+
+def _actual(**over) -> Actual:
+    values = {
+        "exit_code": 0,
+        "scenario": {"errors": 8, "rules_broken": 4, "dropped": 2, "calls": 30},
+        "statuses": {"read_ticket": "completed", "classify": "completed"},
+        "counts": {
+            "read_ticket": {"records": 5, "success": 5, "filtered": 0},
+            "classify": {"records": 4, "success": 4, "filtered": 1},
+        },
+    }
+    values.update(over)
+    return Actual(**values)
+
+
+def _rows(data: dict, actual: Actual | None = None):
+    return compare(parse_expected(data, "sandbox_expected.yml"), actual or _actual(), ACTIONS)
+
+
+def test_each_stated_value_is_one_row_in_the_order_of_the_file():
+    rows = _rows(
+        {
+            "exit_code": 0,
+            "scenario": {"errors": 8, "batch_results_dropped": 2},
+            "actions": {"classify": {"status": "completed", "filtered": 1}},
+        }
+    )
+
+    assert [(row.what, row.expected, row.actual) for row in rows] == [
+        ("exit code", 0, 0),
+        ("scenario errors", 8, 8),
+        ("scenario batch_results_dropped", 2, 2),
+        ("classify status", "completed", "completed"),
+        ("classify filtered", 1, 1),
+    ]
+    assert all(row.holds for row in rows)
+
+
+def test_a_value_that_differs_is_a_row_that_does_not_hold():
+    rows = _rows({"actions": {"classify": {"filtered": 2}}})
+
+    assert [(row.what, row.holds) for row in rows] == [("classify filtered", False)]
+
+
+def test_a_count_the_store_does_not_hold_is_none_and_does_not_hold():
+    rows = _rows({"actions": {"classify": {"deferred": 0}}})
+
+    assert rows[0].actual is None
+    assert not rows[0].holds
+
+
+def test_no_scenario_line_makes_each_scenario_count_none():
+    rows = _rows({"scenario": {"errors": 0}}, _actual(scenario=None))
+
+    assert (rows[0].actual, rows[0].holds) == (None, False)
+
+
+def test_an_action_the_workflow_does_not_have_is_refused():
+    with pytest.raises(ExpectationsError, match="clasify is not an action of the workflow"):
+        _rows({"actions": {"clasify": {"success": 4}}})
+
+
+def test_with_no_action_status_the_rows_are_reported_and_no_name_is_refused():
+    actual = _actual(exit_code=1, statuses={}, counts={})
+
+    rows = compare(
+        parse_expected({"exit_code": 0, "actions": {"clasify": {"success": 4}}}, "f"),
+        actual,
+        [],
+    )
+
+    assert [(row.what, row.actual) for row in rows] == [
+        ("exit code", 1),
+        ("clasify success", None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        ({"exit_code": 0, "exit": 0}, "unknown key 'exit'"),
+        ({"scenario": {"errors": 1, "dropped": 0}}, "scenario: unknown key 'dropped'"),
+        ({"actions": {"classify": {"sucess": 4}}}, "actions.classify: unknown key 'sucess'"),
+        ({"actions": {"classify": {"status": "done"}}}, "'done' is not one of completed"),
+        ({"actions": {"classify": {"success": -1}}}, "-1 is not a whole number 0 or more"),
+        ({"actions": {"classify": {"success": True}}}, "True is not a whole number"),
+        ({"actions": {"classify": {"success": "4"}}}, "'4' is not a whole number"),
+        ({"exit_code": 1.5}, "exit_code: 1.5 is not a whole number"),
+        ({"actions": ["classify"]}, "actions: must be a mapping"),
+        ({"actions": {"classify": 4}}, "actions.classify: must be a mapping"),
+        ([], "the file must be a mapping"),
+        ({}, "the file states no expectation"),
+        (None, "the file must be a mapping"),
+    ],
+)
+def test_a_file_the_check_cannot_follow_is_refused_by_name(data, message):
+    with pytest.raises(ExpectationsError, match=message):
+        parse_expected(data, "sandbox_expected.yml")
+
+
+def test_a_missing_file_is_refused(tmp_path):
+    with pytest.raises(ExpectationsError, match="sandbox_expected.yml: no such file"):
+        load_expected(tmp_path / "sandbox_expected.yml")
+
+
+def test_a_file_that_is_not_yaml_is_refused(tmp_path):
+    path = tmp_path / "sandbox_expected.yml"
+    path.write_text("actions: [\n")
+
+    with pytest.raises(ExpectationsError, match="not valid YAML"):
+        load_expected(path)
+
+
+def test_the_workflow_s_own_file_is_read_before_the_shared_one(tmp_path: Path):
+    assert expectations_path(tmp_path, "wf", None) == tmp_path / "sandbox_expected.yml"
+
+    (tmp_path / "sandbox_expected.wf.yml").write_text("exit_code: 0\n")
+
+    assert expectations_path(tmp_path, "wf", None) == tmp_path / "sandbox_expected.wf.yml"
+    assert expectations_path(tmp_path, "wf", "other.yml") == tmp_path / "other.yml"
+    assert expectations_path(tmp_path, "wf", "/abs/x.yml") == Path("/abs/x.yml")
+
+
+def test_the_report_passes_when_every_row_holds(capsys):
+    code = report(_rows({"exit_code": 0, "scenario": {"errors": 8}}), "wf", "f.yml")
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "PASS: all 2 expectations hold." in out
+
+
+def test_the_report_names_each_row_that_does_not_hold(capsys):
+    rows = _rows({"exit_code": 3, "actions": {"classify": {"filtered": 2, "success": 4}}})
+
+    code = report(rows, "wf", "f.yml")
+
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "FAIL: 2 of 3 expectations do not hold:" in out
+    assert "  exit code: expected 3, got 0" in out
+    assert "  classify filtered: expected 2, got 1" in out

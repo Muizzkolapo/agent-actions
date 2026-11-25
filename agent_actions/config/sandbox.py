@@ -36,6 +36,8 @@ _scenario: Scenario | None = None
 _tally: Tally | None = None
 # Whether this command printed the line naming the stubbed tools.
 _stubs_noted = False
+# The counts of the last scenario line this command printed.
+_reported: dict[str, int] | None = None
 
 
 def is_active() -> bool:
@@ -56,16 +58,16 @@ def sandbox_mode(enabled: bool) -> Iterator[None]:
 @contextmanager
 def scenario_choice(source: str | None) -> Iterator[None]:
     """Have each workflow load in this block read the scenario *source* names."""
-    global _follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted
+    global _follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted, _reported
     from agent_actions.llm.providers.agac.scenario import Tally
 
-    previous = (_follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted)
+    previous = (_follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted, _reported)
     _follows_scenario, _scenario_flag, _scenario, _tally = True, source, None, Tally()
-    _stubs_noted = False
+    _stubs_noted, _reported = False, None
     try:
         yield
     finally:
-        _follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted = previous
+        (_follows_scenario, _scenario_flag, _scenario, _tally, _stubs_noted, _reported) = previous
 
 
 def load_scenario(
@@ -184,13 +186,20 @@ def scenario_summary(only_after_calls: bool = False) -> str | None:
 
     With *only_after_calls*, None when the mock answered no call.
     """
+    global _reported
     if _scenario is None or not _active or _tally is None:
         return None
     if only_after_calls and not _tally.calls:
         return None
     line = _tally.line(_scenario.name)
+    _reported = _tally.counts()
     _tally.clear()
     return line
+
+
+def reported_counts() -> dict[str, int] | None:
+    """The counts of the last scenario line, in this ``scenario_choice`` block; None before one."""
+    return _reported
 
 
 def wait_between_passes() -> float:

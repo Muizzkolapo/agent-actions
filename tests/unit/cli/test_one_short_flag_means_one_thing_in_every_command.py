@@ -58,6 +58,7 @@ def test_the_commands_that_take_a_workflow_are_the_ones_known():
         "records",
         "retry",
         "run",
+        "sandbox check",
         "schema",
         "status",
         "traces",

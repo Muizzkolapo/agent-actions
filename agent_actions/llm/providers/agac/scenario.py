@@ -186,6 +186,10 @@ class Tally:
         with self._lock:
             self._counts = dict.fromkeys(COUNTS, 0)
 
+    def counts(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._counts)
+
     @property
     def calls(self) -> int:
         """The record attempts the mock counted: online calls and batch submissions."""
@@ -193,8 +197,7 @@ class Tally:
             return self._counts["calls"]
 
     def line(self, name: str) -> str:
-        with self._lock:
-            counts = dict(self._counts)
+        counts = self.counts()
         return (
             f"SANDBOX scenario {name}: {counts['errors']} errors, "
             f"{counts['rules_broken']} rules broken, {counts['dropped']} batch results dropped"
