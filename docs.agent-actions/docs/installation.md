@@ -33,6 +33,17 @@ pip install agent-actions
 pipx install agent-actions
 ```
 
+### Database drivers
+
+A workflow can read from and write to a database (see [Databases](./reference/data-io/databases.md)). `sqlite` needs nothing more. Each other database type needs its driver. Install the driver as an extra with the same name as the type:
+
+```bash
+pip install 'agent-actions[postgres]'
+pip install 'agent-actions[snowflake,bigquery]'   # more than one type
+```
+
+The extras are `duckdb`, `postgres`, `mysql`, `redshift`, `snowflake`, `bigquery` and `databricks`.
+
 ## Verify Installation
 
 ```bash

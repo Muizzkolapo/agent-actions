@@ -212,8 +212,9 @@ before it clears anything. An output naming an action the workflow does not run,
 connection the project does not declare or whose driver is not installed, a table,
 `key` or `carry` name that is not a plain name, or a table another output writes on
 the same connection stops the run at once. Tables are written when `agac run` or `agac retry` finishes with
-every action complete. If the write fails, the results are still in the store. Write them
-again, without calling a model, with:
+every action complete. A [sandbox run](../../guides/sandbox.md) writes no table. If the write
+fails, the results are still in the store. Write them again, without calling a model, with
+[`agac export`](../cli/export.md):
 
 ```bash
 agac export -w my_workflow
@@ -223,3 +224,10 @@ agac export -w my_workflow -A classify_ticket    # one action's table
 `-A` must name an action that has an output. An export waits for no run: while
 `agac run` or `agac retry` holds the workflow, it is refused, since the results are
 still being stored.
+
+## See also
+
+- [`agac export`](../cli/export.md): write the tables again, with no model call
+- [`agac run --refresh-input`](../cli/run.md#options): read the query again
+- [Editor Integration](../../guides/editor-setup.md): go to the connection or the action that an output names
+- The [`ticket_triage_warehouse`](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/ticket_triage_warehouse) example, which runs offline on SQLite
