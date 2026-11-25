@@ -103,6 +103,14 @@ class RetryFilterCommand:
             return
 
         below = {action: self._readers_of(backend, action) for action, _ in targets}
+        # Only the cascade reaches a reader for a record failed above it, so a failure
+        # there beside the record's tombstone is derived and goes with it.
+        tombstoned = {
+            (reader, record_id)
+            for action, record_id in targets
+            for reader in below[action]
+            if self._holds_tombstone(backend, reader, record_id)
+        }
         stored = {
             action: {guid for guid, _ in backend.target_row_identities(action)}
             for action in dict.fromkeys(action for action, _ in targets)
@@ -128,7 +136,7 @@ class RetryFilterCommand:
         # The manifest first: a restore replaying it after an interruption here
         # then completes the filter instead of undoing it.
         manifest_changed = manifest is not None and self._filter_the_manifest(
-            manifest_file, manifest, rows, below
+            manifest_file, manifest, rows, below, tombstoned
         )
 
         backend.set_dispositions_batch(rows)
@@ -138,13 +146,17 @@ class RetryFilterCommand:
                 backend.clear_disposition(
                     reader, disposition=DISPOSITION_UNPROCESSED, record_id=record_id
                 )
+                if (reader, record_id) in tombstoned:
+                    for failure in sorted(FAILURE_DISPOSITIONS):
+                        backend.clear_disposition(reader, disposition=failure, record_id=record_id)
                 backend.clear_checkpoint_records(reader, source_guids={record_id})
                 dropped += self._drop_tombstones(backend, reader, record_id)
 
         # Deferred import: avoid circular import at module load time.
         from agent_actions.workflow.managers.state import ActionStatus
 
-        for action in dict.fromkeys(action for action, _ in targets):
+        touched = [action for action, _ in targets] + [reader for reader, _ in tombstoned]
+        for action in dict.fromkeys(touched):
             if state_mgr.get_status(
                 action
             ) == ActionStatus.COMPLETED_WITH_FAILURES and not backend.get_failed_items(action):
@@ -236,6 +248,14 @@ class RetryFilterCommand:
         return found
 
     @staticmethod
+    def _holds_tombstone(backend, action: str, record_id: str) -> bool:
+        return any(
+            row.get("source_guid") == record_id and row.get("_tombstone")
+            for relative_path in backend.list_target_files(action)
+            for row in backend.read_target_for_rewrite(action, relative_path)
+        )
+
+    @staticmethod
     def _drop_tombstones(backend, action: str, record_id: str) -> int:
         """Take *record_id*'s tombstones out of *action*'s output, returning how many."""
         dropped = 0
@@ -257,6 +277,7 @@ class RetryFilterCommand:
         manifest: dict[str, Any],
         rows: list[DispositionRow],
         below: dict[str, list[str]],
+        tombstoned: set[tuple[str, str]],
     ) -> bool:
         filtered = {
             (action, record_id): {
@@ -277,7 +298,10 @@ class RetryFilterCommand:
             key = (row.get("action_name"), row.get("record_id"))
             if key in filtered:
                 kept.append(filtered[key])
-            elif not (key in cascaded and row.get("disposition") == DISPOSITION_UNPROCESSED):
+            elif key not in cascaded or not (
+                row.get("disposition") == DISPOSITION_UNPROCESSED
+                or (key in tombstoned and row.get("disposition") in FAILURE_DISPOSITIONS)
+            ):
                 kept.append(row)
         if kept == manifest.get("dispositions", []):
             return False

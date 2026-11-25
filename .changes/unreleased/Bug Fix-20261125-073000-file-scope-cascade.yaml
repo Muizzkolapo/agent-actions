@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: A FILE tool or HITL action below a record that an LLM action failed with a parse error (a refusal, an empty answer or invalid JSON) now leaves the record unprocessed with reason upstream_unprocessed, as a RECORD action does. Before, it stored failed for the record with "context_scope.observe fields ... not found in this record", and every agac retry exited 3. agac retry --filter <action>:<record_id> now also removes a failed or exhausted row that an action below holds beside the tombstone of the record, in the store and in the retry manifest, and an action left with no failures reads completed, so a store an older run left with the wrong row is repaired.
+time: 2026-11-25T07:30:00Z
