@@ -320,6 +320,19 @@ def augment_data(data: dict, **kwargs) -> dict:
     return data
 ```
 
+### Stub a Tool That Calls a Service in a Sandbox Run
+
+`agac run --sandbox` runs each tool action with its own code. A tool that calls a web API or a database makes the sandbox run slow, and the run is not offline. Stub that tool in the scenario file of the project. Its function is not called, and the mock builds its output from its `schema:`:
+
+```yaml
+# sandbox.yml
+actions:
+  retrieve_candidates:
+    stub: true
+```
+
+Agent Actions still imports the module of a stubbed tool, so do not call the service at the top level of the module. You cannot stub a tool with `granularity: File`. A real run does not read the scenario file. See [Stub a tool action](../../guides/sandbox.md#stub-a-tool-action).
+
 ### Unique Function Names
 
 Each tool name must be unique across all files. If necessary, use the domain as a prefix of the name:

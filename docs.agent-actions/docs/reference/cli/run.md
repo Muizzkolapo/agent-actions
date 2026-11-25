@@ -59,8 +59,8 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--wait` | While the run is paused for a batch, wait and run the workflow again until no batch is open. Then exit with the code of the final status. See [Wait for batch jobs](#wait-for-batch-jobs) |
 | `--poll SECONDS` | With `--wait`: the time between two checks of the batch jobs, in whole seconds. The minimum is 1 (default: 60). With `--sandbox`, the default is no wait. See [Wait for batch jobs](#wait-for-batch-jobs) |
 | `--wait-timeout SECONDS` | With `--wait`: stop the wait when this time after the start of the run is over, and exit 4. The batch jobs stay open for the next run (default: no limit) |
-| `--sandbox` | Run the workflow with no model call and no API key. The mock provider answers each LLM action, tool actions run their own code, and HITL actions approve each record. The run writes to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`, and does not read or change the output of real runs. It does not write the declared `outputs:`. See [Sandbox Runs](../../guides/sandbox.md) |
-| `--scenario happy\|chaos\|PATH` | With `--sandbox`: the scenario that the mock follows, a preset or the path of a scenario file. Without this option, the run uses `sandbox.yml` at the project root, else `happy`. Without `--sandbox`, the option is an error. See [The scenario file](../../guides/sandbox.md#scenario) |
+| `--sandbox` | Run the workflow with no model call and no API key. The mock provider answers each LLM action, tool actions run their own code, and HITL actions approve each record. A tool action that the scenario stubs does not run its code. The run writes to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`, and does not read or change the output of real runs. It does not write the declared `outputs:`. See [Sandbox Runs](../../guides/sandbox.md) |
+| `--scenario happy\|chaos\|PATH` | With `--sandbox`: the scenario that the mock follows, a preset or the path of a scenario file. The scenario also names the tool actions that it stubs. Without this option, the run uses `sandbox.yml` at the project root, else `happy`. Without `--sandbox`, the option is an error. See [The scenario file](../../guides/sandbox.md#scenario) |
 
 ## Exit Codes {/* #exit-codes */}
 
@@ -172,6 +172,15 @@ A [scenario file](../../guides/sandbox.md#scenario) makes the mock fail, change 
 
 ```bash
 agac run -w my_workflow --sandbox --scenario chaos
+```
+
+A tool action runs its own code in a sandbox run. If the tool calls a service, the run is slow and not offline. To prevent that, stub the tool in the scenario file: with `stub: true`, the code of the tool does not run, and the mock builds its output from its output schema. The run names the stubbed tools on a `SANDBOX` line, and the line of each stubbed tool ends with `(stubbed)`. See [Stub a tool action](../../guides/sandbox.md#stub-a-tool-action).
+
+```yaml
+# sandbox.yml
+actions:
+  retrieve_candidates:
+    stub: true
 ```
 
 ## Run a Smaller Version of a Project {/* #running-a-project-smaller-than-it-is */}

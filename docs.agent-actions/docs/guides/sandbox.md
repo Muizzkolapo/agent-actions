@@ -6,7 +6,7 @@ sidebar_position: 6
 
 # Sandbox Runs
 
-`agac run --sandbox` runs a workflow end to end with no model call and no API key. The offline mock provider, `agac-provider`, answers each LLM action. You do not edit the workflow. The output of a sandbox run is kept apart from the output of real runs.
+`agac run --sandbox` runs a workflow end to end with no model call and no API key. The offline mock provider, `agac-provider`, answers each LLM action. You do not edit the workflow. The output of a sandbox run is kept apart from the output of real runs. A tool action runs its own code, unless the scenario [stubs it](#stub-a-tool-action).
 
 Use a sandbox run to test the connections of a workflow: the dependencies, guards, `context_scope`, versions, routers, loops, batch actions, repair loops and HITL actions. A sandbox run takes seconds and costs nothing. It does not wait for a provider. See [No wait for a provider](#no-wait).
 
@@ -14,7 +14,7 @@ Use a sandbox run to test the connections of a workflow: the dependencies, guard
 agac run -w my_workflow --sandbox
 ```
 
-The run prints `SANDBOX` on stderr when it starts. After its result, it prints a `SANDBOX run` line. At the end of the command, it prints one `SANDBOX scenario` line that counts the faults of the [scenario](#scenario).
+The run prints `SANDBOX` on stderr when it starts. When the scenario stubs tool actions, a second `SANDBOX` line names them. After its result, the run prints a `SANDBOX run` line. At the end of the command, it prints one `SANDBOX scenario` line that counts the faults of the [scenario](#scenario).
 
 ## What Changes in a Sandbox Run
 
@@ -23,7 +23,7 @@ Agent Actions loads the workflow as for a real run. Then it changes these action
 | Action | In a sandbox run |
 |--------|------------------|
 | LLM action | The mock provider answers it. The action keeps its `model_name`, which the traces and `inspect` show |
-| Tool action | Runs its own code, as in a real run |
+| Tool action | Runs its own code, as in a real run. A tool action that the scenario stubs does not run: the mock builds its output. See [Stub a tool action](#stub-a-tool-action) |
 | HITL action | Approves each record and opens no review UI. The records get `hitl_status: approved` and the comment `auto-approved (sandbox)` |
 
 Preflight checks the changed workflow. A key that is not set is not an error, because the mock reads no key. The configuration must still be valid for its real vendor. For example, an action on a vendor that takes a key must name `api_key`, as for a real run.
@@ -52,7 +52,7 @@ A judge passes by default in a sandbox run. A [scenario](#scenario) can set the 
 
 ## The Scenario File {/* #scenario */}
 
-A scenario makes the mock fail, change or delay some calls on purpose. Use it to test the recovery paths of a workflow: retry, repair, the failure hint and `agac retry`. The scenario comes from one of these sources:
+A scenario makes the mock fail, change or delay some calls on purpose. Use it to test the recovery paths of a workflow: retry, repair, the failure hint and `agac retry`. A scenario also names the tool actions that do not run their own code. See [Stub a tool action](#stub-a-tool-action). The scenario comes from one of these sources:
 
 | Command | Scenario |
 |---------|----------|
@@ -60,7 +60,7 @@ A scenario makes the mock fail, change or delay some calls on purpose. Use it to
 | `agac run -w my_workflow --sandbox --scenario chaos` | The `happy` or the `chaos` preset |
 | `agac run -w my_workflow --sandbox --scenario path/to/faults.yml` | That file |
 
-`agac retry --sandbox` takes `--scenario` too. Without `--sandbox`, `--scenario` is an error. The read commands do not read a scenario.
+`agac retry --sandbox` and `agac inspect --sandbox` take `--scenario` too. Without `--sandbox`, `--scenario` is an error. The other read commands do not read a scenario.
 
 Agent Actions reads and checks the scenario when it loads the workflow, before it calls the mock. A problem stops the command. The message names the scenario file (`sandbox.yml` or the path you gave) and each key that is wrong.
 
@@ -79,10 +79,14 @@ actions:
     errors: {rate: 0.05, kinds: [rate_limit, timeout, refusal, truncated, empty]}
   classify:
     pin: {label: urgent}        # a fixed value for a field of the output schema
+  search_catalog:               # a tool action, or the base name of a version group
+    stub: true                  # the code of the tool does not run; default false
+    pin: {origin: stubbed}      # optional; only with stub: true
 records:
   - match: {source.page_id: p3} # dotted paths into the input of the record
     actions:
       extract: {error: refusal} # this record fails each attempt with a refusal
+      search_catalog: {pin: {total_found: 0}}
 batch:
   polls_until_complete: 0       # status checks that report the batch in progress
   complete_after_seconds: 0     # seconds before a status check can complete the batch
@@ -99,24 +103,85 @@ batch:
 | `break_rules` | With the probability `rate`, the mock changes the record so that the real check of a rule fails. `rules: all` breaks one error-severity rule of the action. An action with no such rule is not changed. A list of rule types breaks each rule of those types |
 | `heal_on_attempt` | The attempt of a record from which a fault stops. With `heal_on_attempt: 2`, the first attempt fails and the next attempt passes: the retry, the repair round or `agac retry`. `null` never stops the fault |
 | `pin` | Sets each named field of the record to the value. The field must be in the output schema of the action. The value is kept also when the schema or a rule refuses it. The mock then logs one warning for each action and field |
+| `stub` | Only under `actions`, for a tool action. With `stub: true`, the code of the tool does not run in a sandbox run, and the mock builds the output of the tool. See [Stub a tool action](#stub-a-tool-action) |
 | `records` | Each entry gives the rules of the records that its `match` selects. `error: <kind>` makes each attempt of the record fail with that kind. An entry can also set `errors`, `break_rules`, `pin` and `latency_ms` |
 | `batch` | The timing and the faults of the mock batch provider |
 
 A record entry takes precedence over `actions`, and `actions` takes precedence over `defaults`. Each key replaces the key below it whole. For example, the `errors` of an action replace the `errors` of `defaults`.
 
-A name under `actions`, under `records[].actions` and in `batch.fail` is an LLM action or the base name of a version group. The base name applies to each version (`score` applies to `score_1` and `score_2`). An entry for the exact name of a version takes precedence over an entry for its base name.
+A name under `actions` and under `records[].actions` is an LLM action, a tool action or the base name of a version group. A name in `batch.fail` is an LLM action or the base name of a version group. The base name applies to each version (`score` applies to `score_1` and `score_2`). An entry for the exact name of a version takes precedence over an entry for its base name.
+
+The keys of `defaults` apply to LLM actions only. A tool action takes only `stub` and `pin`.
 
 `match` reads the whole input of the record: each field that the action observes, also a field that its prompt prints. For example, `match: {source.page_id: p3}` selects the record whose `source.page_id` is `p3`.
 
 The checks refuse these entries:
 
 - An unknown key.
-- An action name that is not an LLM action or the base name of a version group.
+- An action name that is not an LLM action, a tool action or the base name of a version group.
 - An unknown error kind, or an unknown rule type in `break_rules.rules`.
 - A rate outside 0 to 1, a `heal_on_attempt` less than 2, or a `latency_ms` range whose minimum is more than its maximum.
 - `judge` in a `records` entry. A judge call answers no record, so set `judge` under `actions` or `defaults`.
 - A `pin` field that the output schema of the action does not declare.
 - `pin` or `break_rules` under `actions` or `records` for an action with no JSON output schema (text mode). The `break_rules` of `defaults` do not apply to such an action.
+- A `stub` or a key of a tool action that the run cannot follow. See [What the checks refuse for a tool action](#stub-refusals).
+
+### Stub a Tool Action {/* #stub-a-tool-action */}
+
+By default, a tool action runs its own code in a sandbox run. That is correct for a tool that only changes data. Some tools call a service: a web API, a database, a search index. Such a tool makes the sandbox run slow, and the run is not offline. Stub that tool in the scenario:
+
+```yaml
+# sandbox.yml
+actions:
+  retrieve_candidates:
+    stub: true              # the code of the tool does not run; the mock builds its output
+    pin: {source: stubbed}  # optional, as for an LLM action
+records:
+  - match: {source.title: Dune}
+    actions: {retrieve_candidates: {pin: {total_found: 0}}}
+```
+
+With `stub: true`, a sandbox run does not call the function of the tool for any record. The mock builds one output record for each input record, from the output schema of the tool (`schema:`). It builds the record as it builds the answer of an LLM action:
+
+1. Each field gets a value that its schema keywords accept (`type`, `enum`, `pattern`, `minimum` and the others).
+2. The record meets the expectation rules of the action, if the action has an `expect:` block.
+3. An output field copies the input field of the same name, when a `context_scope.observe` reference names that field exactly. For example, with `observe: [source.title]`, the output field `title` gets the value of `source.title`.
+4. `pin` sets its fields. A `records` entry whose `match` selects the record sets its own `pin`, which replaces the `pin` of the action.
+
+The mock makes the record from the action name and the input of the record. Thus the same input gets the same output in each run: two `--fresh` runs store the same stubbed output, and a parallel run stores the output of a sequential run. The `seed` of the scenario does not change the stubbed output.
+
+Only the call of the function is replaced. The rest is the path of a real tool action:
+
+- Agent Actions imports the module of the tool when it loads the workflow, and preflight checks the tool. An import that fails stops the run, also for a stubbed tool. Do not put a network call at the top level of the module.
+- The guard, `context_scope`, the dispositions, the store and the lineage operate as for a tool that ran. The actions downstream read the stubbed output.
+- The output schema checks the stubbed record, as it checks the output of the tool. A `pin` value that the schema refuses fails the record.
+- The `expect:` block of the action checks the stubbed record and adds its verdict.
+
+The run shows the stubbed tools:
+
+```
+SANDBOX: the scenario stubs these tool actions, so their code does not run: retrieve_candidates
+  ✓ retrieve_candidates  3 records in 0.0s (stubbed)
+```
+
+`agac inspect --sandbox action retrieve_candidates` marks the tool `stubbed by the sandbox scenario` after its function name.
+
+The `happy` and `chaos` presets stub no tool. A real run does not read the scenario, so the tool runs its own code there. `agac retry --sandbox` follows the same scenario, so it does not call a stubbed tool.
+
+#### What the checks refuse for a tool action {/* #stub-refusals */}
+
+| Entry | Why |
+|-------|-----|
+| `stub` on an LLM action | The mock answers an LLM action already |
+| `stub` under `defaults` or in a `records` entry | You stub one tool, by its name, under `actions` |
+| `stub: true` on a tool action with `granularity: File` | A FILE tool decides how many records it returns. The mock builds one record for one input record |
+| `stub: true` on a tool action whose output schema is not known before the run | The mock has no schema to build the output from |
+| `stub: true` on a built-in tool: a router, a join or the result of a loop | It runs no code of the project |
+| `errors`, `break_rules`, `judge`, `latency_ms` or `error` on a tool action | These keys describe a model call |
+| `pin` on a tool action without `stub: true` | The code of the tool writes the output |
+| A tool action in `batch.fail` | A tool action has no batch |
+
+The workflow itself refuses a tool action with no `schema:`, in a real run also. Thus a tool action that you stub has an output schema.
 
 ### Each Decision Is Per Record
 
@@ -232,7 +297,7 @@ agac expect report -w my_workflow --sandbox
 
 `agac retry --sandbox` retries the failed records of a sandbox run, with the mock. It reads and writes only the sandbox output.
 
-`agac inspect --sandbox` shows the workflow as a sandbox run runs it. The action detail marks each LLM action `answered by the sandbox mock`:
+`agac inspect --sandbox` shows the workflow as a sandbox run runs it. The action detail marks each LLM action `answered by the sandbox mock`, and each tool action that the scenario stubs `stubbed by the sandbox scenario`. The command reads `sandbox.yml` at the project root, or the scenario that `--scenario` names. It refuses a scenario that a run refuses:
 
 ```bash
 agac inspect -w my_workflow --sandbox action summarize
@@ -259,6 +324,8 @@ The `reset_workflow.py --full` script of the skills removes the sandbox output t
 ## Limits
 
 - The records are generated. They test the connections of the workflow, not the prompts or the quality of the answers.
+- A stubbed tool gives one generated record for each input record. You cannot stub a FILE tool. A RECORD tool that returns a list of records gives one record when you stub it.
+- A tool action that you do not stub runs its own code. If that code calls a service, the sandbox run calls it too.
 - A rule that the mock cannot meet still fails, for example an `expression` rule or a custom check that the generated values do not pass. The mock logs a warning for each such field.
 - A rule that `break_rules` cannot break, for example an `llm_judge` rule or a rule type that the action does not check, stays as it is. The mock logs one warning for each action and rule.
 - `agac usage --sandbox` counts the calls of the mock under the model `agac-mock`, with zero tokens.

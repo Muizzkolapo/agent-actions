@@ -550,12 +550,13 @@ providers/
 │   └── server.py           ← Flask approval UI
 │
 ├── tools/
-│   └── client.py           ← ToolClient (runs Python UDFs)
+│   └── client.py           ← ToolClient (runs Python UDFs; a tool the sandbox scenario stubs is not called)
 │
 └── agac/
     ├── client.py           ← AgacClient (deterministic mock)
     ├── batch_client.py     ← AgacBatchClient (auto-complete mock)
-    ├── scenario.py         ← Sandbox scenario: faults decided per record input, attempts counted in the sandbox store
+    ├── scenario.py         ← Sandbox scenario: faults decided per record input, attempts counted in the sandbox store, tool actions stubbed by name
+    ├── tool_stub.py        ← The record a stubbed tool action stores, built from its output schema
     └── faults.py           ← Each fault as a real vendor shows it
 ```
 
@@ -571,7 +572,7 @@ providers/
 | Ollama Local | `format` param with schema | Simulated (threads) | No API key needed |
 | Ollama Cloud | Schema injected into prompt text | Simulated (threads) | No structured output support |
 | HITL | N/A | N/A | Flask server, human approval |
-| Tool | N/A | N/A | Runs Python functions |
+| Tool | N/A | N/A | Runs Python functions; in a sandbox run, a tool the scenario stubs stores the mock's record |
 | AGAC | Mock | Mock | Meets the schema and rules; a sandbox scenario adds faults per record |
 
 ### Error unification

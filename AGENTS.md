@@ -56,7 +56,7 @@ These are the **stable paths** that exist in every user's project:
 | `agent_io/target/{action}/` | Output data per action |
 | `agent_io/store/` | Durable database (SQLite) |
 | `.env` | Environment variables |
-| `sandbox.yml` | Sandbox scenario (optional): the faults the mock follows in `agac run --sandbox` and `agac retry --sandbox` |
+| `sandbox.yml` | Sandbox scenario (optional): the faults the mock follows and the tool actions it stubs in `agac run --sandbox` and `agac retry --sandbox` |
 
 Use this to answer: "I'm changing this code — what user files does it affect?" Or in reverse: "Something broke in my config — what framework code touches it?"
 
