@@ -14,7 +14,18 @@ Use a sandbox run to test the connections of a workflow: the dependencies, guard
 agac run -w my_workflow --sandbox
 ```
 
-The run prints `SANDBOX` on stderr when it starts. When the scenario stubs tool actions, a second `SANDBOX` line names them. The command prints this line once, after the scenario passed its checks, also when `--wait` or `agac retry --all` makes more than one pass. After its result, the run prints a `SANDBOX run` line. At the end of the command, it prints one `SANDBOX scenario` line that counts the faults of the [scenario](#scenario).
+The run prints these lines:
+
+| Line | When | Stream |
+|------|------|--------|
+| `SANDBOX: the offline mock answers every LLM action. ...` | When the run starts | stderr |
+| `SANDBOX: the scenario stubs these tool actions, ...` | When the scenario stubs tool actions | stderr |
+| `SANDBOX run: no model was called. ...` | After the result of the run | stdout |
+| `SANDBOX scenario <name>: ...` | At the end of the command. It counts the faults of the [scenario](#scenario) | stdout |
+
+The progress lines of the actions also go to stderr.
+
+The stub line prints once in a command, after the scenario passed its checks, also when `--wait` or `agac retry --all` makes more than one pass. The `SANDBOX scenario` line prints once, at the end of the command.
 
 ## What Changes in a Sandbox Run
 
@@ -68,6 +79,8 @@ Agent Actions reads and checks the scenario when it loads the workflow, before i
 
 The scenario files are your configuration. `agac clean` and `agac run --fresh` do not delete them.
 
+A change to the scenario does not run a completed action again. To run it again with the new scenario, give `--fresh` or `--rerun <action>`.
+
 ### Format
 
 ```yaml
@@ -114,6 +127,17 @@ batch:
 A record entry takes precedence over `actions`, and `actions` takes precedence over `defaults`. Each key replaces the key below it whole. For example, the `errors` of an action replace the `errors` of `defaults`.
 
 A name under `actions` and under `records[].actions` is an LLM action, a tool action or the base name of a version group. A name in `batch.fail` is an LLM action or the base name of a version group. The base name applies to each version (`score` applies to `score_1` and `score_2`). An entry for the exact name of a version takes precedence over an entry for its base name.
+
+An action in a loop has one name for each iteration: `<loop>_iter<N>__<action>`. A scenario names each iteration separately. The name of the action alone is refused. For example, a loop `round` with `max_iterations: 3` that holds a tool action `check` needs three entries:
+
+```yaml
+actions:
+  round_iter1__check: {stub: true}
+  round_iter2__check: {stub: true}
+  round_iter3__check: {stub: true}
+```
+
+An LLM action in a loop also needs one entry for each iteration. The message that refuses a name lists the valid LLM action names and tool action names.
 
 The keys of `defaults` apply to LLM actions only. A tool action takes only `stub` and `pin`.
 
@@ -168,13 +192,15 @@ SANDBOX: the scenario stubs these tool actions, so their code does not run: retr
   ✓ retrieve_candidates  3 records in 0.0s (stubbed)
 ```
 
+The notes of the action come after `(stubbed)`, for example `(stubbed) — 1 skipped by guard`.
+
 With a preset, the notice also names the file that the stubs come from:
 
 ```
 SANDBOX: the scenario stubs these tool actions, so their code does not run: retrieve_candidates (the stubs come from sandbox.yml, the rest from preset chaos)
 ```
 
-`agac inspect --sandbox action retrieve_candidates` marks the tool `stubbed by the sandbox scenario` after its function name.
+`agac inspect --sandbox action retrieve_candidates` marks the tool `stubbed by the sandbox scenario: its code does not run` after its function name.
 
 A preset keeps the `stub` entries of the project file. See [Presets](#presets). A real run does not read the scenario, so the tool runs its own code there. `agac retry --sandbox` follows the same scenario, so it does not call a stubbed tool.
 
@@ -311,7 +337,7 @@ agac expect report -w my_workflow --sandbox
 
 `agac retry --sandbox` retries the failed records of a sandbox run, with the mock. It reads and writes only the sandbox output.
 
-`agac inspect --sandbox` shows the workflow as a sandbox run runs it. The action detail marks each LLM action `answered by the sandbox mock`, and each tool action that the scenario stubs `stubbed by the sandbox scenario`. The command reads the scenario that a run reads: `sandbox.<workflow>.yml` or `sandbox.yml` at the project root, or the scenario that `--scenario` names. It refuses a scenario that a run refuses:
+`agac inspect --sandbox` shows the workflow as a sandbox run runs it. The action detail marks each LLM action `answered by the sandbox mock`, and each tool action that the scenario stubs `stubbed by the sandbox scenario: its code does not run`. The command reads the scenario that a run reads: `sandbox.<workflow>.yml` or `sandbox.yml` at the project root, or the scenario that `--scenario` names. It refuses a scenario that a run refuses:
 
 ```bash
 agac inspect -w my_workflow --sandbox action summarize
@@ -339,6 +365,7 @@ The `reset_workflow.py --full` script of the skills removes the sandbox output t
 
 - The records are generated. They test the connections of the workflow, not the prompts or the quality of the answers.
 - A stubbed tool gives one generated record for each input record. You cannot stub a FILE tool. A RECORD tool that returns a list of records gives one record when you stub it.
+- A stubbed tool gives the same output to two records whose observed input is the same. The mock makes the output from the action name and the observed input of the record.
 - A tool action that you do not stub runs its own code. If that code calls a service, the sandbox run calls it too.
 - A rule that the mock cannot meet still fails, for example an `expression` rule or a custom check that the generated values do not pass. The mock logs a warning for each such field.
 - A rule that `break_rules` cannot break, for example an `llm_judge` rule or a rule type that the action does not check, stays as it is. The mock logs one warning for each action and rule.

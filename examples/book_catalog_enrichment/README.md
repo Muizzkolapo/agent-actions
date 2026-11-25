@@ -342,7 +342,7 @@ Output is written to `agent_io/target/select_for_users/` with three views per bo
 agac run -w book_catalog_enrichment --sandbox
 ```
 
-A sandbox run needs no API key and no network. The mock provider answers each LLM action, and the HITL review approves each record. The `retrieve_candidates` tool calls the Open Library API, so `sandbox.yml` stubs it: its code does not run, and the mock builds its output from the `search_book_catalog` schema. The other tools run their own code. Remove `stub: true` from `sandbox.yml` to call the API in a sandbox run. A real run does not read `sandbox.yml`.
+A sandbox run needs no API key and no network. The mock provider answers each LLM action, and the HITL review approves each record. The `retrieve_candidates` tool calls the Open Library API, so `sandbox.yml` stubs it: its code does not run, and the mock builds its output from the `search_book_catalog` schema. The other tools run their own code. To call the API in a sandbox run, remove `stub: true` from `sandbox.yml`. Then run with `--fresh` or `--rerun retrieve_candidates`. A change to the scenario does not run a completed action again: without one of these options, `retrieve_candidates` is `already complete` and keeps its stubbed records. A real run does not read `sandbox.yml`.
 
 ### Input Format
 
