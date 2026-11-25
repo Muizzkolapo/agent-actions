@@ -398,6 +398,59 @@ def test_inspect_refuses_a_scenario_the_run_would_refuse(tmp_path):
     assert "actions.rank.stub" in _said(shown)
 
 
+TEXT_MODE_RANK = "    schema: rank_output\n    prompt: $catalog.Rank\n"
+
+
+@pytest.mark.parametrize(
+    ("scenario", "text_mode", "named", "why"),
+    [
+        (
+            "actions:\n  search: {stub: true, pin: {orgin: x}}\n",
+            False,
+            "actions.search.pin.orgin",
+            "the output schema of action 'search' declares no field 'orgin'",
+        ),
+        (
+            "actions:\n  rank: {pin: {pick: x}}\n",
+            True,
+            "actions.rank",
+            "action 'rank' has no JSON output schema (text mode), so it takes no pin",
+        ),
+    ],
+)
+def test_inspect_refuses_an_output_the_run_would_refuse(tmp_path, scenario, text_mode, named, why):
+    root = _project(tmp_path)
+    if text_mode:
+        config = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
+        text = config.read_text()
+        assert TEXT_MODE_RANK in text
+        config.write_text(
+            text.replace(TEXT_MODE_RANK, "    json_mode: false\n    prompt: $catalog.Rank\n")
+        )
+    scenario_file = tmp_path / "s.yml"
+    scenario_file.write_text(scenario)
+
+    ran = _run(root, "--scenario", str(scenario_file))
+    shown = run_agac(
+        root,
+        "inspect",
+        "-w",
+        WORKFLOW,
+        "--sandbox",
+        "--scenario",
+        str(scenario_file),
+        "action",
+        "search",
+    )
+
+    for result in (ran, shown):
+        said = _said(result)
+        assert result.returncode != 0, said
+        assert f"- {named}: {why}" in said, said
+        assert f"Invalid configuration in {scenario_file}" in said, said
+    assert _called(root) == set()
+
+
 EXAMPLE = "book_catalog_enrichment"
 # Appended to the example's tool: its one network call writes a marker and reaches no host.
 NO_NETWORK = """
