@@ -25,6 +25,7 @@ from agent_actions.prompt.context.scope_parsing import (
     parse_field_reference,
 )
 from agent_actions.record.reasons import OBSERVE_FIELD_MISSING, SOURCE_UNRESOLVED
+from agent_actions.record.state import CASCADE_BLOCKING_VALUES
 from agent_actions.utils.constants import RUNTIME_BUS_NAMESPACES
 from agent_actions.utils.content import get_existing_content, require_content_envelope
 from agent_actions.utils.dict import pop_nested_value
@@ -832,10 +833,17 @@ def apply_context_scope_for_records(
     )
 
     source_cache: dict[tuple[str | None, str | None], dict | None] = {}
-    prepared: list[tuple[dict, dict, dict | None]] = []
+    # A None content marks a record passed on as it came: see the loop below.
+    prepared: list[tuple[dict, dict | None, dict | None]] = []
     skipped: list[dict] = []
 
     for position, record in enumerate(records):
+        # Failed above this action, the record lacks what it observes by design. The
+        # cascade filter leaves it unprocessed; refusing it here made it this action's
+        # failure, which RECORD mode and the FILE guard never do.
+        if record.get("_state") in CASCADE_BLOCKING_VALUES:
+            prepared.append((record, None, None))
+            continue
         content = get_existing_content(record)
         sguid = record.get("source_guid")
         psguid = record.get("parent_source_guid")
@@ -971,7 +979,7 @@ def apply_context_scope_for_records(
     # than each record's own subset keeps a given ref qualified the same way on
     # every record in this call, not just the ones that happen to carry it.
     namespace_union: frozenset[str] = frozenset(
-        ns for _, content, _ in prepared for ns in content
+        ns for _, content, _ in prepared if content is not None for ns in content
     ) | ({"seed"} if any(seed for _, _, seed in prepared) else frozenset())
 
     # The seed rides on the record as `_seed`, never in its content: content is what a
@@ -980,6 +988,9 @@ def apply_context_scope_for_records(
     enriched: list[dict] = []
     qualified_keys: set[str] = set()
     for record, enriched_content, record_seed in prepared:
+        if enriched_content is None:
+            enriched.append(record)
+            continue
         qualified_keys |= _inject_flat_observed_keys(
             enriched_content,
             resolved_observe,
