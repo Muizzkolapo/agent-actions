@@ -170,7 +170,7 @@ The command holds the [run lock](#concurrent-runs) from the first pass to the la
 agac run -w my_workflow --sandbox
 ```
 
-The run writes its output to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`. It does not read or change the output of real runs, so a real run after it answers each action. Give `--sandbox` to `status`, `records`, `traces` and the other read commands to read this output. A sandbox run does not wait for a provider: it makes a retry with no backoff, and `--wait` does not sleep between two passes unless you give `--poll`. See [Sandbox Runs](../../guides/sandbox.md).
+The run writes its output to `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db`. It does not read or change the output of real runs, so a real run after it answers each action. Give `--sandbox` to `status`, `records`, `traces` and the other read commands to read this output. A sandbox run does not wait for a provider: it makes a retry with no backoff, and `--wait` does not sleep between two passes unless you give `--poll` or the scenario sets `batch.complete_after_seconds` (then at most 1 second). See [Sandbox Runs](../../guides/sandbox.md).
 
 A [scenario file](../../guides/sandbox.md#scenario) makes the mock fail, change or delay some calls on purpose, so the run tests retry, repair and the failure paths. Give a preset or a file with `--scenario`:
 

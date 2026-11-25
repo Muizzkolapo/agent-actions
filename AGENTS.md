@@ -55,8 +55,9 @@ These are the **stable paths** that exist in every user's project:
 | `agent_io/staging/` | Input data |
 | `agent_io/target/{action}/` | Output data per action |
 | `agent_io/store/` | Durable database (SQLite) |
+| `agent_io/sandbox/` | Output of sandbox runs (status, logs, target); the store is `agent_io/store/{workflow}.sandbox.db` |
 | `.env` | Environment variables |
-| `sandbox.yml` | Sandbox scenario (optional): the faults the mock follows and the tool actions it stubs in `agac run --sandbox` and `agac retry --sandbox` |
+| `sandbox.yml` | Sandbox scenario (optional): the faults the mock follows and the tool actions it stubs in `agac run --sandbox`, `agac retry --sandbox`, `agac inspect --sandbox` and `agac sandbox check` |
 | `sandbox.{workflow}.yml` | Sandbox scenario of one workflow (optional): read instead of `sandbox.yml` by a sandbox run of `{workflow}` |
 | `sandbox_expected.yml` | Expected outcomes of a sandbox run (optional): the exit code, scenario counts and per-action status and record counts that `agac sandbox check` compares |
 | `sandbox_expected.{workflow}.yml` | Expected outcomes of one workflow (optional): read instead of `sandbox_expected.yml` by `agac sandbox check -w {workflow}` |

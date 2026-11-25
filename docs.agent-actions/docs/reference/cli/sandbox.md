@@ -18,7 +18,7 @@ agac sandbox check -w my_workflow
 
 The command does these steps:
 
-1. It reads and checks the expectations file. A problem stops the command with exit code 2, before the run.
+1. It reads and checks the expectations file. A problem stops the command with exit code 2, before the run. An action name that the workflow does not have is found only after the run. See the list of refusals below.
 2. It runs the workflow as `agac run -w my_workflow --sandbox --fresh --wait` does, in the same process. The run follows the scenario that a sandbox run reads. See [The scenario file](../../guides/sandbox.md#scenario).
 3. It reads the result from the sandbox output before the run releases the run lock: the status of each action, the counts of the sandbox store and the counts of the `SANDBOX scenario` line.
 4. It prints one row for each value that the file states, and a `PASS` or `FAIL` line.
@@ -55,7 +55,7 @@ The error of the run comes before the table.
 |--------|-------------|
 | `-w`, `--workflow` | The workflow name (required). `-a` names the same option |
 | `--expected PATH` | The expectations file. A relative path is from the project root. Default: `sandbox_expected.<workflow>.yml` at the project root, else `sandbox_expected.yml` |
-| `--scenario happy\|chaos\|PATH` | The scenario of the run, as for `agac run --sandbox`. Default: `sandbox.<workflow>.yml`, else `sandbox.yml`, else `happy` |
+| `--scenario happy\|chaos\|PATH` | The scenario of the run, as for `agac run --sandbox`. A relative path is from the current directory. Default: `sandbox.<workflow>.yml`, else `sandbox.yml`, else `happy` |
 | `-u`, `--user-code` | The folder of the tools, as for `agac run` |
 | `-e`, `--execution-mode` | `auto` (default), `parallel` or `sequential`, as for `agac run` |
 
