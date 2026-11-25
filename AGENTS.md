@@ -58,6 +58,8 @@ These are the **stable paths** that exist in every user's project:
 | `.env` | Environment variables |
 | `sandbox.yml` | Sandbox scenario (optional): the faults the mock follows and the tool actions it stubs in `agac run --sandbox` and `agac retry --sandbox` |
 | `sandbox.{workflow}.yml` | Sandbox scenario of one workflow (optional): read instead of `sandbox.yml` by a sandbox run of `{workflow}` |
+| `sandbox_expected.yml` | Expected outcomes of a sandbox run (optional): the exit code, scenario counts and per-action status and record counts that `agac sandbox check` compares |
+| `sandbox_expected.{workflow}.yml` | Expected outcomes of one workflow (optional): read instead of `sandbox_expected.yml` by `agac sandbox check -w {workflow}` |
 
 Use this to answer: "I'm changing this code — what user files does it affect?" Or in reverse: "Something broke in my config — what framework code touches it?"
 

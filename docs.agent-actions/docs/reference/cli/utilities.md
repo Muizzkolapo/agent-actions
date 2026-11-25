@@ -56,7 +56,7 @@ The command gives you a working start point with sensible defaults. It is simila
 | Option | Description |
 |--------|-------------|
 | `-o, --output-dir` | The directory in which to create the project (default: the current directory) |
-| `-t, --template` | The template name: `default`, `minimal` or `full` (default: `default`). The three templates create the same structure |
+| `-t, --template` | The template name: `default`, `minimal`, `full` or `sandbox` (default: `default`). `default`, `minimal` and `full` create the same empty structure. `sandbox` creates a small project that runs offline. See [The sandbox template](#sandbox-template) |
 | `-f, --force` | Create the project, even if the directory exists |
 
 **Examples:**
@@ -69,6 +69,9 @@ agac init my_project -o ~/projects
 
 # Name a template (default, minimal or full)
 agac init my_project -t minimal
+
+# Create the sandbox starter project
+agac init my_sandbox --template sandbox
 
 # See all available examples
 agac init list
@@ -91,6 +94,35 @@ To start from an example, do these steps:
 :::note[Start from an Example]
 The command gets the examples from GitHub. Thus the package stays small.
 :::
+
+### The Sandbox Template {/* #sandbox-template */}
+
+`agac init <project-name> --template sandbox` creates a small project with one workflow, `support_desk`. The workflow uses each feature once, and a [sandbox run](../../guides/sandbox.md) runs it offline in a few seconds, with no API key:
+
+```bash
+agac init my_sandbox --template sandbox
+cd my_sandbox
+agac sandbox check -w support_desk
+```
+
+The project has these files, together with the standard folders:
+
+```
+my_sandbox/
+├── agent_actions.yml
+├── agent_workflow/support_desk/
+│   ├── agent_config/support_desk.yml   # the workflow, with a comment on each part
+│   └── agent_io/staging/tickets.json   # five tickets, one of them spam
+├── branches/reply_round.yml            # one round of the loop
+├── prompt_store/support_desk.md
+├── schema/support_desk/                # the output schemas
+├── seed_data/teams.json
+├── tools/support_desk/support_tools.py # the tool actions: plain Python, no network
+├── sandbox.yml                         # the scenario: faults that heal
+└── sandbox_expected.yml                # what a sandbox run must produce
+```
+
+The template ships in the package, so it needs no network. The workflow names a real vendor (`openai`), so it is also a start for real runs. A sandbox run sends each LLM action to the mock. See [The starter project](../../guides/sandbox.md#starter-project) for the features of the workflow and [`agac sandbox check`](./sandbox.md) for the check.
 
 ## example
 

@@ -1,6 +1,6 @@
 ---
 name: agac-agent-skills
-description: Build, run, inspect, and debug agent-actions workflows. Triggers on workflow YAML, UDFs, observe/passthrough/drop, guards, versions, schemas, seed data, prompts, HITL, running or resetting a pipeline, debugging empty/filtered output, sandbox, offline, mock, scenario, sandbox.yml, stub, chaos, or testing a workflow without an API key.
+description: Build, run, inspect, and debug agent-actions workflows. Triggers on workflow YAML, UDFs, observe/passthrough/drop, guards, versions, schemas, seed data, prompts, HITL, running or resetting a pipeline, debugging empty/filtered output, sandbox, offline, mock, scenario, sandbox.yml, stub, chaos, sandbox check, sandbox_expected.yml, the sandbox starter template, or testing a workflow without an API key.
 ---
 
 # Agent Actions Workflow Builder
@@ -16,7 +16,7 @@ description: Build, run, inspect, and debug agent-actions workflows. Triggers on
 5. **Guard fields carry their action's name.** Write `upstream.field == value`, not `field == value`. A guard reads the record as stored, so the field does not have to be in observe; observing it only to guard on it sends it to the model for nothing.
 6. **A record tool reads by action name; a FILE tool reads flat keys.** A record tool gets `data["action_name"]["field"]`, one level, version merges included. A FILE tool gets a list of items holding the observed fields as flat keys: `item["field"]` for a field named in observe, and `item["action_name.field"]` only where two observed names really collide (two named fields with one name, or a wildcard field with the same name as a named field, which keeps the bare key).
 7. **Seed data needs no observe.** Use `{{ seed.key }}` directly in prompts.
-8. **Test offline first.** After each change, run `agac run -w {workflow} -u tools --sandbox` before a real run. The offline mock answers every LLM action, with no API key and no cost, and the run checks the wiring. See [references/sandbox-testing.md](references/sandbox-testing.md).
+8. **Test offline first.** After each change, run `agac run -w {workflow} -u tools --sandbox` before a real run. The offline mock answers every LLM action, with no API key and no cost, and the run checks the wiring. To pin what the run must produce, write `sandbox_expected.yml` and run `agac sandbox check -w {workflow}`. See [references/sandbox-testing.md](references/sandbox-testing.md).
 
 ## Workflow Structure
 
@@ -34,6 +34,8 @@ schema/{name}/               # output schemas (when complex)
 tools/{tool-group}/          # UDF implementations
 sandbox.yml                  # optional scenario of sandbox runs
 sandbox.{name}.yml           # optional scenario of this workflow only; read before sandbox.yml
+sandbox_expected.yml         # optional outcomes that agac sandbox check asserts
+sandbox_expected.{name}.yml  # optional outcomes of this workflow only; read before sandbox_expected.yml
 ```
 
 ## Config
@@ -82,7 +84,7 @@ Detailed guidance — loaded on demand:
 - [references/pooling-approach.md](references/pooling-approach.md) — sequential vs parallel pooling, selection action design, pooling vs versioning
 - [references/prompt-engineering.md](references/prompt-engineering.md) — one unit of outcome, distil before generating, seed data, output contracts, version diversity
 - [references/database-io.md](references/database-io.md) — `connections:`, a `database` data source and its snapshot, `outputs:` tables and their modes, `--refresh-input`, `agac export`
-- [references/sandbox-testing.md](references/sandbox-testing.md) — `agac run --sandbox`, what the mock answers, the `sandbox.yml` scenario (faults, `pin`, tool `stub`), presets, testing recipes, limits
+- [references/sandbox-testing.md](references/sandbox-testing.md) — `agac run --sandbox`, what the mock answers, the `sandbox.yml` scenario (faults, `pin`, tool `stub`), presets, the starter template, `agac sandbox check` and `sandbox_expected.yml`, testing recipes, limits
 
 Related skills:
 
@@ -344,6 +346,12 @@ agac run -w {workflow} -u tools --sandbox
 
 # Sandbox run with faults, to test retry and repair
 agac run -w {workflow} -u tools --sandbox --scenario chaos
+
+# Sandbox run checked against sandbox_expected.yml (exit 0 pass, 1 mismatch, 2 bad file)
+agac sandbox check -w {workflow} -u tools
+
+# A starter project that uses each feature once, and passes its check offline
+agac init my_sandbox --template sandbox
 
 # Per-record status across all actions
 agac dispositions -w {workflow} -u tools
