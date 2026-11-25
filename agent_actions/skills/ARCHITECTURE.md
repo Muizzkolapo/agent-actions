@@ -14,7 +14,7 @@ This document maps the moving parts of `agent_actions/skills/` — the module th
 agac-agent-skills/  agac-operations/   agac-expectations/   agac-blind-verification/
      │                  │                  │                  │
  SKILL.md           SKILL.md           SKILL.md           SKILL.md
- references/ (6)    references/        references/        references/
+ references/ (7)    references/        references/        references/
  scripts/ (2)         recovery.md        calibration.md     display-ids.md
                     scripts/                               consensus.md
                       run_health.py
@@ -93,7 +93,9 @@ Each skill has a `SKILL.md` at its root. This file serves two purposes:
    description: Build, run, inspect, and debug agent-actions workflows.
                 Triggers on workflow YAML, UDFs, observe/passthrough/drop,
                 guards, versions, schemas, seed data, prompts, HITL, running
-                or resetting a pipeline, or debugging empty/filtered output.
+                or resetting a pipeline, debugging empty/filtered output,
+                sandbox, offline, mock, scenario, sandbox.yml, stub, chaos,
+                or testing a workflow without an API key.
    ---
    ```
    The `description` field lists trigger keywords. AI coding assistants (Claude Code, Codex) match user queries against these keywords to decide when to load the skill.
@@ -105,6 +107,7 @@ Each skill has a `SKILL.md` at its root. This file serves two purposes:
    - Guards, versions, fan-in, seed data, schemas
    - Action templates (LLM, Record tool, File tool, HITL)
    - Running and debugging via the `agac` CLI and bundled scripts
+   - Testing a workflow offline first with `agac run --sandbox`
 
 When an AI assistant triggers on the skill, it reads `SKILL.md` as its primary context, then follows links into `references/` for deeper detail and invokes `scripts/` for inspection or reset.
 
@@ -112,7 +115,7 @@ When an AI assistant triggers on the skill, it reads `SKILL.md` as its primary c
 
 ## What the Skill Contains
 
-### references/ (6 guides)
+### references/ (7 guides)
 
 Deep-dive documentation that `SKILL.md` links to. Each file covers one topic in detail:
 
@@ -124,6 +127,7 @@ Deep-dive documentation that `SKILL.md` links to. Each file covers one topic in 
 | `pooling-approach.md` | Sequential vs parallel pooling, selection action design, pooling vs versioning |
 | `prompt-engineering.md` | One unit of outcome, distil before generating, seed data, output contracts, version diversity |
 | `database-io.md` | Connections, a `database` data source and its snapshot, `outputs:` tables, `--refresh-input`, `agac export` |
+| `sandbox-testing.md` | `agac run --sandbox` with the offline mock, what is mocked and what is real, the `sandbox.yml` scenario (faults, `pin`, tool `stub`), presets, reading the results, testing recipes, limits |
 
 ### scripts/ (2 helpers)
 
@@ -145,10 +149,10 @@ Both scripts self-locate the project root by walking up for `agent_actions.yml`,
 | `_MANIFEST.md` | Module manifest (AMP protocol) |
 | `ARCHITECTURE.md` | This file |
 | `agac-agent-skills/SKILL.md` | Skill descriptor + primary knowledge payload |
-| `agac-agent-skills/references/*.md` | 6 deep-dive reference guides |
+| `agac-agent-skills/references/*.md` | 7 deep-dive reference guides |
 | `agac-agent-skills/scripts/*.py` | 2 helper scripts (inspect, reset) |
-| `agac-operations/SKILL.md`, `references/recovery.md` | Running, recovering and checking large workflows |
-| `agac-operations/scripts/run_health.py` | Health check of the output counts (standard library only) |
+| `agac-operations/SKILL.md`, `references/recovery.md` | Running, recovering, rehearsing offline and checking large workflows |
+| `agac-operations/scripts/run_health.py` | Health check of the output counts of real runs, or of sandbox runs with `--sandbox` (standard library only) |
 | `agac-expectations/SKILL.md`, `references/calibration.md` | `expect:` rules and their calibration |
 | `agac-blind-verification/SKILL.md`, `references/*.md` | Blind verifiers, display ids, vote rules |
 
@@ -162,7 +166,7 @@ CLI entry point (outside this module):
 
 ## Caveats
 
-1. **No runtime code.** This module has no Python files in the package root, no `__init__.py`, no imports. It is invisible to the Python import system. The only framework code that touches it is `cli/skills.py`, which uses `pathlib` and `shutil`. The two files under `scripts/` run standalone — they shell out to the `agac` CLI rather than importing it.
+1. **No runtime code.** This module has no Python files in the package root, no `__init__.py`, no imports. It is invisible to the Python import system. The only framework code that touches it is `cli/skills.py`, which uses `pathlib` and `shutil`. The files under `scripts/` run standalone — they shell out to the `agac` CLI, and import the framework only where it is importable: `reset_workflow.py` to hold the run lock and reclaim batch records, and `run_health.py` for the status path of `--sandbox`, each with a fallback for a plain `python3`.
 
 2. **`--force` is destructive.** `shutil.rmtree` deletes the entire target skill directory before copying. If users have edited installed skill files (customized reference docs, added notes), those edits are lost without confirmation.
 

@@ -143,7 +143,7 @@ An `llm_judge` expectation (see the `agac-expectations` skill) sees the field it
 
 ## Gotchas
 
-1. **A leak through the view passes every static check.** Preflight sees a correct `observe` list, but the view text itself can hold the reference (an id order, a "recommended" mark, a longer candidate). Read 3 rendered verifier prompts with `agac traces -w <workflow> -A verify_1` before a full run.
+1. **A leak through the view passes every static check.** Preflight sees a correct `observe` list, but the view text itself can hold the reference (an id order, a "recommended" mark, a longer candidate). Read 3 rendered verifier prompts with `agac traces -w <workflow> -A verify_1` before a full run. A sandbox run renders them at no cost: run `agac run -w <workflow> -u tools --sandbox`, then `agac traces -w <workflow> -A verify_1 --sandbox`. The offline mock answers the verifiers, so the vote counts of that run mean nothing.
 2. **A verifier that observes `classify_document.*` sees the reference.** A wildcard on the action under test gives the verifier every field of it. Name the fields of the blind view, not a wildcard of that action.
 3. **Same model, same blind spot.** If all verifiers miss the same kind of error, a majority does not help. Add a verifier on a different model, or a refuter.
 

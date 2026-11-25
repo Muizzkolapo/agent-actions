@@ -11,8 +11,8 @@ per provider (Claude/Codex). This package ships four skills.
 
 | Sub-Module | Description |
 |------------|-------------|
-| [agac-agent-skills](agac-agent-skills/SKILL.md) | Build, run, inspect, and debug agent-actions workflows. |
-| [agac-operations](agac-operations/SKILL.md) | Run large workflows safely: batch or online, resume, `--rerun`, `retry --all`, exit codes, usage, scale limits, and a health check of the output counts. |
+| [agac-agent-skills](agac-agent-skills/SKILL.md) | Build, run, inspect, and debug agent-actions workflows, and test them offline with `agac run --sandbox`. |
+| [agac-operations](agac-operations/SKILL.md) | Run large workflows safely: batch or online, resume, `--rerun`, `retry --all`, exit codes, usage, scale limits, an offline rehearsal with faults, and a health check of the output counts. |
 | [agac-expectations](agac-expectations/SKILL.md) | Declare output-quality rules with `expect:` blocks, and calibrate a rule before it may block records. |
 | [agac-blind-verification](agac-blind-verification/SKILL.md) | Check outputs with independent verifiers that never see the reference, with display ids and a vote rule. |
 
@@ -37,12 +37,16 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `references/prompt-engineering.md` | `prompt_store/{workflow}.md` | Reads | — |
 | `references/database-io.md` | `agent_actions.yml` | Reads | `connections` |
 | `references/database-io.md` | `agent_config/{workflow}.yml` | Reads | `defaults.data_source`, `outputs[]` |
+| `references/sandbox-testing.md` | `sandbox.yml` | Reads | `seed`, `defaults`, `actions.<name>` (`errors`, `break_rules`, `pin`, `judge`, `latency_ms`, `stub`), `records[]`, `batch` |
+| `references/sandbox-testing.md` | `agent_workflow/{workflow}/agent_io/sandbox/` | Reads (via `agac ... --sandbox`) | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Writes (deletes) | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/{store,target,sandbox}/` | Writes (`--full` wipes) | — |
 | `scripts/reset_workflow.py` | `.agac/batch_state/` | Writes (`--full` reclaims) | — |
 | `scripts/inspect_action.py` | `agent_config/{workflow}.yml` | Reads (via `agac inspect`) | — |
 | `agac-operations/scripts/run_health.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Reads | — |
-| `agac-operations/scripts/run_health.py` | `agac dispositions -w {workflow} --json` | Reads (runs the command) | — |
+| `agac-operations/scripts/run_health.py` | `agent_workflow/{workflow}/agent_io/sandbox/.agent_status.json` | Reads (`--sandbox`) | — |
+| `agac-operations/scripts/run_health.py` | `agac dispositions -w {workflow} --json` | Reads (runs the command, with `--sandbox` when given) | — |
+| `agac-operations/references/recovery.md`, `agac-expectations/SKILL.md` | `sandbox.yml` | Reads | `actions.<name>.errors`, `break_rules`, `judge`, `batch` |
 
 ## Dependencies
 

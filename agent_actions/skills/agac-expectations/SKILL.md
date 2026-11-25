@@ -139,6 +139,27 @@ A rule that `row_condition` waived reports `passed: true, skipped: true`. It is 
 
 With `return_last`, a rule that fails on every record does not stop the run. Every record keeps a failed verdict, and a guard downstream filters them. The run can end with exit code 0 and few usable records. Check the counts after each run (see the `agac-operations` skill, Health check).
 
+## Test the wiring offline
+
+`agac run -w <workflow> -u tools --sandbox` answers each LLM action with the offline mock, with no API key and no cost. The mock reads the action's rules and builds an output that meets the deterministic ones. A sandbox run thus checks that the rules load, run and write a verdict, and that a guard on `overall_pass` routes the records.
+
+Script the paths in a scenario file (`sandbox.yml` at the project root, or `--scenario <file>`):
+
+```yaml
+actions:
+  triage_ticket:
+    break_rules: {rules: [accepted_values], rate: 1.0, heal_on_attempt: 2}
+  summarize_ticket:
+    judge: {pass_rate: 0.5}
+```
+
+1. `break_rules` changes the output so that the real check of the rule fails. `heal_on_attempt: 2` stops the fault at the repair round, so you see the repair loop heal. `heal_on_attempt: null` never stops it, so you see `on_exhausted`.
+2. `judge.pass_rate` is the chance that a judge call passes. Use it to test the actions after a judge. Without it, the judge passes in a sandbox run.
+3. Read the verdicts with `agac expect report -w <workflow> --sandbox`. The `SANDBOX scenario` line counts the broken rules.
+4. A rule that the mock cannot meet (an `expression` rule, a custom check) can still fail. The mock logs a warning.
+
+A sandbox verdict calibrates nothing. The data is fake, and the sandbox judge does not read the value. Calibrate a rule on real outputs only. The `agac-agent-skills` skill has the full scenario format in `references/sandbox-testing.md`.
+
 ## When NOT to use an expectation
 
 An expectation judges one record's output against a stated rule. Keep a tool action or a group of actions for the cases below:
