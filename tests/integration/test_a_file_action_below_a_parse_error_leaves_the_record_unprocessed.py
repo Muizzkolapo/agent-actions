@@ -201,7 +201,7 @@ class TestTheRecordIsUnprocessedAtTheFileAction:
         _agac(root, "retry", "--scenario", "fail.yml", "--all", code=EXIT_SUCCESS)
 
 
-def _as_an_older_run_left_it(root: Path, record_id: str) -> None:
+def _as_an_older_run_left_it(root: Path, record_id: str, disposition: str = "failed") -> None:
     """The FILE action refused the record's tombstone as its own failure, as before."""
     backend = SQLiteBackend(str(_db(root)), WORKFLOW)
     backend.initialize()
@@ -212,7 +212,7 @@ def _as_an_older_run_left_it(root: Path, record_id: str) -> None:
                 (
                     "review",
                     record_id,
-                    "failed",
+                    disposition,
                     "context_scope.observe field 'extract.code' not found in this record",
                     "pages.json",
                     None,
@@ -229,10 +229,13 @@ def _as_an_older_run_left_it(root: Path, record_id: str) -> None:
 
 
 class TestAFilterClearsTheFailureAnOlderRunLeft:
-    def test_the_failed_row_goes_with_the_tombstone_and_the_retry_exits_0(self, tmp_path):
+    @pytest.mark.parametrize("disposition", ["failed", "exhausted"])
+    def test_the_failure_row_goes_with_the_tombstone_and_the_retry_exits_0(
+        self, tmp_path, disposition
+    ):
         root, refused = _refusing_run(tmp_path)
-        _as_an_older_run_left_it(root, refused)
-        assert _dispositions(root, "review")[refused][0] == "failed"
+        _as_an_older_run_left_it(root, refused, disposition)
+        assert _dispositions(root, "review")[refused][0] == disposition
         assert refused in _guids(root, "review"), "the tombstone the filter removes"
 
         _filter(root, refused)
@@ -243,7 +246,7 @@ class TestAFilterClearsTheFailureAnOlderRunLeft:
         _agac(root, "retry", "--scenario", "fail.yml", "--all", code=EXIT_SUCCESS)
 
     def test_a_failure_at_a_reader_holding_no_tombstone_for_the_record_stays(self, tmp_path):
-        """The control: without the tombstone the command removes, the row is not derived."""
+        """The control: without a stored row for the record there, its failure stays."""
         root, refused = _refusing_run(tmp_path)
         _as_an_older_run_left_it(root, refused)
         backend = SQLiteBackend(str(_db(root)), WORKFLOW)

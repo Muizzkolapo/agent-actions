@@ -103,8 +103,9 @@ class RetryFilterCommand:
             return
 
         below = {action: self._readers_of(backend, action) for action, _ in targets}
-        # Only the cascade reaches a reader for a record failed above it, so a failure
-        # there beside the record's tombstone is derived and goes with it.
+        # A failure at a reader holding a stored row (a tombstone) for the record goes
+        # with that row: once filtered the reader drops the record, so no retry could
+        # reach the failure.
         tombstoned = {
             (reader, record_id)
             for action, record_id in targets

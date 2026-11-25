@@ -1,9 +1,9 @@
 """`agac retry --filter` rewrites a live retry manifest by the rule it applies to the store.
 
 Below the filtered action, a reader's `unprocessed` row for the record goes, and so does a
-failure row where the command removes the record's tombstone at that reader: only the
-cascade reached the reader for that record, so the failure was derived from the one
-filtered (1907). A failure at a reader holding no tombstone for the record stays.
+failure row at a reader holding a stored row (a tombstone) for the record, which the
+command removes: once filtered the reader drops the record, so no retry could reach that
+failure (1907). A failure at a reader holding no tombstone for the record stays.
 """
 
 import json
