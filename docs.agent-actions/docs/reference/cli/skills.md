@@ -70,7 +70,7 @@ agent-actions ships four skills. `install` copies all of them:
 | Skill | What it teaches |
 |-------|-----------------|
 | `agac-agent-skills` | Build, run, inspect and debug workflows: actions, context scope, guards, versions, schemas, prompts, HITL. Test a workflow offline with [`agac run --sandbox`](../../guides/sandbox.md) and a scenario file before a real run |
-| `agac-operations` | Run large workflows safely: batch or online, resume, `--rerun`, `retry --all`, exit codes, `agac usage`, scale limits, a sandbox rehearsal of retry and recovery, and a health check of the output counts (also of sandbox runs) |
+| `agac-operations` | Run large workflows safely: batch or online, resume, `--rerun` (all records, or only the records that `--where` or `--records` selects), `retry --all`, exit codes, `agac usage`, scale limits, a sandbox rehearsal of retry and recovery, and a health check of the output counts (also of sandbox runs) |
 | `agac-expectations` | Declare output-quality rules with `expect:` blocks, test the rules and the repair loop in a sandbox run, and calibrate a rule on real outputs before it may block records |
 | `agac-blind-verification` | Check outputs with independent verifiers that never see the reference |
 

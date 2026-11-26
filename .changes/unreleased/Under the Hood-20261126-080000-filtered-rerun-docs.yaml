@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'Document a filtered rerun (`--rerun ACTION --where / --records`) where readers look for it: the "when you edit the workflow" section of the artifacts page, the sandbox guide and its skill reference, the databases page (what a merge, replace and append table hold after it), the skills page, the recovery decision table of the operations skill, and the README.'
+time: 2026-11-26T08:00:00.000000000+00:00

@@ -99,6 +99,8 @@ batch:
   refused, and the refusal lists the valid names.
 - A change to the scenario does not run a completed action again. Use `--fresh` or
   `--rerun <action>`.
+- `--rerun <action> --where '<expression>'` works with `--sandbox`: rehearse a filtered rerun
+  offline, and check with `--dry-run` how many records it selects.
 - The run reads and checks the scenario before the first call. A wrong key stops the command
   and names the file and the key. `agac inspect -w {workflow} --sandbox` checks it with no run.
   It prints no stub notice; `agac inspect -w {workflow} --sandbox action {tool}` marks a

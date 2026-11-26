@@ -7,6 +7,7 @@ Use this page when an action produced bad output in a large run, and the actions
 | Situation | Do this |
 |---|---|
 | The prompt, schema or model of one action was wrong | Fix the config, then `agac run -w <workflow> -u tools --rerun <action>` |
+| It was wrong for some records only (one category, one language, 100 of 500) | Fix the config, then `agac run -w <workflow> -u tools --rerun <action> --where '<guard expression>' --dry-run` to see the count, and the same command without `--dry-run`. Only the matching records are answered again; `--records ids.txt` takes a list of source_guids instead |
 | Some records failed for a transient reason (rate limit, timeout) | `agac retry -w <workflow> --all` |
 | One record can never succeed (input too large, input empty) | `agac retry -w <workflow> --filter <action>:<record_id> --reason "<why>"` |
 | The output of an action is good, but the next action read the wrong field of it | Add a recovery tool action (section 2), then `--rerun` the recovery action |
