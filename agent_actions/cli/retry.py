@@ -36,6 +36,7 @@ from agent_actions.cli.exit_codes import (
     classify_outcome,
     report_quota_stop,
 )
+from agent_actions.cli.rerun_selection import RecordFilter, Selection, select_records
 from agent_actions.cli.run import (
     check_declared_outputs,
     report_scenario,
@@ -159,6 +160,12 @@ def _halted_among(failures: dict[str, list[dict]], actions: list[str]) -> list[s
     ]
 
 
+def _stored_rows(backend, action: str):
+    """Every row *action* stored, file by file."""
+    for relative_path in backend.list_target_files(action):
+        yield from backend.read_target(action, relative_path)
+
+
 def _delete_manifest(path: Path) -> None:
     """Delete the retry manifest and its repair notes once the re-run has reached the end,
     failed or not."""
@@ -172,8 +179,16 @@ def _delete_manifest(path: Path) -> None:
 class RetryCommand:
     """Retry failed/exhausted records from a given action forward."""
 
-    def __init__(self, args: RetryCommandArgs):
+    # Set by `agac run --rerun ACTION --where/--records`: answer the records it matches
+    # again from `args.from_action`, whether or not they failed. None for a retry.
+    _record_filter: RecordFilter | None = None
+    _selection: Selection | None = None
+    # The File tools a filtered rerun reaches that something in its range reads.
+    _file_tools: Sequence[str] = ()
+
+    def __init__(self, args: RetryCommandArgs, record_filter: RecordFilter | None = None):
         self.args = args
+        self._record_filter = record_filter
         self.agent_name = Path(args.agent).stem
         self.console = Console()
         self._abandoned: set[tuple[str, str, str]] = set()
@@ -182,6 +197,20 @@ class RetryCommand:
         self._open_before: frozenset[tuple[str, str]] = frozenset()
         # Whether a pass ran the workflow to its end.
         self._reran = False
+
+    @property
+    def _noun(self) -> str:
+        return "Rerun" if self._record_filter is not None else "Retry"
+
+    @property
+    def _word(self) -> str:
+        """What this command calls itself in a sentence: a retry, or a filtered rerun."""
+        return self._noun.lower()
+
+    @property
+    def _again(self) -> str:
+        """How to ask for this command again, as the end of a remedy."""
+        return "run the rerun again" if self._record_filter is not None else "retry"
 
     def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
@@ -314,7 +343,7 @@ class RetryCommand:
         if prior_manifest and self.args.dry_run:
             self.console.print(
                 "[yellow]Found incomplete retry manifest — prior retry was interrupted. "
-                f"A retry would restore {len(restoring)} disposition(s) first, and this "
+                f"A {self._word} would restore {len(restoring)} disposition(s) first, and this "
                 "plan counts them.[/yellow]"
             )
         elif prior_manifest:
@@ -335,7 +364,8 @@ class RetryCommand:
             # The manifest and its notes stay until this retry writes its own: one that
             # stops short of that leaves the stopped retry for the next to resume.
             self.console.print(
-                f"[cyan]Restored {len(restoring)} disposition(s). Proceeding with retry.[/cyan]"
+                f"[cyan]Restored {len(restoring)} disposition(s). "
+                f"Proceeding with {self._word}.[/cyan]"
             )
 
         unwritten = restoring if self.args.dry_run else []
@@ -343,6 +373,15 @@ class RetryCommand:
             backend, state_mgr, execution_order, resumed
         )
         failures = self._find_failures(backend, execution_order, unwritten)
+        if self._record_filter is not None:
+            self._selection = self._select(self._record_filter, backend, workflow, execution_order)
+            if not self._selection.named:
+                return None
+            # The plan is the selection alone: a record that failed elsewhere keeps its
+            # failure for `agac retry`, as every record this rerun did not name keeps its row.
+            first = self._selection.starts[0]
+            self.args = self.args.model_copy(update={"from_action": first})
+            failures = {first: self._selection.as_plan_rows()}
 
         if not failures:
             found = self._failures_when_none_is_recorded(
@@ -388,10 +427,20 @@ class RetryCommand:
                     f"for action '{from_action}'"
                 )
 
-        self._display_retry_plan(from_action, target_records, execution_order, failures)
-
         from_idx = execution_order.index(from_action)
         downstream_actions = execution_order[from_idx:]
+        if self._selection is not None:
+            # Only what reads the action: a branch beside it holds the same records
+            # and would answer them again for nothing.
+            starts = set(self._selection.starts)
+            below = {a for start in starts for a in actions_below(backend, start)}
+            downstream_actions = [a for a in downstream_actions if a in starts or a in below]
+            self._file_tools = self._file_tools_something_reads(
+                downstream_actions, workflow.services.core.action_runner.action_configs or {}
+            )
+        self._display_retry_plan(
+            from_action, target_records, execution_order, failures, downstream_actions
+        )
         self._note_file_tools(
             downstream_actions,
             workflow.services.core.action_runner.action_configs or {},
@@ -530,7 +579,43 @@ class RetryCommand:
         self._reran = True
         if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
             write_declared_outputs(workflow, project_root, self.args.agent)
+            if self._selection is not None:
+                self._note_appended_outputs(workflow, downstream_actions)
         return outcome
+
+    @staticmethod
+    def _file_tools_something_reads(
+        downstream_actions: list[str], action_configs: dict[str, dict[str, Any]]
+    ) -> list[str]:
+        from agent_actions.processing.helpers import replaces_its_file_whole
+
+        return [
+            action
+            for action in downstream_actions[:-1]
+            if replaces_its_file_whole(action_configs.get(action) or {})
+        ]
+
+    def _note_appended_outputs(self, workflow, downstream_actions: list[str]) -> None:
+        """Say which append tables still hold the answers this rerun replaced.
+
+        An append skips a key the table holds, so a record answered again is not
+        written to it.
+        """
+        declared = (workflow.config.manager.user_config or {}).get("outputs") or []
+        stale = [
+            str(output.get("table"))
+            for output in declared
+            if isinstance(output, dict)
+            and output.get("mode") == "append"
+            and output.get("action") in downstream_actions
+        ]
+        if stale:
+            self.console.print(
+                f"[yellow]Note: {', '.join(stale)} is written with mode: append, which "
+                "skips a key the table holds, so it still holds the earlier answer of each "
+                "record answered again. Use mode: merge to have the new answer replace it."
+                "[/yellow]"
+            )
 
     def _report(self, outcome: RunOutcome, state_mgr, execution_order: list[str]) -> None:
         """Print the sentence for *outcome*; the exit code is read from the outcome alone."""
@@ -539,22 +624,36 @@ class RetryCommand:
         elif outcome is RunOutcome.RECORD_FAILURES:
             partial = actions_with_record_failures(state_mgr, execution_order)
             self.console.print(
-                f"\n[yellow]Retry finished with failed or exhausted records in: "
+                f"\n[yellow]{self._noun} finished with failed or exhausted records in: "
                 f"{', '.join(partial)}.[/yellow]"
             )
         elif outcome is RunOutcome.PAUSED_FOR_BATCH:
             waiting = state_mgr.get_batch_submitted_actions(execution_order)
             self.console.print(
-                f"\n[cyan]Retry paused - batch job(s) submitted for: {', '.join(waiting)}. "
+                f"\n[cyan]{self._noun} paused - batch job(s) submitted for: "
+                f"{', '.join(waiting)}. "
                 f"Collect them with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
             )
         elif outcome is RunOutcome.PAUSED:
             self.console.print(
-                f"\n[cyan]Retry paused before every action finished. "
+                f"\n[cyan]{self._noun} paused before every action finished. "
                 f"Continue with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
             )
         else:
-            self.console.print("\n[green]Retry complete.[/green]")
+            if self._selection is not None:
+                widened = (
+                    f" A File tool in the range ({', '.join(self._file_tools)}) also had "
+                    "what reads it answer again each record whose row it wrote differently."
+                    if self._file_tools
+                    else ""
+                )
+                self.console.print(
+                    f"\n[green]Rerun complete: {len(self._selection.matched)} record(s) of "
+                    f"'{self._selection.action}' answered again there and at what reads it; "
+                    f"{self._selection.kept} kept their answers.{widened}[/green]"
+                )
+            else:
+                self.console.print("\n[green]Retry complete.[/green]")
 
     @staticmethod
     def _clear_for_the_rerun(
@@ -726,7 +825,9 @@ class RetryCommand:
     def _report_failures(self, state_mgr, execution_order: list[str]) -> None:
         failed = state_mgr.get_failed_actions(execution_order)
         skipped = state_mgr.get_skipped_actions(execution_order)
-        self.console.print(f"\n[red]Retry finished with failures for: {self.agent_name}[/red]")
+        self.console.print(
+            f"\n[red]{self._noun} finished with failures for: {self.agent_name}[/red]"
+        )
         self.console.print(f"  Failed actions: {', '.join(failed)}")
         if skipped:
             self.console.print(f"  Skipped actions: {', '.join(skipped)}")
@@ -802,13 +903,13 @@ class RetryCommand:
         if execution_order.index(from_action) <= execution_order.index(started):
             return False
         reason = (
-            f"A retry from {started} was stopped before it finished, and a retry from "
+            f"A retry from {started} was stopped before it finished, and a {self._word} from "
             f"{from_action} starts below it, so it would not answer what that one named. "
-            f"Resume it first — agac retry -a {self.agent_name} — then retry from "
+            f"Resume it first — agac retry -a {self.agent_name} — then {self._again} from "
             f"{from_action} if anything is still failed there."
         )
         if self.args.dry_run:
-            self.console.print(f"\n[yellow]This retry would be refused: {reason}[/yellow]")
+            self.console.print(f"\n[yellow]This {self._word} would be refused: {reason}[/yellow]")
             return True
         raise click.ClickException(reason)
 
@@ -964,11 +1065,14 @@ class RetryCommand:
             return
 
         flag = sandbox.run_flags()
-        remedy = f"Run the workflow first — agac run -a {self.agent_name}{flag} — then retry."
+        remedy = (
+            f"Run the workflow first — agac run -a {self.agent_name}{flag} — then {self._again}."
+        )
         if halted:
             resume = (
                 f"resume {halted[0]} with a retry from it, which names no record and runs it "
-                f"in full — agac retry -a {self.agent_name} --from {halted[0]}{flag} — then retry."
+                f"in full — agac retry -a {self.agent_name} --from {halted[0]}{flag} — "
+                f"then {self._again}."
             )
             remedy = (
                 f"Run the workflow first — agac run -a {self.agent_name}{flag} — then {resume}"
@@ -977,12 +1081,12 @@ class RetryCommand:
             )
         reason = (
             f"{len(unfinished)} action(s) hold no current answer for some of their records "
-            f"({', '.join(unfinished)}). A retry answers only the records it names and "
+            f"({', '.join(unfinished)}). A {self._word} answers only the records it names and "
             f"carries what each action holds for the rest, so it would complete them "
             f"without those answers. {remedy}"
         )
         if self.args.dry_run:
-            self.console.print(f"\n[yellow]This retry would be refused: {reason}[/yellow]")
+            self.console.print(f"\n[yellow]This {self._word} would be refused: {reason}[/yellow]")
             return
         raise click.ClickException(reason)
 
@@ -1167,7 +1271,7 @@ class RetryCommand:
             f"{batch_id} ({action}, {state})" for action, batch_id, _, state in sorted(owed)
         )
         remedy = (
-            "Collect them first — run the workflow again — then retry. "
+            f"Collect them first — run the workflow again — then {self._again}. "
             "If the provider no longer has them, pass --abandon-in-flight."
         )
 
@@ -1178,14 +1282,14 @@ class RetryCommand:
             if self.args.abandon_in_flight:
                 waiting = self._records_waiting_on(backend, owed)
                 self.console.print(
-                    f"\n[yellow]This retry would abandon {len(owed)} batch job(s) "
+                    f"\n[yellow]This {self._word} would abandon {len(owed)} batch job(s) "
                     f"not collected yet ({listing}), giving up whatever they return, and "
                     f"would mark {len(waiting)} record(s) waiting on them failed so a "
                     f"later retry can still reach them.[/yellow]"
                 )
             else:
                 self.console.print(
-                    f"\n[yellow]This retry would be refused: {len(owed)} batch job(s) "
+                    f"\n[yellow]This {self._word} would be refused: {len(owed)} batch job(s) "
                     f"not collected yet ({listing}). {remedy}[/yellow]"
                 )
             return
@@ -1202,9 +1306,10 @@ class RetryCommand:
             )
             return
 
+        mine = "rerun" if self._record_filter is not None else "repair"
         raise click.ClickException(
             f"{len(owed)} batch job(s) not collected yet ({listing}). Their results would "
-            f"be lost to this repair's own submission. {remedy}"
+            f"be lost to this {mine}'s own submission. {remedy}"
         )
 
     @classmethod
@@ -1311,6 +1416,65 @@ class RetryCommand:
             )
         return len(waiting)
 
+    def _select(
+        self, record_filter: RecordFilter, backend, workflow, execution_order: list[str]
+    ) -> Selection:
+        """The records `--where` / `--records` match at the action the rerun starts from."""
+        from agent_actions.prompt.context.scope_inference import expand_version_base_names
+
+        action = self.args.from_action or ""
+        # A versioned action is stored under each version's name, as `--rerun` reads it.
+        starts = [name for name in expand_version_base_names([action], execution_order)]
+        starts = [name for name in execution_order if name in starts]
+        if not starts:
+            raise click.ClickException(
+                f"Action '{action}' not found in execution order: {execution_order}"
+            )
+        configs = workflow.services.core.action_runner.action_configs or {}
+        upstream = expand_version_base_names(
+            list((configs.get(starts[0]) or {}).get("dependencies") or []), execution_order
+        )
+
+        def held_by_input(record_ids: Sequence[str]) -> set[str]:
+            if not upstream:
+                return set(backend.source_guids_among(record_ids))
+            wanted = set(record_ids)
+            return {
+                row["source_guid"]
+                for dependency in upstream
+                for row in _stored_rows(backend, dependency)
+                if row.get("source_guid") in wanted
+            }
+
+        stored = (row for start in starts for row in _stored_rows(backend, start))
+        selection = select_records(stored, action, record_filter, held_by_input)
+        selection.starts = starts
+        if not selection.considered:
+            raise click.ClickException(
+                f"'{action}' holds no stored record to choose from. Run the workflow first."
+            )
+        self.console.print(
+            f"\n[bold]{len(selection.matched)} of {selection.considered} record(s) of "
+            f"'{action}' match[/bold]; the other {selection.kept} keep their answers."
+        )
+        if selection.unevaluated:
+            self.console.print(
+                f"  [dim]{selection.unevaluated} record(s) could not be evaluated and are "
+                f"not matched: {selection.first_error}[/dim]"
+            )
+        if not selection.matched:
+            self.console.print("[yellow]No record matches. Nothing is changed.[/yellow]")
+        elif len(selection.named) != len(selection.matched):
+            self.console.print(
+                f"  [dim]'{action}' makes its records from the ones it reads, so it runs "
+                f"again on the {len(selection.named) - len(selection.matched)} record(s) the "
+                "matches were made from.[/dim]"
+            )
+        if self.args.dry_run:
+            for record_id in selection.matched:
+                self.console.print(record_id, highlight=False)
+        return selection
+
     def _records_this_repair_may_process(
         self,
         cleared_ids: set[str],
@@ -1374,16 +1538,18 @@ class RetryCommand:
         target_records: list[dict],
         execution_order: list[str],
         all_failures: dict[str, list[dict]],
+        downstream: list[str] | None = None,
     ) -> None:
         """Display what will be retried."""
-        from_idx = execution_order.index(from_action)
-        downstream = execution_order[from_idx:]
+        if downstream is None:
+            downstream = execution_order[execution_order.index(from_action) :]
 
         # The __node__ row is the action's own status, not a record.
         records = [r for r in target_records if r.get("record_id") != NODE_LEVEL_RECORD_ID]
         action_rows = [r for r in target_records if r.get("record_id") == NODE_LEVEL_RECORD_ID]
 
-        self.console.print("\n[bold]Retry Plan[/bold]")
+        title = "Rerun Plan" if self._selection is not None else "Retry Plan"
+        self.console.print(f"\n[bold]{title}[/bold]")
         self.console.print(f"  From action: [cyan]{from_action}[/cyan]")
         self.console.print(f"  Actions to re-run: {' → '.join(downstream)}")
         for row in action_rows:
@@ -1392,12 +1558,18 @@ class RetryCommand:
                 Text(f"  Action status: {row.get('disposition', '?')}")
                 + Text(f" — {reason}" if reason else "", style="dim")
             )
-        self.console.print(f"  Records to retry: {len(records)}")
+        doing = "answer again" if self._selection is not None else "retry"
+        self.console.print(f"  Records to {doing}: {len(records)}")
         if not records:
             self.console.print(
                 f"  [dim]The failure is {from_action}'s own, so the retry re-runs it "
                 "without narrowing it to particular records.[/dim]"
             )
+            self._note_other_failures(from_action, all_failures)
+            return
+
+        if self._selection is not None:
+            # The ids are printed by --dry-run; a table of them says nothing more.
             self._note_other_failures(from_action, all_failures)
             return
 
@@ -1441,7 +1613,8 @@ class RetryCommand:
             )
             # Soft-wrapped: one line in a log, where it is read back after the fact.
             self.console.print(
-                f"  [dim]Note: '{action}' is a File tool, so the retry hands it every record "
+                f"  [dim]Note: '{action}' is a File tool, so the {self._word} hands it every "
+                f"record "
                 f"of each file holding a record listed above, and {below}.[/dim]",
                 soft_wrap=True,
                 highlight=False,
