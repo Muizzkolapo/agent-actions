@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'The sandbox starter project (`agac init <name> --template sandbox`) completes under `--scenario chaos`. `score`, `draft_reply` and `tag_reply` had no `expect:` block with `repair: auto`, so a cut-off or empty answer failed its record and the run exited 3. Each now has one, and the run of `sandbox.yml` and `sandbox_expected.yml` are unchanged.'
+time: 2026-11-26T06:00:00.000000000+00:00

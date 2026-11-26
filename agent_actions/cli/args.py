@@ -117,6 +117,16 @@ class RunCommandArgs(BaseModel):
     rerun: tuple[str, ...] = Field(
         (), description="Answer every record of these actions and what reads them again"
     )
+    where: str | None = Field(
+        None,
+        description="With --rerun: answer again only the records this guard expression matches",
+    )
+    records: str | None = Field(
+        None, description="With --rerun: answer again only the records this file lists by id"
+    )
+    dry_run: bool = Field(
+        False, description="With --where / --records: print what would be answered again"
+    )
     verify_keys: bool = Field(
         False, description="Verify API keys are valid by probing vendor endpoints before execution"
     )

@@ -12,6 +12,8 @@ The `retry` command runs the failed or exhausted records again, from one action 
 agac retry -w <workflow-name> [options]
 ```
 
+To answer again records that did **not** fail, use [`agac run --rerun ACTION --where / --records`](./run.md#rerun-selected-records). It runs on the same path as a retry, and keeps the rows of each record that it did not name.
+
 A retry takes the same lock as [`run`](./run.md#concurrent-runs). If a run or another retry of the workflow is in progress, the retry exits 1 with `Another run of workflow '<workflow>' is in progress`. `--filter` also takes the lock, because `--filter` rewrites dispositions, stored rows, the status file and the retry manifest. `--dry-run` writes nothing and does not take the lock.
 
 A retry uses the same [exit codes](./run.md#exit-codes) as a run. The code is `0` when no action holds a failed or exhausted record. The code is `1` when an action failed. The code is `3` when a failed or exhausted record remains. The code is `4` when the retry submitted a batch, or stopped before every action ended. The code is `0` when there is nothing to retry, and for `--dry-run` and `--filter`. The code is `1` when the workflow has no store, because it did not run. This is also true with `--dry-run`, `--filter` and `--all`. See [Errors](#errors).
