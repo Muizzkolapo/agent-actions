@@ -11,6 +11,13 @@ actions:
     intent: Write a reply to the ticket, and fix what the last check found
     prompt: $support_desk.Draft_Reply
     schema: reply
+    # An answer that is cut off or empty is asked again (try: --scenario chaos).
+    expect:
+      repair: auto
+      expectations:
+        - id: reply_is_set
+          type: not_null
+          field: reply
     dependencies: [ticket, rating]
     context_scope:
       observe: [ticket.ticket_id, ticket.text, rating.urgency, prior.*]
