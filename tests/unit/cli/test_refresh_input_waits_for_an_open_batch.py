@@ -84,3 +84,33 @@ def test_the_refresh_request_ends_with_the_run_that_asked(tmp_path, monkeypatch)
 
     assert seen == [True]
     assert not database_source._refresh_requested
+
+
+@pytest.mark.parametrize("status_text", [None, "{not json", "[]"])
+def test_an_open_batch_in_the_store_refuses_the_refresh_whatever_the_status_file_says(
+    tmp_path, status_text
+):
+    # A soft reset removes the status file, and a crash can leave it cut short.
+    from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+    from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+    from agent_actions.storage import get_storage_backend
+
+    workflow_dir = tmp_path / "wf"
+    io_dir = workflow_dir / "agent_io"
+    (io_dir / "store").mkdir(parents=True)
+    backend = get_storage_backend(workflow_path=str(workflow_dir), workflow_name="wf")
+    backend.initialize()
+    BatchRegistryManager(backend, "classify").save_batch_job(
+        "part-0.json",
+        BatchJobEntry(
+            batch_id="b-1",
+            status="in_progress",
+            timestamp="2026-11-26T00:00:00Z",
+            provider="agac-provider",
+        ),
+    )
+    backend.close()
+    if status_text is not None:
+        (io_dir / ".agent_status.json").write_text(status_text)
+
+    assert batches_still_open(io_dir, "wf") == ["classify"]

@@ -317,7 +317,7 @@ class DbApiConnector(Connector):
         Compared as text, a key matches whatever type its column holds: an id an
         earlier write stored as text, or a column made by hand, still matches.
         """
-        keys = [[_key_text(row[position]) for position in positions] for row in batch]
+        keys = [[key_text(row[position]) for position in positions] for row in batch]
         dialect = self.dialect
         names = [dialect.as_text(column) for column in key]
         for chunk in _statement_chunks(keys, len(key), dialect.max_params):
@@ -345,7 +345,7 @@ class DbApiConnector(Connector):
         seen = self.held_keys(table, key)
         kept: list[Sequence[Any]] = []
         for row in rows:
-            row_key = tuple(_key_text(row[position]) for position in positions)
+            row_key = tuple(key_text(row[position]) for position in positions)
             if row_key not in seen:
                 seen.add(row_key)
                 kept.append(row)
@@ -446,7 +446,7 @@ def _refuse_null_keys(
         )
 
 
-def _key_text(value: Any) -> str:
+def key_text(value: Any) -> str:
     """*value* as text, the way a database casts a stored key to text."""
     safe = json_safe(value)
     return safe if isinstance(safe, str) else json.dumps(safe)

@@ -267,3 +267,34 @@ def test_a_source_connection_cannot_write_even_inside_a_select(project):
             connector.write("topics", ["id"], [(1,)], mode=WriteMode.APPEND)
         with pytest.raises(ConfigurationError, match="readonly|read-only|read only"):
             list(connector.read("WITH gone AS (SELECT 1) DELETE FROM topics RETURNING id"))
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT id FROM topics; DELETE FROM topics",
+        "SELECT id FROM topics;\n-- then\nDELETE FROM topics WHERE true;",
+        "SELECT id FROM topics; /* x */ DROP TABLE topics",
+    ],
+)
+def test_a_second_statement_is_refused_and_never_runs(project, sql):
+    # BigQuery runs a query of several statements as a script, and opens no read-only session.
+    with pytest.raises(ConfigurationError, match="holds more than one"):
+        _resolve(project, sql=sql)
+
+    with sqlite3.connect(project / "warehouse.db") as raw:
+        assert raw.execute("SELECT count(*) FROM topics").fetchone() == (5,)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT id FROM topics;",
+        "SELECT id FROM topics ;  -- the end\n",
+        "SELECT id FROM topics WHERE topic != 'a;b'",
+        'SELECT id, topic AS "a;b" FROM topics',
+        "SELECT id FROM topics /* a; b */",
+    ],
+)
+def test_a_semicolon_that_ends_the_statement_or_sits_in_a_text_is_accepted(project, sql):
+    assert len(_staged(_resolve(project, sql=sql))) == 5

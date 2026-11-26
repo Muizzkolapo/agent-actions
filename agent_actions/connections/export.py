@@ -12,6 +12,7 @@ from agent_actions.config.schema import OUTPUT_IDENTITY_COLUMN as IDENTITY_COLUM
 from agent_actions.config.schema import OutputConfig
 from agent_actions.connections import ColumnType, Connector, WriteMode, open_connection
 from agent_actions.connections.base import quoted_identifier
+from agent_actions.connections.dbapi import key_text
 from agent_actions.errors import ConfigurationError
 from agent_actions.record.state import CASCADE_BLOCKING_STATES, RecordState
 from agent_actions.storage.backend import StorageBackend
@@ -43,7 +44,8 @@ def output_table(
         answer = content.get(action)
         if not isinstance(answer, dict):
             continue
-        clash = sorted(set(answer) & set(columns[: len(carry) + 1]))
+        beside = {name.lower() for name in columns[: len(carry) + 1]}
+        clash = sorted(name for name in answer if name.lower() in beside)
         if clash:
             raise ConfigurationError(
                 f"Action '{action}' has a field named like a column written beside "
@@ -56,7 +58,19 @@ def output_table(
         row = {IDENTITY_COLUMN: record.get(IDENTITY_COLUMN)}
         row.update({name: source.get(name) for name in carry})
         row.update(answer)
-        columns.extend(name for name in answer if name not in columns)
+        for name in answer:
+            if name in columns:
+                continue
+            twin = next(
+                (held_name for held_name in columns if held_name.lower() == name.lower()), None
+            )
+            if twin is not None:
+                raise ConfigurationError(
+                    f"Action '{action}' writes both {twin!r} and {name!r}, which most databases "
+                    "take as one column; give the fields names that differ in more than case",
+                    context={"action": action, "fields": [twin, name]},
+                )
+            columns.append(name)
         flat.append(row)
     unheld = [name for name in carry if name not in held]
     if flat and unheld:
@@ -134,7 +148,8 @@ def _one_row_per_key(
     positions = [columns.index(name) for name in key]
     kept: dict[tuple[Any, ...], tuple[Any, ...]] = {}
     for row in rows:
-        row_key = tuple(row[position] for position in positions)
+        # As text, as the write compares keys: 7 and "7" are one key in the table.
+        row_key = tuple(key_text(row[position]) for position in positions)
         held = kept.setdefault(row_key, row)
         if held != row:
             shown = ", ".join(

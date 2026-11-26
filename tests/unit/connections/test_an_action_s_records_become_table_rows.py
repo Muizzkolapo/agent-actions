@@ -244,3 +244,30 @@ def test_an_append_output_written_twice_adds_each_record_once(connector):
     store = _Stored([_record("g1", {"score": 4}), _record("g3", {"score": 5})])
     assert write_output(store, _output(mode=WriteMode.APPEND), connector) == 1
     assert len(_held(connector)) == 3
+
+
+def test_keys_that_read_the_same_as_text_are_one_key(connector):
+    # The write compares keys as text, so 7 and "7" would be the same row twice.
+    store = _Stored(
+        [
+            _record("g1", {"score": 1}, source={"id": 7}),
+            _record("g2", {"score": 2}, source={"id": "7"}),
+        ]
+    )
+
+    with pytest.raises(ConfigurationError, match="share the key of grades"):
+        write_output(store, _output(carry=["id"], key=["id"]), connector)
+
+
+def test_an_answered_field_named_like_a_carried_column_in_another_case_is_refused():
+    records = [_record("g1", {"ID": "theirs"}, source={"id": 7})]
+
+    with pytest.raises(ConfigurationError, match="named like a column written beside its own: ID"):
+        output_table(records, "grade", ["id"])
+
+
+def test_two_answered_fields_that_differ_only_in_case_are_refused():
+    records = [_record("g1", {"summary": "a"}), _record("g2", {"Summary": "b"})]
+
+    with pytest.raises(ConfigurationError, match="writes both 'summary' and 'Summary'"):
+        output_table(records, "grade", [])

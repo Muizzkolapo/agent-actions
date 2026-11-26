@@ -105,6 +105,10 @@ anything else (`DELETE`, `UPDATE`, `DROP`) is refused before it reaches the
 database. SQLite and DuckDB are opened read-only for it, and Postgres and MySQL
 get a read-only session, so a `WITH ... DELETE` cannot write either.
 
+It must be one statement: a `;` before the end is refused, since only the first statement
+is checked and BigQuery, Snowflake, Redshift and Databricks open no read-only session. A `;`
+inside a quoted text or a comment, or at the very end, is accepted.
+
 It must return rows, and each column must have a name of its own:
 `SELECT t.id, u.id` is refused, so alias one with `AS`.
 
@@ -190,6 +194,9 @@ more often a misspelling than a column of nulls.
 | `append` | What it held, plus each row whose `key` it does not hold yet. Writing twice changes nothing; a source row that changed is added beside the old one. |
 | `replace` | Exactly the rows the store holds now. |
 | `merge` | What it held, with each row sharing a `key` replaced. Writing twice changes nothing. |
+
+Two field names that differ only in case (`summary` and `Summary`, or an answer field `ID`
+beside `carry: [id]`) are refused, since most databases take them as one column.
 
 A key is compared as text, so it matches whatever type its column holds: an id
 stored as `VARCHAR` matches the number `7`, and a Postgres `UUID` column matches
