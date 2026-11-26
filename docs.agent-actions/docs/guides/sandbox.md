@@ -242,6 +242,7 @@ These events start the count again:
 |-------|-------|
 | `agac run --sandbox --fresh` | Starts again for each action |
 | `agac run --sandbox --rerun <action>` | Starts again for that action and the actions that read it |
+| `agac run --sandbox --rerun <action> --where <expression>` | Starts again only for the records that match, at that action and the actions that read it. Use this to test a [filtered rerun](../reference/cli/run.md#rerun-selected-records) offline before you pay for it |
 | An input record is removed from the staged input, and a run sees that | Starts again for that record, at the action that read it and the actions that read that action. If you stage the same input again, it is a new record: its count starts at 1 |
 | `agac clean --all` | Removed with the sandbox store |
 

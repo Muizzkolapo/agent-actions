@@ -219,7 +219,10 @@ before it clears anything. An output naming an action the workflow does not run,
 connection the project does not declare or whose driver is not installed, a table,
 `key` or `carry` name that is not a plain name, or a table another output writes on
 the same connection stops the run at once. Tables are written when `agac run` or `agac retry` finishes with
-every action complete. A [sandbox run](../../guides/sandbox.md) writes no table. If the write
+every action complete. A [filtered rerun](../cli/run.md#rerun-selected-records)
+(`--rerun ACTION --where`) writes them too: a `merge` or `replace` table then holds the new
+answer of each record that it answered again, and an `append` table keeps the earlier answer.
+A [sandbox run](../../guides/sandbox.md) writes no table. If the write
 fails, the results are still in the store. Write them again, without calling a model, with
 [`agac export`](../cli/export.md):
 

@@ -193,6 +193,11 @@ the edit is undone. The framework does not see a change to a module that a tool 
 a seed data file. Thus, after such a change, run `agac run --rerun <action>` or `--fresh` to answer
 all records again.
 
+If the edit applies to some records only, add `--where` or `--records` to `--rerun`. The run then
+answers only the matching records under the edit, and the other records keep their answers. The
+action holds answers from two configs after that run, so it gets the mark. See
+[Rerun selected records](../cli/run.md#rerun-selected-records).
+
 The framework does not keep the verdict of a guard. The run that resumes the action gives each
 record to the guard again. Thus a record that the guard code now skips is skipped, and a record that it now
 passes is answered. The exception is a record of a batch action whose batch was out, or

@@ -100,6 +100,7 @@ Switch providers per-action by changing `model_vendor`.
 
 - **Pre-flight validation** — schemas, dependencies, templates, and credentials checked before any LLM call
 - **Batch processing** — route thousands of records through provider batch APIs
+- **Selective rerun** — after a full run, answer only the records that need it again (`--rerun ACTION --where '...'`); the rest keep their paid answers ([docs](docs.agent-actions/docs/reference/cli/run.md#rerun-selected-records))
 - **User-defined functions** — Python tools for pre/post-processing and custom logic
 - **Databases** — read input rows from a query and write results to tables on SQLite, DuckDB, Postgres, MySQL, Redshift, Snowflake, BigQuery or Databricks ([docs](docs.agent-actions/docs/reference/data-io/databases.md))
 - **Expectations** — declare rules the output must satisfy; failures are regenerated with the rule's feedback
