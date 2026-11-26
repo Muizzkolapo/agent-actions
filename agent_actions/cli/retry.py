@@ -197,6 +197,8 @@ class RetryCommand:
         self._open_before: frozenset[tuple[str, str]] = frozenset()
         # Whether a pass ran the workflow to its end.
         self._reran = False
+        # The workflow whose outputs to write once the last pass ends, if it ended so.
+        self._outputs_to_write: tuple[Any, Path | None, list[str]] | None = None
 
     @property
     def _noun(self) -> str:
@@ -226,6 +228,13 @@ class RetryCommand:
                 # workflow. Held from the first pass of --all to the last.
                 with hold_run_lock(paths.io_dir, self.agent_name):
                     code = passes(paths, project_root)
+                    # Once, after the last pass: --all writing after each pass
+                    # showed a pass's partial tables and paid for each load.
+                    if self._outputs_to_write is not None:
+                        workflow, root, ran = self._outputs_to_write
+                        write_declared_outputs(workflow, root, self.args.agent)
+                        if self._selection is not None:
+                            self._note_appended_outputs(workflow, ran)
             except ProviderQuotaStop as stop:
                 # Its manifest stays, as after an interrupt, so the next retry resumes it.
                 report_quota_stop(stop)
@@ -577,10 +586,11 @@ class RetryCommand:
 
         self._report(outcome, state_mgr, execution_order)
         self._reran = True
-        if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES):
-            write_declared_outputs(workflow, project_root, self.args.agent)
-            if self._selection is not None:
-                self._note_appended_outputs(workflow, downstream_actions)
+        self._outputs_to_write = (
+            (workflow, project_root, downstream_actions)
+            if outcome in (RunOutcome.SUCCESS, RunOutcome.RECORD_FAILURES)
+            else None
+        )
         return outcome
 
     @staticmethod

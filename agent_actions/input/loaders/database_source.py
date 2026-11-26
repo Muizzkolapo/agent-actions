@@ -27,6 +27,10 @@ REMOTE_CACHE_DIR = "_remote_cache"
 # The statements a source may be: anything else could change the data it reads.
 _READING_STATEMENT = re.compile(r"^(select|with|values|table)\b", re.IGNORECASE)
 _LEADING_NOISE = re.compile(r"^(\s+|--[^\n]*(\n|$)|/\*.*?\*/|\()+", re.DOTALL)
+# What can hold a `;` that does not end a statement: a quoted text or name, a comment.
+_QUOTED_OR_COMMENT = re.compile(
+    r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|`[^`]*`|--[^\n]*|/\*.*?\*/", re.DOTALL
+)
 
 # Start nodes run in threads and may share one source.
 _SNAPSHOT_LOCK = threading.Lock()
@@ -71,6 +75,14 @@ def forget_refresh_request() -> None:
 def refuse_a_statement_that_writes(query: str) -> None:
     """Refuse a source query that is not a read, before it can reach the database."""
     stripped = _LEADING_NOISE.sub("", query, count=1)
+    if ";" in _QUOTED_OR_COMMENT.sub(" ", query).strip().rstrip(";"):
+        # Only the first statement is checked here, and BigQuery, Snowflake, Redshift
+        # and Databricks open no read-only session, so a second one would run.
+        raise ConfigurationError(
+            "A database data source reads one statement, and its sql holds more than one "
+            "(a ';' before the end). Remove the statements after the first",
+            context={"sql": query},
+        )
     if not _READING_STATEMENT.match(stripped):
         first = (stripped.split() or ["(nothing)"])[0]
         raise ConfigurationError(

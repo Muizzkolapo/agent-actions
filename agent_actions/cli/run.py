@@ -54,9 +54,10 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
     try:
         statuses = json.loads(status_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return []
+        # Gone or cut short: the batch registry in the store still says what is open.
+        statuses = {}
     if not isinstance(statuses, dict):
-        return []
+        statuses = {}
     waiting = {"batch_submitted", "checking_batch"}
     open_actions = {
         action
@@ -73,7 +74,8 @@ def batches_still_open(io_dir: Path, workflow_name: str) -> list[str]:
         )
         backend.initialize()
         try:
-            for action in statuses:
+            registered = BatchRegistryManager.list_action_names(backend)
+            for action in dict.fromkeys([*statuses, *registered]):
                 jobs = BatchRegistryManager(backend, action).get_all_jobs().values()
                 if any(job.is_in_flight or job.awaits_collection for job in jobs):
                     open_actions.add(action)

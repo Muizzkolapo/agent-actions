@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'Database sources and outputs: a source `sql` of more than one statement (`SELECT 1; DELETE FROM t`) is refused, since only the first was checked and BigQuery, Snowflake, Redshift and Databricks open no read-only session; `--refresh-input` reads the batch registry when the status file is gone or cut short, and every action the registry holds; a merge or append compares keys as text when it finds two rows sharing one, as the database does (7 and "7"); field names that differ only in case are refused; and `agac retry --all` writes the declared outputs once, after its last pass.'
+time: 2026-11-26T07:00:00.000000000+00:00

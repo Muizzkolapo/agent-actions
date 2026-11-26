@@ -231,3 +231,32 @@ def test_a_retry_whose_outputs_cannot_be_written_clears_nothing(project):
     assert "No connection named 'warehouse'" in output, output
     assert _statuses(project) == before
     assert not list((project / IO).rglob("_retry_manifest.json")), output
+
+
+FAILS_WHILE_FLAGGED = (
+    '    flag = Path(__file__).with_name("fail_" + source["topic"].replace(" ", "_"))\n'
+    "    if flag.exists():\n"
+    '        raise ValueError("refused on purpose")\n'
+)
+
+
+def test_retry_all_writes_the_tables_once_after_its_last_pass(project):
+    # Each pass of --all used to write them: a pass's partial tables, and a load each.
+    tools = project / TOOLS
+    text = tools.read_text(encoding="utf-8")
+    tools.write_text(
+        "from pathlib import Path\n" + text.replace(READ_SPEC, READ_SPEC + FAILS_WHILE_FLAGGED),
+        encoding="utf-8",
+    )
+    for topic in ("photosynthesis", "plate_tectonics"):
+        (tools.parent / f"fail_{topic}").touch()
+    first = run_agac(project, "run", "-a", WORKFLOW)
+    assert first.returncode != 0, first.stdout + first.stderr
+    # Pass 1 repairs one record and leaves the other, so a second pass runs.
+    (tools.parent / "fail_photosynthesis").unlink()
+
+    result = run_agac(project, "retry", "-a", WORKFLOW, "--all")
+
+    output = " ".join((result.stdout + result.stderr).split())
+    assert "Pass 2" in output, output[-3000:]
+    assert output.count("rows to published") == 1, output[-3000:]
