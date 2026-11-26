@@ -200,3 +200,20 @@ def test_the_exit_code_of_a_run_that_fails_a_record_is_compared_as_a_value(proje
 
     assert differs.returncode == 1, differs.stdout + differs.stderr
     assert "  exit code: expected 0, got 3" in differs.stdout
+
+
+def test_the_template_completes_under_the_chaos_preset(project):
+    """Each LLM action has what chaos needs: `retry:` and an `expect:` block with repair.
+
+    Without the block, a rater's cut-off answer failed its record, and the starter
+    project showed a failure where it shows how a workflow gets through one.
+    """
+    result = run_agac(
+        project, "run", "-w", WORKFLOW, "--sandbox", "--wait", "--scenario", "chaos", env=ENV
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output[-3000:]
+    assert "16 completed" in output, output[-3000:]
+    faults = output.split("SANDBOX scenario chaos: ")[-1].split(" errors")[0]
+    assert int(faults) > 0, "chaos injected no fault, so the run proved nothing"

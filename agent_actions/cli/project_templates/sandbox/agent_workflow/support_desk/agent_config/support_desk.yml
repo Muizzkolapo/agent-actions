@@ -89,6 +89,13 @@ actions:
     intent: "Rate how urgent the ticket is"
     prompt: $support_desk.Score
     schema: score
+    # An answer that is cut off or empty is asked again (try: --scenario chaos).
+    expect:
+      repair: auto
+      expectations:
+        - id: urgency_is_set
+          type: not_null
+          field: urgency
     versions:
       param: rater
       range: [1, 2]
@@ -168,6 +175,13 @@ actions:
     intent: "Tag the approved reply for the help centre"
     prompt: $support_desk.Tag
     schema: tags
+    # An answer that is cut off or empty is asked again (try: --scenario chaos).
+    expect:
+      repair: auto
+      expectations:
+        - id: tags_is_set
+          type: not_null
+          field: tags
     guard:
       condition: 'approve_reply.hitl_status == "approved"'
       on_false: filter
