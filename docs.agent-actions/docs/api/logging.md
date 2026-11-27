@@ -950,7 +950,7 @@ config = LoggingConfig(
     default_level="INFO",
     module_levels={
         "httpx": "INFO",         # see HTTP request lines from httpx again
-        "transformers": "ERROR", # silence model-loading chatter further
+        "pypdf": "ERROR",        # silence PDF parser warnings further
     },
 )
 LoggerFactory.initialize(config=config)
