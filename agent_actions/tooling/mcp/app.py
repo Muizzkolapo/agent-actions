@@ -67,7 +67,11 @@ Exit codes of a run or a retry: 0 success, 3 finished with failed or exhausted r
 The resources are the files that define this project's workflows (agac://project/...: \
 the config, prompts, schemas, tools and sandbox scenario) and the bundled skill guides \
 (agac://skills/...: how to write a workflow, context scope, guards, expectations, \
-operations and sandbox testing). Read a guide before you write or change a workflow.
+operations and sandbox testing). Read a guide before you write or change a workflow. \
+The guides show shell commands: each `agac` command has the tool of the same purpose \
+here (the agac-operations guide lists them). This server cannot run the guides' \
+scripts/*.py or write a file: check output counts with dispositions and records, and tell \
+the person what to change in a workflow.
 """
 
 

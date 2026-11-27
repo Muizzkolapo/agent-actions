@@ -14,6 +14,21 @@ agac mcp [options]
 
 You do not start the command by hand. The assistant starts it and speaks to it on standard input and standard output.
 
+## When to Use It
+
+The [skills](./skills) teach an assistant how Agent Actions works. The MCP server gives an assistant tools to act on one project. Use the server in these situations:
+
+| Situation | What to use |
+|-----------|-------------|
+| The assistant has no shell, for example Claude Desktop or a chat client | The MCP server. It is the only way for the assistant to run `agac`. |
+| The assistant must test workflows but never spend money | The MCP server, without `--allow-real-runs`. The server refuses a real run, so the limit does not depend on the prompt. |
+| A person who does not know `agac` asks about a run, for example "why did these records fail?" | The MCP server. The read tools return JSON that the assistant can explain. |
+| A coding assistant with a shell (Claude Code, Codex) builds or changes a workflow | The skills, and `agac` in the shell. Add the MCP server if you want the sandbox-only limit. |
+| You write or change workflow files | A coding assistant with the skills. The server has no tool that writes a file. |
+| You run a script of a skill, for example `run_health.py` | A shell. The server runs `agac` commands only. Through the server, use `dispositions` and `records` to check the output counts. |
+
+The skills and the server work well together. The skills tell the assistant what to build and what to check. The server runs the checks safely. A client that has no installed skills can read the skill guides as [resources](#resources).
+
 ## Safety
 
 The server is safe by default:

@@ -157,3 +157,30 @@ For a record that `field` cannot split (the long text is nested, or spread over 
 | What did the run cost in tokens? | `agac usage -w <workflow>` |
 
 Do not read the store tables directly. Their payload columns are compressed, and their layout can change between releases. Use the commands above.
+
+## Through the MCP server
+
+When you reach agac through its MCP server (`agac mcp`), you have tools, not a shell. Each command above has a tool:
+
+| Command | Tool |
+|---|---|
+| `agac run` (also `--rerun`, `--where`, `--records`, `--dry-run`, `--fresh`, `--scenario`) | `run_workflow` |
+| `agac retry` | `retry_workflow` |
+| `agac sandbox check` | `sandbox_check` |
+| `agac inspect` | `inspect_workflow` |
+| `agac status --json` | `workflow_status` |
+| `agac dispositions --json`, `--quarantined` | `dispositions` |
+| `agac records`, `--snapshots` | `records` (`failed_inputs`) |
+| `agac traces` | `traces` |
+| `agac usage` | `usage` |
+| `agac expect report` | `expect_report` |
+| `agac schema` | `workflow_schema` |
+| `agac export` | `export_outputs` |
+
+Differences:
+
+- Each run and retry is a sandbox run unless you set `sandbox: false`. The server refuses a real run, a real retry and an export unless it was started with `--allow-real-runs`. Do not ask the person to restart it with that flag until the sandbox run is clean.
+- The read tools read sandbox output by default. Set `sandbox: false` to read what real runs stored.
+- `scripts/*.py` need a shell. Do the health check with `dispositions` (counts per action) and `records` (the output of one action).
+- The server cannot write files. To change a workflow, tell the person what to change.
+
