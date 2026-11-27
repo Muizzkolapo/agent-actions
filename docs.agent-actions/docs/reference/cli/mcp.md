@@ -83,18 +83,20 @@ Each tool runs one `agac` command in the project. The assistant gets the output 
 | Tool | Command | What it does |
 |------|---------|--------------|
 | `list_workflows` | — | List the workflows of the project |
-| `inspect_workflow` | [`inspect`](./inspect) | Validate a workflow and list its actions. It runs nothing. |
+| `inspect_workflow` | [`inspect`](./inspect) | Validate a workflow and list its actions. With `action`, show one action as the run sees it: guard, retry, the fields it reads and writes, its prompt and schema. With `view: "context"`, show the variables that its prompt can use. It runs nothing. |
 | `run_workflow` | [`run`](./run) | Run or resume a workflow. `rerun` with `where` or `records` answers some records again. `dry_run` shows the count first. |
 | `retry_workflow` | [`retry`](./retry) | Retry the failed or exhausted records |
 | `sandbox_check` | [`sandbox check`](./sandbox) | Run the workflow in the sandbox and compare the result with the expected outcomes |
 | `workflow_status` | [`status`](./utilities#status) | The status of each action and of the last run |
-| `dispositions` | [`dispositions`](./dispositions) | What happened to each record at each action |
-| `records` | [`records`](./records) | The records that an action stored, or the input of each failed record |
+| `dispositions` | [`dispositions`](./dispositions) | What happened to each record at each action. With `record`, follow one record through the workflow and see the guard that stopped it |
+| `records` | [`records`](./records) | The records that an action stored, or the input of each failed record. `offset` pages through them |
 | `traces` | [`traces`](./traces) | The prompt, the context and the response of each record of an action |
 | `usage` | [`usage`](./usage) | The model calls and the tokens that each action used |
 | `expect_report` | [`expect report`](./expect) | The verdicts that the `expect:` rules stored |
 | `workflow_schema` | [`schema`](./schema) | The input and output fields of each action |
 | `export_outputs` | [`export`](./export) | Write the declared `outputs:` to their database tables again. It needs `--allow-real-runs`. |
+
+Each tool tells the client what it can do, with the MCP hints `readOnlyHint`, `destructiveHint`, `idempotentHint` and `openWorldHint`. The read tools are read-only, so a client can approve them without a prompt. `run_workflow`, `sandbox_check` and `export_outputs` can replace output that is stored.
 
 The tools that take `sandbox` have it set to `true` by default. To read the output of real runs, the assistant sets `sandbox` to `false`.
 

@@ -21,6 +21,7 @@ agac dispositions -w <workflow-name> [options]
 | `-A, --action TEXT` | Show the dispositions for only the specified action |
 | `--quarantined` | Show only the failed, exhausted and unprocessed records, with details |
 | `--json` | Print the counts as one JSON document, for a script. See [JSON Output](#json-output). `--json` does not take `--quarantined`. If you give the two flags together, the command stops with exit code 2. See the error below this table |
+| `--record ID` | Follow one record through the workflow. `ID` is its `source_guid`. See [Follow One Record](#follow-one-record). With `--json`, the command prints the trail as JSON. `--record` does not take `--quarantined` |
 
 This is the error for `--json` with `--quarantined`:
 
@@ -188,12 +189,54 @@ reason that no answer reached it. The reason tells you where to look. The reason
 
 When no record is stuck, the command reports `No quarantined records found.`
 
+### Follow One Record
+
+`--record` shows what occurred to one record at each action, in run order. Use it to find why a record is not in the output of an action:
+
+```bash
+agac dispositions -w my_workflow --record 779f2584-0348-5abc-b217-4e9dc61bdbd1
+```
+
+```
+┃ Action    ┃ Disposition    ┃ Reason       ┃ Guard                         ┃
+│ read      │ success        │              │                               │
+│ classify  │ filtered       │ guard_filter │ read.is_spam == false         │
+│ score     │ —  not reached │              │                               │
+│ reply     │ —  not reached │              │                               │
+```
+
+For each action, the row gives the disposition of the record and its reason:
+
+- `guard_skipped`, `filtered` or `sent_elsewhere`: a guard stopped the record or sent it to a different branch. The **Guard** column shows the guard condition.
+- `failed_checks`: the record continued with a verdict that did not pass.
+- `—  not reached`: the action has no row for the record. The run did not get to the action, or the record went down a different branch.
+
+To get the record IDs, run `agac records -w my_workflow --field source_guid`. To see what each action stored for the record, run `agac records -w my_workflow --source-guid <ID>`.
+
+With `--json`, the command prints the trail:
+
+```json
+{
+  "workflow": "my_workflow",
+  "record": "779f2584-0348-5abc-b217-4e9dc61bdbd1",
+  "reached": 2,
+  "last": "classify",
+  "actions": [
+    {"name": "classify", "disposition": "filtered", "reason": "guard_filter", "detail": null, "guard": "read.is_spam == false"}
+  ]
+}
+```
+
+`reached` is the number of actions that have a row for the record. `last` is the last of those actions in run order. In `actions`, `disposition` is `null` for an action that has no row for the record.
+
 ## Errors
 
 | Message | Cause |
 |---------|-------|
 | `No store for workflow '<name>' at <path>. Has it been run?` | The workflow did not run. Thus it has no store. The command exits 1 and creates no store. With `--json`, stdout is empty: the message goes to stderr. With `--sandbox`, `<path>` is the sandbox store, `agent_io/store/<name>.sandbox.db`. |
 | `--json prints the counts, so it takes no --quarantined. ...` | You gave `--json` with `--quarantined`. The command exits 2. |
+| `--record follows one record, so it takes no --quarantined.` | You gave `--record` with `--quarantined`. The command exits 2. |
+| `No action of '<name>' holds a disposition for record '<ID>'. ...` | No action has a row for the ID. Make sure that the ID is a `source_guid`. The command exits 1. |
 
 :::note[Run from Anywhere]
 You can run this command from any subdirectory in your project.

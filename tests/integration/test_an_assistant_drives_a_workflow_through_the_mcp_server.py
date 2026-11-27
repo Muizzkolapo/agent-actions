@@ -208,3 +208,31 @@ def test_the_protocol_is_utf_8_whatever_the_locale_of_the_server(project):
 
     assert not is_error, text
     assert "hïgh" in text
+
+
+def test_a_record_a_guard_dropped_is_followed_to_the_guard(session):
+    _, spam = session.call(
+        "records", workflow=WORKFLOW, action="read_ticket", field="content.read_ticket.is_spam"
+    )
+    _, ids = session.call("records", workflow=WORKFLOW, action="read_ticket", field="source_guid")
+    flags = json.loads(spam[spam.index("[") :])
+    guids = json.loads(ids[ids.index("[") :])
+    dropped = guids[flags.index(True)]
+
+    is_error, text = session.call("dispositions", workflow=WORKFLOW, record=dropped)
+
+    assert not is_error, text
+    trail = json.loads(text[text.index("{") :])
+    classify = next(step for step in trail["actions"] if step["name"] == "classify")
+    assert (classify["disposition"], classify["guard"]) == (
+        "filtered",
+        "read_ticket.is_spam == false",
+    )
+    assert trail["last"] != "tag_reply"
+
+
+def test_one_action_is_shown_as_the_run_sees_it(session):
+    is_error, text = session.call("inspect_workflow", workflow=WORKFLOW, action="classify")
+
+    assert not is_error, text
+    assert "Guard        read_ticket.is_spam == false" in text

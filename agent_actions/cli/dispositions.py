@@ -135,15 +135,72 @@ def dispositions_report(backend, workflow: str, actions: list[str]) -> dict[str,
     return {"workflow": workflow, "actions": entries}
 
 
+def record_trail(
+    backend, workflow: str, record_id: str, actions: list[str], configs: dict[str, Any]
+) -> dict[str, Any]:
+    """What ``agac dispositions --record`` prints: one record's disposition at each action.
+
+    An action with no row for the record never got it: the run had not reached the action,
+    or the record took another branch. A guard that filtered or skipped it is named.
+    """
+    steps = []
+    for action in actions:
+        rows = backend.get_disposition(action, record_id=record_id, snapshots=False)
+        row = rows[-1] if rows else None
+        state = None if row is None else _state(row)
+        guard = (configs.get(action) or {}).get("guard")
+        clause = guard.get("clause") or guard.get("condition") if isinstance(guard, dict) else None
+        steps.append(
+            {
+                "name": action,
+                "disposition": state,
+                "reason": None if row is None else row.get("reason"),
+                "detail": None if row is None else row.get("detail"),
+                "guard": clause if state in _GUARD_STATES else None,
+            }
+        )
+    reached = [step for step in steps if step["disposition"] is not None]
+    return {
+        "workflow": workflow,
+        "record": record_id,
+        "reached": len(reached),
+        "last": reached[-1]["name"] if reached else None,
+        "actions": steps,
+    }
+
+
+# How a row reads in a trail: guard outcomes are told apart from other dispositions.
+_GUARD_STATES = {"guard_skipped", "filtered", "sent_elsewhere"}
+
+
+def _state(row: dict) -> str:
+    disposition = str(row.get("disposition", "unknown"))
+    if disposition == DISPOSITION_UNPROCESSED and row.get("reason") in GUARD_SKIP_REASONS:
+        return "guard_skipped"
+    if _sent_elsewhere(row):
+        return "sent_elsewhere"
+    if disposition == DISPOSITION_SUCCESS and row.get("reason") == EXPECTATIONS_FAILED:
+        return "failed_checks"
+    return disposition
+
+
 class DispositionsCommand:
     """Display per-action disposition breakdown for a workflow."""
 
-    def __init__(self, agent: str, action: str | None, quarantined: bool, as_json: bool = False):
+    def __init__(
+        self,
+        agent: str,
+        action: str | None,
+        quarantined: bool,
+        as_json: bool = False,
+        record: str | None = None,
+    ):
         self.agent_name = Path(agent).stem
         self.agent = agent
         self.action_filter = action
         self.quarantined_only = quarantined
         self.as_json = as_json
+        self.record = record
         self.console = Console()
 
     def execute(self, project_root: Path | None = None) -> None:
@@ -174,7 +231,21 @@ class DispositionsCommand:
 
         backend = SQLiteBackend.create_readonly(db_path)
         try:
-            if self.as_json:
+            if self.record is not None:
+                trail = record_trail(
+                    backend, self.agent_name, self.record, actions, workflow.action_configs
+                )
+                if not trail["reached"]:
+                    raise click.ClickException(
+                        f"No action of '{self.agent_name}' holds a disposition for record "
+                        f"'{self.record}'. Records are named by source_guid; list them with: "
+                        f"agac records -w {self.agent_name}{sandbox.flag()} --field source_guid"
+                    )
+                if self.as_json:
+                    click.echo(json.dumps(trail, indent=2, ensure_ascii=False))
+                else:
+                    self._show_trail(trail)
+            elif self.as_json:
                 report = dispositions_report(backend, self.agent_name, actions)
                 click.echo(json.dumps(report, indent=2, ensure_ascii=False))
             elif self.quarantined_only:
@@ -183,6 +254,34 @@ class DispositionsCommand:
                 self._show_summary(backend, actions)
         finally:
             backend.close()
+
+    def _show_trail(self, trail: dict[str, Any]) -> None:
+        table = Table(title=f"Record {trail['record']}: {self.agent_name}")
+        table.add_column("Action", style="cyan")
+        table.add_column("Disposition")
+        table.add_column("Reason")
+        table.add_column("Guard", style="dim")
+        styles = {"success": "green", "failed": "red", "exhausted": "red"}
+        for step in trail["actions"]:
+            state = step["disposition"]
+            shown = (
+                Text("—  not reached", style="dim")
+                if state is None
+                else Text(state, style=styles.get(state, "yellow"))
+            )
+            table.add_row(
+                step["name"],
+                shown,
+                Text("" if step["reason"] == state else (step["reason"] or "")[:80]),
+                Text(step["guard"] or ""),
+            )
+        print_whole(self.console, table)
+        self.console.print(
+            f"[dim]The record reached {trail['reached']} of {len(trail['actions'])} actions; "
+            f"the last was {trail['last']}. An action that did not reach it had not run, or "
+            "the record took another branch. Its stored output: agac records "
+            f"-w {self.agent_name}{sandbox.flag()} --source-guid {trail['record']}[/dim]"
+        )
 
     def _show_summary(self, backend, actions: list[str]) -> None:
         """Show per-action disposition counts beside the records produced."""
@@ -345,6 +444,15 @@ class DispositionsCommand:
     is_flag=True,
     help="Print the count of each disposition per action as JSON",
 )
+@click.option(
+    "--record",
+    default=None,
+    metavar="ID",
+    help=(
+        "Follow one record (its source_guid): its disposition and reason at each action, "
+        "in run order, and the guard that filtered or skipped it"
+    ),
+)
 @handles_user_errors("dispositions")
 @requires_project
 def dispositions(
@@ -352,15 +460,18 @@ def dispositions(
     action: str | None,
     quarantined: bool,
     as_json: bool,
+    record: str | None,
     project_root: Path | None = None,
 ) -> None:
     """Inspect record-level processing dispositions per action."""
+    if record is not None and quarantined:
+        raise click.UsageError("--record follows one record, so it takes no --quarantined.")
     if as_json and quarantined:
         raise click.UsageError(
             "--json prints the counts, so it takes no --quarantined. "
             "'agac records --snapshots' prints the failed and exhausted records as JSON."
         )
-    command = DispositionsCommand(agent, action, quarantined, as_json)
+    command = DispositionsCommand(agent, action, quarantined, as_json, record)
     command.execute(project_root=project_root)
 
 

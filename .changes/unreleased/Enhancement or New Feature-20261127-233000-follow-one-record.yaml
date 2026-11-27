@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: '`agac dispositions --record ID` follows one record through the workflow: its disposition and reason at each action in run order, the actions it never reached, and the guard that filtered, skipped or routed it away (`--json` for the trail as JSON). Through `agac mcp`, the `dispositions` tool takes `record`, `inspect_workflow` shows one action or its prompt context (`action`, `view`), `records` pages with `offset`, and every tool carries the MCP read-only, destructive, idempotent and open-world hints.'
+time: 2026-11-27T23:30:00.000000000+00:00

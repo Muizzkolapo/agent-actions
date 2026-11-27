@@ -390,6 +390,7 @@ expect:                  # in defaults — applies to LLM actions only
 6. Is a large upstream field (e.g. full page content) polluting a downstream action? Check if a distilled field already carries what you need.
 
 **Tracing records across actions:**
+`agac dispositions -w {workflow} --record {source_guid}` follows one record through every action in run order: its disposition and reason at each, the actions it never reached, and the guard that filtered or skipped it. Start there when a record is missing from an action's output.
 Records carry `version_correlation_id` — same ID across all actions for the same source record. Use `agac traces -w {workflow} -A {action}` for rendered prompts and `agac records -w {workflow} -A {action}` for stored outputs (the store keeps both compressed, so `sqlite3` shows blobs). Correlate by `target_id` or `version_correlation_id`, not by array index.
 
 **Inspecting an action's config, context, and schema:**
