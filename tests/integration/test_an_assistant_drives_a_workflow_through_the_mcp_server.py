@@ -8,14 +8,11 @@ sandbox template, so nothing calls a model.
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
-from tests._support.agac_cli import REPO, run_agac
+from tests._support.agac_cli import run_agac, start_agac
 
 WORKFLOW = "support_desk"
 ENV = {"OPENAI_API_KEY": ""}
@@ -25,23 +22,8 @@ class Client:
     """One MCP session with an `agac mcp` process."""
 
     def __init__(self, project: Path, *flags: str, **extra_env: str) -> None:
-        env = {**os.environ, **ENV, "PYTHONPATH": str(REPO), **extra_env}
-        self.process = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "agent_actions.cli.main",
-                "mcp",
-                "--project",
-                str(project),
-                *flags,
-            ],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            env=env,
+        self.process = start_agac(
+            project, "mcp", "--project", str(project), *flags, env={**ENV, **extra_env}
         )
         self.sent = 0
 
