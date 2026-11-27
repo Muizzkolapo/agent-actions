@@ -25,7 +25,7 @@ default_agent_config:
 |-------|---------|-------------|
 | `chunk_size` | 300 | The maximum size of each chunk (tokens or characters) |
 | `chunk_overlap` | 10 | The overlap between consecutive chunks |
-| `split_method` | `tiktoken` | The chunking strategy: `tiktoken`, `chars`, `spacy` or the name of a custom split function (see below) |
+| `split_method` | `tiktoken` | The chunking strategy: `tiktoken`, `chars`, `spacy`, `markdown` or the name of a custom split function (see below) |
 | `tokenizer_model` | `cl100k_base` | The tokenizer that measures the chunk size |
 | `field` | none | The field of each JSON, CSV, TSV or Excel record to split into parts, as `source.<name>`. See [Split one field of a record](#split-one-field-of-a-record) |
 
@@ -38,7 +38,7 @@ default_agent_config key  <  default_agent_config block  <  defaults: key
   <  defaults: block  <  action key  <  action block
 ```
 
-For `tiktoken` and `chars` splits, an overlap at or above the chunk size is refused at load, not at the split. The reason is that merging by name can pair a nearer size with a wider overlap.
+For `tiktoken`, `chars` and `markdown` splits, an overlap at or above the chunk size is refused at load, not at the split. The reason is that merging by name can pair a nearer size with a wider overlap.
 
 The defaults are tuned for the short-document benchmarks of the framework. The examples below show larger values (4000 / 8000), tuned for OpenAI-class context windows. For production workloads on long documents, start with these larger values.
 
@@ -121,6 +121,19 @@ chunk_config:
 ```
 
 **When to use:** Sentences that must stay complete, natural language content, quality that is more important than speed.
+
+### markdown
+
+Structure-based splitting, measured in tokens. It splits at headings first, then at paragraphs, then at sentences. Each chunk starts with the path of its headings, for example `Billing > Duplicate charges`. The heading path counts in the chunk size:
+
+```yaml
+chunk_config:
+  chunk_size: 200
+  chunk_overlap: 0
+  split_method: markdown
+```
+
+**When to use:** Markdown, HTML and other documents with headings, when each chunk must say which section it comes from. It is the default of a [knowledge base](../../guides/knowledge.md#chunks), which does not inherit the `chunk_config` of the workflow.
 
 ### Custom split function
 

@@ -168,6 +168,8 @@ For a record, a guard reads the same file as the prompt. Thus `seed.syllabus.dom
 | **Loaded from** | `seed_data/` directory | `agent_io/staging/` directory |
 | **Reference** | `{{ seed.name.field }}` | `{{ source.field }}` |
 
+A seed gives each record the whole file, or one file that a value selects. For a reference that is too large for the prompt, search it for each record with [`retrieve`](../../guides/knowledge.md).
+
 ## Best Practices
 
 1. **Keep seed data focused**: Use specific files, not monolithic configuration files.

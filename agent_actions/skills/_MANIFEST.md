@@ -37,6 +37,8 @@ This is a content-only module (no Python runtime code). The bundled documentatio
 | `references/prompt-engineering.md` | `prompt_store/{workflow}.md` | Reads | — |
 | `references/database-io.md` | `agent_actions.yml` | Reads | `connections` |
 | `references/database-io.md` | `agent_config/{workflow}.yml` | Reads | `defaults.data_source`, `outputs[]` |
+| `references/knowledge-retrieval.md` | `agent_actions.yml` | Reads | `knowledge` |
+| `references/knowledge-retrieval.md` | `agent_config/{workflow}.yml` | Reads | `actions[].context_scope.retrieve` |
 | `references/sandbox-testing.md` | `sandbox.yml`, `sandbox.<workflow>.yml` | Reads | `seed`, `defaults`, `actions.<name>` (`errors`, `break_rules`, `pin`, `judge`, `latency_ms`, `stub`), `records[]`, `batch` |
 | `references/sandbox-testing.md` | `agent_workflow/{workflow}/agent_io/sandbox/` | Reads (via `agac ... --sandbox`) | — |
 | `scripts/reset_workflow.py` | `agent_workflow/{workflow}/agent_io/.agent_status.json` | Writes (deletes) | — |
