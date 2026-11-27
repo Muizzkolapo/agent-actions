@@ -88,4 +88,4 @@ def test_a_paused_retry_names_the_scenario_given():
     with sandbox.sandbox_mode(True), sandbox.scenario_choice("chaos"):
         command._report(RunOutcome.PAUSED, None, [])
 
-    assert "agac run -a wf --sandbox --scenario chaos" in buffer.getvalue()
+    assert "agac run -w wf --sandbox --scenario chaos" in buffer.getvalue()

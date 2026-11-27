@@ -175,6 +175,15 @@ def _records(args: dict[str, Any]) -> list[str]:
 
 def _first_records(output: str, args: dict[str, Any]) -> str:
     """The first `limit` records of a JSON list, with how many there are in all."""
+    return _some_records(output, args, newest=False)
+
+
+def _newest_records(output: str, args: dict[str, Any]) -> str:
+    """The last `limit` items of a JSON list stored oldest first, such as traces."""
+    return _some_records(output, args, newest=True)
+
+
+def _some_records(output: str, args: dict[str, Any], *, newest: bool) -> str:
     limit = args.get("limit") or DEFAULT_RECORD_LIMIT
     start = output.find("[")
     try:
@@ -183,10 +192,12 @@ def _first_records(output: str, args: dict[str, Any]) -> str:
         return output
     if not isinstance(records, list) or len(records) <= limit:
         return output
-    shown = json.dumps(records[:limit], indent=1, ensure_ascii=False)
+    kept = records[-limit:] if newest else records[:limit]
+    which = f"the last {limit} (newest)" if newest else f"the first {limit}"
     return (
-        f"{len(records)} records in all; the first {limit} are shown. Raise 'limit', or "
-        f"narrow with 'action', 'source_guid' or 'field'.\n{shown}"
+        f"{len(records)} records in all; {which} are shown. Raise 'limit', or narrow "
+        f"with 'action', 'source_guid', 'record' or 'field'.\n"
+        + json.dumps(kept, indent=1, ensure_ascii=False)
     )
 
 
@@ -370,7 +381,8 @@ TOOLS: tuple[Tool, ...] = (
         name="traces",
         description=(
             "The prompt, the context and the response each record of an action was run "
-            "with, as JSON (`agac traces`). Use it to see why an answer is what it is."
+            "with, as JSON (`agac traces`), newest last; a cut keeps the newest. Use it to "
+            "see why an answer is what it is."
         ),
         properties={
             "workflow": WORKFLOW,
@@ -389,7 +401,7 @@ TOOLS: tuple[Tool, ...] = (
             *_flag("record", args.get("record")),
             "--json",
         ],
-        shape=_first_records,
+        shape=_newest_records,
     ),
     Tool(
         name="usage",

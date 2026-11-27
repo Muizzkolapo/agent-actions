@@ -5,6 +5,7 @@ import io
 import pytest
 from rich.console import Console
 
+from agent_actions.cli.args import RetryCommandArgs
 from agent_actions.cli.exit_codes import RunOutcome
 from agent_actions.cli.retry import RetryCommand
 from agent_actions.cli.retry_filter import RetryFilterCommand
@@ -21,6 +22,7 @@ def _retry(buffer):
     command = object.__new__(RetryCommand)
     command.agent_name = "wf"
     command.console = Console(file=buffer, width=200)
+    command.args = RetryCommandArgs(agent="wf")
     return command
 
 
@@ -31,7 +33,19 @@ def test_a_paused_retry_names_the_flag_only_in_a_sandbox(outcome, active):
     with sandbox.sandbox_mode(active):
         _retry(buffer)._report(outcome, _Waiting(), ["classify"])
 
-    assert ("agac run -a wf --sandbox" in buffer.getvalue()) is active
+    assert ("agac run -w wf --sandbox" in buffer.getvalue()) is active
+
+
+def test_a_paused_rerun_that_waits_names_no_command_to_run():
+    buffer = io.StringIO()
+    command = _retry(buffer)
+    command.args = RetryCommandArgs(agent="wf", collected_after=True)
+
+    command._report(RunOutcome.PAUSED_FOR_BATCH, _Waiting(), ["classify"])
+
+    said = " ".join(buffer.getvalue().split())
+    assert "batch job(s) submitted for: classify. Waiting for them to be collected." in said
+    assert "agac run" not in said
 
 
 @pytest.mark.parametrize("active", [True, False])

@@ -1,5 +1,6 @@
 """An MCP tool call becomes one `agac` command line, and a real one is refused by default."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -394,3 +395,17 @@ def test_a_real_run_does_not_wait_for_a_batch_unless_told_to():
     assert "--wait" not in _argv("run_workflow", workflow="wf", sandbox=False)
     assert "--wait" in _argv("run_workflow", workflow="wf", sandbox=False, wait=True)
     assert "--wait" in _argv("run_workflow", workflow="wf")
+
+
+def test_traces_keep_the_newest_when_they_are_cut(ran, tmp_path):
+    # Traces are stored oldest first; the newest are the run just made.
+    _, answer = ran
+    traces = [{"record_id": f"r{n}"} for n in range(5)]
+    answer["done"] = _Done(stdout=json.dumps(traces))
+
+    outcome = call_tool(
+        TOOLS["traces"], {"workflow": "wf", "action": "a", "limit": 2}, Context(tmp_path)
+    )
+
+    assert "5 records in all; the last 2 (newest) are shown" in outcome.text
+    assert '"r3"' in outcome.text and '"r4"' in outcome.text and '"r0"' not in outcome.text

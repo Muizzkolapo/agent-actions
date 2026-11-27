@@ -639,15 +639,19 @@ class RetryCommand:
             )
         elif outcome is RunOutcome.PAUSED_FOR_BATCH:
             waiting = state_mgr.get_batch_submitted_actions(execution_order)
+            then = (
+                "Waiting for them to be collected."
+                if self.args.collected_after
+                else f"Collect them with: agac run -w {self.agent_name}{sandbox.run_flags()}"
+            )
             self.console.print(
                 f"\n[cyan]{self._noun} paused - batch job(s) submitted for: "
-                f"{', '.join(waiting)}. "
-                f"Collect them with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
+                f"{', '.join(waiting)}. {then}[/cyan]"
             )
         elif outcome is RunOutcome.PAUSED:
             self.console.print(
                 f"\n[cyan]{self._noun} paused before every action finished. "
-                f"Continue with: agac run -a {self.agent_name}{sandbox.run_flags()}[/cyan]"
+                f"Continue with: agac run -w {self.agent_name}{sandbox.run_flags()}[/cyan]"
             )
         else:
             if self._selection is not None:
