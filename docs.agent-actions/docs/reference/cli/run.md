@@ -448,10 +448,10 @@ than one configuration, one record at a time.
 A change to the files of a [knowledge base](../../guides/knowledge.md) is reported in the same way. The stored matches stand, and the run names the step and the rerun:
 
 ```
-knowledge base 'help_center' changed since write_reply: retrieve 'help' (write_reply__help) answered; run again with --rerun write_reply__help
+write_reply: retrieve 'help' (write_reply__help): knowledge base 'help_center' changed since it answered; run again with --rerun write_reply__help
 ```
 
-`--rerun write_reply` also searches again for each `retrieve` entry of `write_reply`. See [When a knowledge base changes](../../guides/knowledge.md#when-a-knowledge-base-changes).
+`--rerun write_reply` also searches again for each `retrieve` entry of `write_reply`. A filtered rerun (`--where` or `--records`) does not: name the step, as `--rerun write_reply__help`. See [When a knowledge base changes](../../guides/knowledge.md#when-a-knowledge-base-changes).
 
 
 ## Parallel Execution

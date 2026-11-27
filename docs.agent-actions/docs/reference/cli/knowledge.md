@@ -26,7 +26,7 @@ agac knowledge list
 
 ```
 help_center: 3 source(s), index: keyword, fuzzy
-  14 file(s), 120 row(s)
+  14 file(s), 120 database row(s)
   keyword: 9c1f0e2a7b3d4c55 (built)
   fuzzy: 41d8a6e0c2b7f913 (not built)
 ```
@@ -59,7 +59,7 @@ The first build of a database source reads its rows and keeps them as a snapshot
 | Option | Description |
 |--------|-------------|
 | `NAME` | The knowledge base to build. Default: each base |
-| `--refresh` | Read the query of each database source again, and replace its snapshot |
+| `--refresh` | Read the query of each database source again, and replace its snapshot. This is the only command that reads the query of an existing snapshot again: `agac run --refresh-input` does not |
 | `--prune` | After the build, remove the index files of earlier digests. Refused while a run of the project is in progress |
 
 The index files are in `.agac/knowledge/<base>/`. Old files stay until `--prune` removes them, so the stored matches of earlier runs can still be compared with their index.
@@ -91,7 +91,7 @@ The command builds a missing or old index first, as a run does. It prints the co
 | `NAME` | The knowledge base to search (required) |
 | `TEXT` | The query text (required). Quote it when it holds spaces |
 | `-k N` | The number of matches, from 1 to 50. Default: 5 |
-| `--method M` | A search method: `keyword`, `all_words`, `phrase`, `fuzzy` or `key`. Give it more than one time to merge methods with equal weights. Default: `keyword`. The base must have the index of each method |
+| `--method M` | A search method: `keyword`, `all_words`, `phrase`, `fuzzy` or `key`. Give it more than one time to merge methods with equal weights. Default: `keyword`. The base must have the index of each method. `key` needs `id:` on each source and cannot be merged |
 | `--json` | Print the output as JSON, in the shape that a `retrieve` step stores: `matches`, `count`, `query` and `index` |
 
 The command takes no `where` and no limits other than `-k`. To test those, run the workflow and read the step with [`agac records`](./records.md):

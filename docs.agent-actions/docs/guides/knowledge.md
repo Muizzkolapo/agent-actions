@@ -103,7 +103,7 @@ A chunk is the unit that the search finds and the prompt reads. A base splits it
 | Key | Default in a knowledge base | Note |
 |-----|-----------------------------|------|
 | `split_method` | `markdown` | Splits at headings, then paragraphs, then sentences. The path of headings starts each chunk, for example `Billing > Duplicate charges` |
-| `chunk_size` | `200` tokens | The heading path counts in the size |
+| `chunk_size` | `200` tokens | The heading path counts in the size. The `markdown` split counts tokens offline, with an estimate: about one token for each six characters of a word, and one for each punctuation mark |
 | `chunk_overlap` | `0` | At most half of `chunk_size` |
 | `field` | not accepted | A base splits its own files, not a field of a staged record |
 
@@ -111,18 +111,24 @@ A base does not inherit the `chunk_config` of `default_agent_config` or of a wor
 
 A record of a structured source or a database row is never split.
 
+The `tiktoken` split, and the `tokenizer_model` key, use the tiktoken encodings. tiktoken downloads an encoding the first time it uses it, so the first build with `split_method: tiktoken` needs the network. The default `markdown` split needs no download.
+
 ### What the Load Refuses
 
-Agent Actions checks the `knowledge:` section when it loads a workflow that retrieves from it, and in each `agac knowledge` command. The error names the base and the key. It refuses these entries:
+Agent Actions checks the keys of the `knowledge:` section when it loads a workflow that retrieves from it (also in `agac inspect`), and in each `agac knowledge` command. The error names the base and the key. It refuses these entries:
 
 - An unknown key, or a `name:` key in a base.
-- A glob that finds no file, a path outside the project, a file that cannot be read, or a file over 10 MB.
 - A file type that a base does not read.
-- A record with no text in its `text` fields.
 - A database source without `id:`, or SQL that writes.
-- Two chunks with the same `id`.
 - An unknown index, or `index: [vector]`.
-- `chunk_config.field`, or a `chunk_overlap` of more than half of `chunk_size`.
+- `index: [fuzzy]` when the SQLite of your Python has no trigram tokenizer with `remove_diacritics` (SQLite 3.45 or later).
+- `chunk_config.field`, or a `chunk_overlap` of more than half of `chunk_size`. This rule is for a knowledge base only. The `chunk_config` of a workflow refuses only an overlap at or above the chunk size.
+
+The source files are read when an index is built: at the start of `agac run` or `agac retry`, before the first action, and in `agac knowledge build`, `list` and `search`. The build refuses these sources:
+
+- A glob that finds no file, a path outside the project, a file that cannot be read, or a file over 10 MB.
+- A record with no text in its `text` fields, or with no value in its `id` field.
+- Two chunks with the same `id`.
 
 ## Retrieve in an Action
 
@@ -156,7 +162,7 @@ The prompt reads the matches as `retrieve.help`. See [The prompt](#the-prompt).
 | `method` | `keyword` | | A [search method](#search-methods), a list of methods with equal weights, or a mapping of methods to weights. See [Merge methods](#merge-methods) |
 | `where` | none | | An exact match on the metadata of the chunks. See [Filter with where](#filter-with-where) |
 | `top_k` | `5` | 1 to 50 | The number of chunks that the search returns, at most |
-| `candidates` | the larger of 20 and 4 × `top_k` | | The number of results of each method, before the merge and the limits |
+| `candidates` | the larger of 20 and 4 × `top_k` | `top_k` to 1000 | The number of results of each method, before the merge and the limits |
 | `max_context_tokens` | none | | The total size of the returned chunks, in tokens. See [Limits](#limits) |
 | `max_per_origin` | none | | The number of chunks from one origin: one file, or one connection. See [Limits](#limits) |
 
@@ -170,9 +176,9 @@ The load turns each entry into an internal step of the workflow, named `<action>
 
 The step is a step like the others. Its matches are stored, and the commands name the step:
 
-- `agac inspect` shows it, and `agac records -A write_reply__help` prints its output.
+- `agac inspect` shows it with a note, also when its action is in a loop, and `agac records -A write_reply__help` prints its output.
 - A message about it reads `write_reply: retrieve 'help' (write_reply__help)`.
-- `--rerun write_reply__help` searches again. `--rerun write_reply` also searches again for each entry of `write_reply`.
+- `--rerun write_reply__help` searches again. `--rerun write_reply` also searches again for each entry of `write_reply`. A filtered rerun (`--where` or `--records`) of `write_reply` does not search again: name the step, as `--rerun write_reply__help --where ...`.
 - `sandbox_expected.yml` names it as `write_reply__help`.
 
 In the prompt and in a guard of the action, `retrieve.help` is the output of `write_reply__help`. Another action can read the same matches: it observes `write_reply__help.matches` and depends on `write_reply`, or on an action downstream of it.
@@ -184,7 +190,7 @@ The load refuses these entries:
 - An entry whose step name is the name of an action.
 - An action named `retrieve`.
 - A `query` or `where` reference to an action that is not upstream of the action.
-- A `top_k` outside 1 to 50, a `method` that the base has no index for, or `key` with another method.
+- A `top_k` outside 1 to 50, a `candidates` below `top_k` or above 1000, a `method` that the base has no index for, or `key` with another method.
 - A `where` field that no source of the base lists under `metadata:`.
 - `key` on a base with a source that does not set `id:`.
 
@@ -249,7 +255,7 @@ These limits apply after the merge, in this order:
 2. `max_context_tokens` adds the best chunks until the next chunk makes the total larger than the limit. It never cuts a chunk. If the best chunk alone is larger than the limit, the record gets no match, and the step logs one warning in each run that names the limit.
 3. `top_k` keeps at most this number of chunks.
 
-The tokens are counted offline, with the tokenizer of the chunks.
+The tokens are counted offline, with the estimate of the `markdown` split (see [Chunks](#chunks)), whatever the `split_method` of the base. It needs no download.
 
 ## The Output of a Search
 
@@ -363,6 +369,8 @@ An index holds the chunks of a base and their search tables. Agent Actions build
 
 No other command builds an index. `agac knowledge list` reads the sources and connects to no database.
 
+A run that builds an index logs `knowledge base 'help_center': built the keyword index <digest> (<n> chunks)`. The terminal shows this line with `agac -v`.
+
 The index files are in `.agac/knowledge/<base>/` at the project root. The name of each file holds a digest of the bytes that it indexes. Thus a changed source gives a new file, and an unchanged source uses the file that exists. One run reads one digest for each base, also when you edit a source during the run. A build writes a temporary file and renames it, under a lock for the project. Thus two runs that build at the same time do not damage the index.
 
 Old index files stay until `agac knowledge build --prune` removes them. `agac init` writes a `.gitignore` that holds `.agac/`. In a project that you made before, add `.agac/` to `.gitignore`. The index files are made from your sources, so do not commit them.
@@ -376,7 +384,7 @@ The first build reads the rows of a database source and keeps them as a snapshot
 The stored matches of a record come from the index that the search read. When the files of a base change, the stored matches are old. Each run then warns:
 
 ```
-knowledge base 'help_center' changed since write_reply: retrieve 'help' (write_reply__help) answered; run again with --rerun write_reply__help
+write_reply: retrieve 'help' (write_reply__help): knowledge base 'help_center' changed since it answered; run again with --rerun write_reply__help
 ```
 
 The records keep their matches until you search again. This is the same rule as for an [edit of an action](../reference/cli/run.md#when-you-edit-the-workflow): a run does not repeat what it already did. To search again and write new replies:
@@ -395,7 +403,16 @@ A [sandbox run](./sandbox.md) runs each search for real, on the real index. The 
 
 A sandbox run builds a missing index, as a real run does, from the same files. A database source needs its snapshot: a sandbox run does not connect to the database. If the snapshot does not exist, the sandbox run stops and tells you to run `agac knowledge build`. Run it once where the connection works.
 
-The [starter project](./sandbox.md#starter-project) has help-article retrieval. Use it to see a search, the prompt and the citations in a sandbox run.
+The [starter project](./sandbox.md#starter-project) has help-article retrieval. The action `draft_reply`, in the loop `reply_round`, has the entry `help`, which searches `help_center` with `source.text`. Its step in the first round is `reply_round_iter1__draft_reply__help`. Use it to see a search, the prompt and the citations in a sandbox run:
+
+```bash
+agac init my_sandbox --template sandbox
+cd my_sandbox
+agac run -w support_desk --sandbox --wait
+agac records -w support_desk --sandbox -A reply_round_iter1__draft_reply__help
+```
+
+A sandbox run that builds an index writes it to `.agac/knowledge/`, as a real run does. A later run, and a later `agac sandbox check`, uses that index while the sources do not change.
 
 ## Limits of Keyword Search
 

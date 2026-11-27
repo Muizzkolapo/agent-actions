@@ -58,7 +58,7 @@ context_scope:
       method: {keyword: 0.7, fuzzy: 0.3}  # default keyword; or [keyword, fuzzy] (equal weights)
       where: {category: classify.category}  # a field ref if it starts with source/an upstream action
       top_k: 4                            # default 5, 1..50
-      candidates: 20                      # default max(20, 4 * top_k); per method, before the merge
+      candidates: 20                      # default max(20, 4 * top_k), top_k..1000; per method, before the merge
       max_context_tokens: 1000            # total size; never cuts a chunk
       max_per_origin: 2                   # chunks from one file or one connection
 ```
@@ -112,11 +112,13 @@ agac run -w {workflow} --rerun write_reply__help          # search again after t
 
 1. **Indexes build only in `run`, `retry` and `agac knowledge build|search`**, once per base per
    run, in `.agac/knowledge/<base>/`. Add `.agac/` to `.gitignore` (`agac init` does it).
-2. **A changed base warns; it does not search again.** The run names
-   `write_reply: retrieve 'help' (write_reply__help)` and the `--rerun`. Rerun to update.
+2. **A changed base warns; it does not search again.** The warning reads
+   `write_reply: retrieve 'help' (write_reply__help): knowledge base 'help_center' changed since
+   it answered; run again with --rerun write_reply__help`. Rerun to update. A filtered rerun
+   (`--where`) of `write_reply` does not search again: name the step.
 3. **A database source is read once.** Later builds read the snapshot. `agac knowledge build
-   --refresh` reads it again. A sandbox run with no snapshot stops: build once where the
-   connection works.
+   --refresh` reads it again (`agac run --refresh-input` does not). A sandbox run with no
+   snapshot stops: build once where the connection works.
 4. **A sandbox run searches for real.** The mock answers the LLM actions, but the matches are
    real. A retrieve step cannot be stubbed.
 5. **Keyword search matches words, not meanings.** "billed twice" does not find "duplicate
