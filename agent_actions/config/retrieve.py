@@ -363,7 +363,8 @@ def _methods(raw: Any, base: Any, where: str) -> dict[str, float]:
         )
     for method in methods:
         index = INDEX_FOR_METHOD[method]
-        if index not in base.index:
+        # The key index is the chunks table that every index file holds; no base declares it.
+        if method != KEY_METHOD and index not in base.index:
             raise ConfigurationError(
                 f"{where}: method '{method}' searches the '{index}' index, which knowledge base "
                 f"'{base.name}' does not build (index: {', '.join(base.index)}). Add '{index}' "

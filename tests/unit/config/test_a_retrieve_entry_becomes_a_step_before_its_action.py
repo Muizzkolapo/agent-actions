@@ -20,7 +20,7 @@ def knowledge(monkeypatch):
     return install_fake_knowledge(
         monkeypatch,
         FakeBase("help_center", index=["keyword", "fuzzy"], metadata_fields={"product"}),
-        FakeBase("faq", index=["keyword", "key"], has_key=True),
+        FakeBase("faq", index=["keyword"], has_key=True),
     )
 
 
