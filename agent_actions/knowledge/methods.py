@@ -106,7 +106,8 @@ def _build_fts(kind: str) -> Callable[[sqlite3.Connection], None]:
             f"content='chunks', content_rowid='rowid', tokenize='{TOKENIZERS[kind]}')"
         )
         conn.execute(
-            f"INSERT INTO {table}(rowid, title, body) SELECT rowid, title, body FROM chunks"
+            # `table` is a constant of _TABLES, never user text.
+            f"INSERT INTO {table}(rowid, title, body) SELECT rowid, title, body FROM chunks"  # nosec B608
         )
 
     return build
@@ -128,8 +129,9 @@ def _fts_search(kind: str, compile_query: Callable[[str], str]) -> Callable[...,
             return []
         table = _TABLES[kind]
         extra, params = _where_sql(where)
+        # `table` and TITLE_WEIGHT are constants; `extra` holds only ? placeholders.
         rows = conn.execute(
-            f"SELECT c.id, bm25({table}, {TITLE_WEIGHT}, 1.0) AS rank FROM {table} "
+            f"SELECT c.id, bm25({table}, {TITLE_WEIGHT}, 1.0) AS rank FROM {table} "  # nosec B608
             f"JOIN chunks c ON c.rowid = {table}.rowid WHERE {table} MATCH ?{extra} "
             "ORDER BY rank, c.id LIMIT ?",
             [query, *params, candidates],
@@ -144,8 +146,10 @@ def _key_search(conn: sqlite3.Connection, text: str, candidates: int, where: Whe
     if not key:
         return []
     extra, params = _where_sql(where)
+    # `extra` holds only ? placeholders.
     rows = conn.execute(
-        f"SELECT c.id FROM chunks c WHERE c.id = ?{extra} LIMIT ?", [key, *params, candidates]
+        f"SELECT c.id FROM chunks c WHERE c.id = ?{extra} LIMIT ?",  # nosec B608
+        [key, *params, candidates],
     ).fetchall()
     return [(row[0], 1.0) for row in rows]
 

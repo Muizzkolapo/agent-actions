@@ -128,8 +128,9 @@ def _chunks(path: Path, ids: list[str]) -> dict[str, dict[str, Any]]:
     for start in range(0, len(ids), 500):
         part = ids[start : start + 500]
         placeholders = ",".join("?" for _ in part)
+        # `placeholders` holds only ? marks.
         for chunk_id, title, text, origin, digest, metadata in conn.execute(
-            "SELECT id, title, text, origin, hash, metadata FROM chunks "
+            "SELECT id, title, text, origin, hash, metadata FROM chunks "  # nosec B608
             f"WHERE id IN ({placeholders})",
             part,
         ):
