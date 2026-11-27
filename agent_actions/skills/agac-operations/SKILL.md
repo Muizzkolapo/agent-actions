@@ -180,6 +180,7 @@ When you reach agac through its MCP server (`agac mcp`), you have tools, not a s
 Differences:
 
 - Each run and retry is a sandbox run unless you set `sandbox: false`. The server refuses a real run, a real retry and an export unless it was started with `--allow-real-runs`. Do not ask the person to restart it with that flag until the sandbox run is clean.
+- A real run does not wait for a batch unless you set `wait: true`. It returns exit code 4 while a batch is open: call `run_workflow` again later to collect it.
 - The read tools read sandbox output by default. Set `sandbox: false` to read what real runs stored.
 - `scripts/*.py` need a shell. Do the health check with `dispositions` (counts per action) and `records` (the output of one action).
 - The server cannot write files. To change a workflow, tell the person what to change.

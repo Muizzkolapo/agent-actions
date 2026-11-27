@@ -298,6 +298,8 @@ def test_the_workflows_of_a_project_are_listed_by_their_config_files(tmp_path):
         ("inspect_workflow", {"scenario": "agent_io/kept.yml"}),
         ("sandbox_check", {"expected": ".env"}),
         ("sandbox_check", {"expected": "/home/someone/.aws/credentials"}),
+        ("run_workflow", {"scenario": "deploy/secrets.yml"}),
+        ("sandbox_check", {"expected": "docker-compose.yml"}),
     ],
 )
 def test_a_scenario_or_expectations_file_must_be_a_yaml_file_of_the_project(
@@ -306,13 +308,15 @@ def test_a_scenario_or_expectations_file_must_be_a_yaml_file_of_the_project(
     # The CLI quotes the line a YAML file fails on, so another file would be read through it.
     calls, _ = ran
 
-    with pytest.raises(ToolRefused, match=".yml file of the project"):
+    with pytest.raises(ToolRefused, match=r"sandbox\*\.yml file of the project"):
         call_tool(TOOLS[name], {"workflow": "wf", **args}, Context(project_root=tmp_path))
 
     assert calls == []
 
 
-@pytest.mark.parametrize("scenario", ["happy", "chaos", "sandbox.yml", "scenarios/late.yaml"])
+@pytest.mark.parametrize(
+    "scenario", ["happy", "chaos", "sandbox.yml", "scenarios/sandbox_late.yaml"]
+)
 def test_a_named_scenario_or_a_yaml_file_of_the_project_is_taken(ran, tmp_path, scenario):
     calls, _ = ran
 
@@ -358,3 +362,35 @@ def test_the_command_speaks_utf_8_whatever_the_locale(monkeypatch, tmp_path):
 
     assert (seen["encoding"], seen["errors"]) == ("utf-8", "replace")
     assert seen["env"]["PYTHONIOENCODING"] == "utf-8"
+
+
+@pytest.mark.parametrize("folder", ["/home/someone/other/tools", "../other/tools", "agent_io"])
+def test_user_code_must_be_a_folder_of_the_project(ran, tmp_path, folder):
+    calls, _ = ran
+
+    with pytest.raises(ToolRefused, match="'user_code' must be a folder of the project"):
+        call_tool(
+            TOOLS["run_workflow"], {"workflow": "wf", "user_code": folder}, Context(tmp_path)
+        )
+
+    assert calls == []
+
+
+def test_user_code_in_the_project_is_passed_on(ran, tmp_path):
+    calls, _ = ran
+
+    call_tool(TOOLS["run_workflow"], {"workflow": "wf", "user_code": "tools"}, Context(tmp_path))
+
+    assert "--user-code=tools" in calls[0]["argv"]
+
+
+@pytest.mark.parametrize("listed", [["a\nb"], ["a\rb"], ["#a"], ["  "]])
+def test_a_record_id_that_would_read_as_another_line_is_refused(listed):
+    with pytest.raises(ToolRefused, match="each id in 'records' must be one line"):
+        check_arguments(TOOLS["run_workflow"], {"workflow": "wf", "records": listed})
+
+
+def test_a_real_run_does_not_wait_for_a_batch_unless_told_to():
+    assert "--wait" not in _argv("run_workflow", workflow="wf", sandbox=False)
+    assert "--wait" in _argv("run_workflow", workflow="wf", sandbox=False, wait=True)
+    assert "--wait" in _argv("run_workflow", workflow="wf")

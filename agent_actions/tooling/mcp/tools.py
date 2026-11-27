@@ -144,8 +144,9 @@ def _run(args: dict[str, Any]) -> list[str]:
     argv += _flag("record-limit", args.get("record_limit"))
     argv += _flag("file-limit", args.get("file_limit"))
     argv += _flag("user-code", args.get("user_code"))
-    # A dry run of a filtered rerun starts nothing to wait for.
-    if args.get("wait", True) and not args.get("dry_run"):
+    # A dry run starts nothing to wait for. A real batch can take hours, longer than a
+    # client waits for one reply: by default it returns at exit code 4, to be called again.
+    if args.get("wait", args.get("sandbox", True)) and not args.get("dry_run"):
         argv += ["--wait"]
     return argv
 
@@ -231,7 +232,10 @@ TOOLS: tuple[Tool, ...] = (
             },
             "wait": {
                 **BOOLEAN,
-                "description": "Wait for batch jobs and collect them (default true)",
+                "description": (
+                    "Wait for batch jobs and collect them (default: true in the sandbox, "
+                    "false in a real run, which returns exit code 4 while a batch is open)"
+                ),
             },
             "record_limit": {**INTEGER, "description": "At most this many records a file"},
             "file_limit": {**INTEGER, "description": "At most this many input files"},
@@ -492,6 +496,14 @@ def check_arguments(tool: Tool, args: dict[str, Any]) -> None:
             raise ToolRefused(f"{tool.name}: '{name}' must be {_a(wanted)}")
         if least is not None and value < least:
             raise ToolRefused(f"{tool.name}: '{name}' must be {least} or more")
+        if name == "records" and any(
+            not item.strip() or item.lstrip().startswith("#") or "\n" in item or "\r" in item
+            for item in value
+        ):
+            raise ToolRefused(
+                f"{tool.name}: each id in 'records' must be one line, not blank, not starting "
+                "with #"
+            )
         texts = value if isinstance(value, list) else [value]
         if any(isinstance(text, str) and not _printable(text) for text in texts):
             raise ToolRefused(f"{tool.name}: '{name}' holds a NUL or an unpaired surrogate")
@@ -508,22 +520,36 @@ def _printable(text: str) -> bool:
 
 
 def refuse_a_file_outside_the_project(tool: Tool, args: dict[str, Any], context: Context) -> None:
-    """Refuse a scenario or expectations file that is not a YAML file of the project.
+    """Refuse a path that is not a sandbox file or a folder of the project.
 
-    The CLI shows the line a YAML file fails on, so any other file could be read through it.
+    The CLI shows the line a YAML file fails on, so through a scenario or expectations
+    path any other file could be read; `user_code` imports the Python files it names.
     """
     root = context.project_root.resolve()
     for name in ("scenario", "expected"):
         value = args.get(name)
         if value is None or (name == "scenario" and value in NAMED_SCENARIOS):
             continue
-        path = (root / value).resolve()
-        inside = root in path.parents and "agent_io" not in path.relative_to(root).parts
-        if not inside or path.suffix not in (".yml", ".yaml"):
+        path = _inside(root, value)
+        if (
+            path is None
+            or not path.name.startswith("sandbox")
+            or path.suffix not in (".yml", ".yaml")
+        ):
             raise ToolRefused(
-                f"{tool.name}: '{name}' must be a .yml file of the project, outside agent_io"
-                + (", or 'happy' or 'chaos'" if name == "scenario" else "")
+                f"{tool.name}: '{name}' must be a sandbox*.yml file of the project, outside "
+                "agent_io" + (", or 'happy' or 'chaos'" if name == "scenario" else "")
             )
+    if args.get("user_code") is not None and _inside(root, args["user_code"]) is None:
+        raise ToolRefused(f"{tool.name}: 'user_code' must be a folder of the project")
+
+
+def _inside(root: Path, value: str) -> Path | None:
+    """*value* resolved against *root*, or None when it leaves the project or is agent_io."""
+    path = (root / value).resolve()
+    if path != root and root not in path.parents:
+        return None
+    return None if "agent_io" in path.relative_to(root).parts else path
 
 
 def _a(kind: str) -> str:

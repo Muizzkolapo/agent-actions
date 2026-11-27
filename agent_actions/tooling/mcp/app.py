@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from agent_actions.tooling.mcp.server import INVALID_PARAMS, McpServer, RpcError
@@ -117,7 +118,7 @@ def build_server(context: Context) -> McpServer:
 
     def read_resource(params: dict[str, Any]) -> dict[str, Any]:
         uri = str(params.get("uri"))
-        path = {**_project_files(context.project_root), **_skill_files()}.get(uri)
+        path = _project_file(context.project_root, uri) or _skill_files().get(uri)
         if path is None:
             raise RpcError(INVALID_PARAMS, f"Unknown resource: {uri}")
         kind = "text/markdown" if path.suffix == ".md" else "text/plain"
@@ -171,6 +172,32 @@ def _project_files(root: Path) -> dict[str, Path]:
             if path.is_file() and _not_linked(root, path):
                 files[PROJECT_SCHEME + path.relative_to(root).as_posix()] = path
     return files
+
+
+def _project_file(root: Path, uri: str) -> Path | None:
+    """The project file *uri* names, when it is one `resources/list` would list."""
+    if not uri.startswith(PROJECT_SCHEME):
+        return None
+    relative = PurePosixPath(uri[len(PROJECT_SCHEME) :])
+    if relative.is_absolute() or ".." in relative.parts:
+        return None
+    path = root.joinpath(*relative.parts)
+    if not any(_matches(relative.parts, pattern.split("/")) for pattern in PROJECT_FILES):
+        return None
+    return path if path.is_file() and _not_linked(root, path) else None
+
+
+def _matches(parts: tuple[str, ...], pattern: list[str]) -> bool:
+    """Whether a relative path matches a glob pattern, as `Path.glob` reads it."""
+    if not pattern:
+        return not parts
+    if pattern[0] == "**":
+        return any(_matches(parts[skip:], pattern[1:]) for skip in range(len(parts) + 1))
+    return (
+        bool(parts)
+        and fnmatch.fnmatchcase(parts[0], pattern[0])
+        and _matches(parts[1:], pattern[1:])
+    )
 
 
 def _not_linked(root: Path, path: Path) -> bool:

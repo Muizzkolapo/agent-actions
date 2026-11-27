@@ -191,7 +191,7 @@ class CLI:
     def _handle_termination(self, signum: int, _frame) -> None:
         signal_name = signal.Signals(signum).name
         self.logger.info("Received termination signal: %s", signal_name)
-        click.echo(f"\nOperation interrupted by {signal_name}. Exiting gracefully...")
+        click.echo(f"\nOperation interrupted by {signal_name}. Exiting gracefully...", err=True)
         sys.exit(130)
 
     def _configure_logging(

@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.tooling.mcp.app import PROJECT_SCHEME, _project_files
+from agent_actions.tooling.mcp.app import PROJECT_SCHEME, _project_file, _project_files
 
 
 @pytest.fixture
@@ -32,3 +32,24 @@ def test_a_linked_project_folder_is_still_served(project, tmp_path_factory):
     link.symlink_to(project, target_is_directory=True)
 
     assert PROJECT_SCHEME + "agent_actions.yml" in _project_files(link)
+
+
+def test_a_read_finds_each_listed_file_and_nothing_else(project):
+    (project / "schema" / "wf" / "deep").mkdir(parents=True)
+    (project / "schema" / "wf" / "deep" / "a.yml").write_text("fields: []\n")
+    (project / "prompt_store" / "nested").mkdir()
+    (project / "prompt_store" / "nested" / "b.md").write_text("x\n")
+    (project / "prompt_store" / "leak.md").symlink_to(project / ".env")
+
+    listed = _project_files(project)
+
+    assert {uri: _project_file(project, uri) for uri in listed} == listed
+    for uri in (
+        PROJECT_SCHEME + ".env",
+        PROJECT_SCHEME + "prompt_store/nested/b.md",
+        PROJECT_SCHEME + "prompt_store/leak.md",
+        PROJECT_SCHEME + "prompt_store/../.env",
+        PROJECT_SCHEME + "/etc/passwd",
+        PROJECT_SCHEME + "prompt_store/missing.md",
+    ):
+        assert _project_file(project, uri) is None, uri
