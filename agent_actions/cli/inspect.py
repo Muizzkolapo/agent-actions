@@ -73,7 +73,13 @@ class InspectCommand(BaseInspectCommand):
 
 
 def _in_loop(config: dict[str, Any]) -> bool:
-    """Whether *config* is an action of one iteration of a loop, shown as the loop."""
+    """Whether *config* is an action of one iteration of a loop, shown as the loop.
+
+    A retrieve step is shown even there: `records -A` and `sandbox_expected.yml` name it.
+    """
+    spec = builtin_tool(config)
+    if spec is not None and spec["tool"] == RETRIEVE:
+        return False
     return loop_of(config) is not None and not is_loop_pick(config)
 
 

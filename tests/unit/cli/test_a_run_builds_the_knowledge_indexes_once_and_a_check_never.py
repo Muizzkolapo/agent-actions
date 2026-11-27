@@ -70,6 +70,11 @@ def test_inspect_validates_the_steps_and_builds_no_index(project, knowledge):
     assert result.exit_code == 0, result.output
     assert "classify: retrieve 'help' from knowledge base help_center by keyword on" in output
     assert "billing_team__policy" in output
+    # The starter's own entry, on draft_reply in the loop: its steps are shown, by name.
+    assert (
+        "reply_round_iter1__draft_reply__help reply_round_iter1__draft_reply: retrieve 'help' "
+        "from knowledge base help_center by keyword on source.text, top 2"
+    ) in output
     assert knowledge.ensured == []
     assert knowledge.hashed == []
     assert knowledge.searched == []
