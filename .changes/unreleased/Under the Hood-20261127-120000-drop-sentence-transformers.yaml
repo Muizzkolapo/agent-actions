@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: '`sentence-transformers` is no longer a dependency. No code imported it, and it installed about 1.7 GB of packages (torch, transformers, scikit-learn, the CUDA libraries). Embeddings come back later as an optional extra.'
+time: 2026-11-27T12:00:00Z
