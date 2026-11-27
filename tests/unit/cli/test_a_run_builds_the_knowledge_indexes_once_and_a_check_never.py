@@ -75,6 +75,23 @@ def test_inspect_validates_the_steps_and_builds_no_index(project, knowledge):
     assert knowledge.searched == []
 
 
+@pytest.mark.parametrize(
+    "command",
+    [["schema"], ["retry", "--dry-run", "--sandbox"], ["dispositions", "--sandbox"]],
+    ids=["schema", "retry-dry-run", "dispositions"],
+)
+def test_a_command_that_loads_the_workflow_without_running_it_builds_no_index(
+    project, knowledge, command
+):
+    assert _agac("run", "-w", "support_desk", "--sandbox", "--wait").exit_code == 0
+    built = len(knowledge.ensured)
+
+    result = _agac(*command, "-w", "support_desk")
+
+    assert "Usage" not in result.output, result.output
+    assert len(knowledge.ensured) == built
+
+
 def test_a_run_builds_each_index_once_and_searches_with_its_digest(project, knowledge):
     result = _agac("run", "-w", "support_desk", "--sandbox", "--wait")
 
