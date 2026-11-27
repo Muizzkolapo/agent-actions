@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from agent_actions.llm.providers.tools.builtin import DEFAULT_CASE, PICK, ROUTE
+from agent_actions.llm.providers.tools.builtin import DEFAULT_CASE, PICK, RETRIEVE, ROUTE
 
 
 class RouteSpec(BaseModel):
@@ -40,7 +40,28 @@ class PickSpec(BaseModel):
     loop: dict[str, Any] | None = None
 
 
-_SPECS: dict[str, type[BaseModel]] = {ROUTE: RouteSpec, PICK: PickSpec}
+class RetrieveSpec(BaseModel):
+    """``retrieve``: the matches a search of knowledge base ``base`` finds for the record."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    tool: Literal["retrieve"]
+    base: str = Field(min_length=1)
+    # Each search method to its weight in the merge of their results.
+    methods: dict[str, float] = Field(min_length=1)
+    query: list[str] = Field(min_length=1)
+    # Each metadata field to a field reference, or to {"value": <constant>}.
+    where: dict[str, str | dict[str, Any]]
+    top_k: int = Field(ge=1, le=50)
+    candidates: int = Field(ge=1)
+    max_context_tokens: int | None = Field(ge=1)
+    max_per_origin: int | None = Field(ge=1)
+    # The context_scope.retrieve entry and the action the load generated the step for.
+    entry: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+
+
+_SPECS: dict[str, type[BaseModel]] = {ROUTE: RouteSpec, PICK: PickSpec, RETRIEVE: RetrieveSpec}
 
 
 def checked_builtin(spec: Any) -> dict[str, Any]:

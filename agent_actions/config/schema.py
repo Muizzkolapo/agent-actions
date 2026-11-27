@@ -696,6 +696,16 @@ class ActionConfig(_RetryValidators):
                 f"Action '{self.name}' picks from {', '.join(missing)}, which it does not "
                 "depend on. List each action of 'of' under 'dependencies'."
             )
+        if spec["tool"] == "retrieve":
+            refs = [*spec["query"], *(r for r in spec["where"].values() if isinstance(r, str))]
+            unread = sorted(
+                {ref.split(".", 1)[0] for ref in refs} - {"source", *self.dependencies}
+            )
+            if unread:
+                raise ValueError(
+                    f"Action '{self.name}' retrieves with {', '.join(unread)}, which it does "
+                    "not depend on."
+                )
 
     @field_validator("context_scope")
     @classmethod

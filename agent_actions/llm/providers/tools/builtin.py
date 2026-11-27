@@ -2,12 +2,19 @@
 
 ``route`` writes ``{"case": <case>}``: the value of the ``field`` field when it is one of
 ``cases``, else ``default`` when the router has a default branch. ``pick`` writes the
-output of the one action of ``of`` the record holds an output of.
+output of the one action of ``of`` the record holds an output of. ``retrieve`` writes the
+matches a search of a knowledge base finds for the record's query.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import importlib
+import threading
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
@@ -15,7 +22,8 @@ from agent_actions.errors import ConfigurationError
 BUILTIN_KEY = "_builtin"
 ROUTE = "route"
 PICK = "pick"
-BUILTIN_TOOLS = frozenset({ROUTE, PICK})
+RETRIEVE = "retrieve"
+BUILTIN_TOOLS = frozenset({ROUTE, PICK, RETRIEVE})
 CASE_FIELD = "case"
 DEFAULT_CASE = "default"
 
@@ -36,7 +44,9 @@ def runs_udf(config: Mapping[str, Any]) -> bool:
     return config.get("kind") == "tool" and builtin_tool(config) is None
 
 
-def field_value(data: Mapping[str, Any], path: str) -> Any:
+def field_value(
+    data: Mapping[str, Any], path: str, hint: str = "; observe it on the router"
+) -> Any:
     """The value at ``<action>.<field>[.<field>...]`` of a record's action-keyed data.
 
     Raises ``KeyError`` naming *path* when the record does not hold it: a field the router
@@ -45,7 +55,7 @@ def field_value(data: Mapping[str, Any], path: str) -> Any:
     value: Any = data
     for part in path.split("."):
         if not isinstance(value, Mapping) or part not in value:
-            raise KeyError(f"the record holds no '{path}'; observe it on the router")
+            raise KeyError(f"the record holds no '{path}'{hint}")
         value = value[part]
     return value
 
@@ -110,4 +120,153 @@ def run_builtin(spec: Mapping[str, Any], data: Any) -> dict[str, Any]:
         )
     if spec["tool"] == ROUTE:
         return {CASE_FIELD: route_case(spec, data)}
+    if spec["tool"] == RETRIEVE:
+        return retrieved(spec, data)
     return picked(spec, data)
+
+
+# -- retrieve ----------------------------------------------------------------
+
+
+def retrieve_steps_of(action_configs: Mapping[str, Any], action: str) -> list[str]:
+    """The retrieve steps the load generated for the context_scope.retrieve of *action*."""
+    return [
+        name
+        for name, config in action_configs.items()
+        if (spec := builtin_tool(config)) is not None
+        and spec["tool"] == RETRIEVE
+        and spec.get("action") == action
+    ]
+
+
+def step_label(spec: Mapping[str, Any], name: str) -> str:
+    """How a message names a step: ``write_reply: retrieve 'help' (write_reply__help)``."""
+    return f"{spec.get('action')}: retrieve '{spec.get('entry')}' ({name})"
+
+
+def knowledge_api() -> ModuleType:
+    """The knowledge base API, imported when a workflow first uses it."""
+    return importlib.import_module("agent_actions.knowledge.api")
+
+
+def searched_indexes(spec: Mapping[str, Any]) -> tuple[str, frozenset[str]]:
+    """The knowledge base a retrieve step searches and the index kinds its methods read.
+
+    One digest covers one set of kinds, so a run resolves a digest for each such pair.
+    """
+    index_for = knowledge_api().INDEX_FOR_METHOD
+    return spec["base"], frozenset(index_for[method] for method in spec["methods"])
+
+
+@dataclass
+class KnowledgeRun:
+    """What one run resolved for the knowledge bases its retrieve steps search."""
+
+    project_root: Path
+    sandbox: bool
+    digests: dict[tuple[str, frozenset[str]], str] = field(default_factory=dict)
+    hashes: dict[tuple[str, frozenset[str]], str | None] = field(default_factory=dict)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+_knowledge_run: KnowledgeRun | None = None
+
+
+@contextmanager
+def knowledge_run(project_root: Path, sandbox: bool) -> Iterator[KnowledgeRun]:
+    """Hold one digest per knowledge base and index kinds for every pass of the run."""
+    global _knowledge_run
+    previous = _knowledge_run
+    _knowledge_run = KnowledgeRun(project_root=project_root, sandbox=sandbox)
+    try:
+        yield _knowledge_run
+    finally:
+        _knowledge_run = previous
+
+
+def resolve_knowledge(
+    action_configs: Mapping[str, Any], project_root: Path, sandbox: bool
+) -> None:
+    """Build the stale indexes the retrieve steps of *action_configs* read, before any action.
+
+    Each base and set of index kinds is resolved once per run; a later pass keeps the
+    digest of the first.
+    """
+    global _knowledge_run
+    wanted = {
+        searched_indexes(spec)
+        for config in action_configs.values()
+        if (spec := builtin_tool(config)) is not None and spec["tool"] == RETRIEVE
+    }
+    if not wanted:
+        return
+    run = _knowledge_run
+    if run is None or run.project_root != project_root or run.sandbox != sandbox:
+        # A load outside a run command: its digests serve this load only.
+        run = _knowledge_run = KnowledgeRun(project_root=project_root, sandbox=sandbox)
+    api = knowledge_api()
+    for key in sorted(wanted, key=lambda pair: (pair[0], sorted(pair[1]))):
+        if key not in run.digests:
+            base, indexes = key
+            run.digests[key] = api.ensure_indexes(
+                project_root, base, set(indexes), sandbox=sandbox
+            )
+
+
+def knowledge_hash(spec: Mapping[str, Any]) -> str | None:
+    """The digest the current files give the indexes *spec* searches; None outside a run."""
+    run = _knowledge_run
+    if run is None:
+        return None
+    key = searched_indexes(spec)
+    with run.lock:
+        if key not in run.hashes:
+            run.hashes[key] = knowledge_api().knowledge_hash(
+                run.project_root, key[0], set(key[1]), sandbox=run.sandbox
+            )
+        return run.hashes[key]
+
+
+def query_words(value: Any, ref: str) -> list[str]:
+    """The text a query reference adds: a null adds nothing, a list of strings is flattened."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [word for item in value for word in query_words(item, ref)]
+    if isinstance(value, Mapping):
+        raise TypeError(f"{ref} holds an object; a query reads text, numbers or lists of them")
+    return [str(value)]
+
+
+def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any]:
+    """The matches the knowledge base of *spec* holds for the record's query."""
+    hint = "; the retrieve step reads it from the record"
+    words = [w for ref in spec["query"] for w in query_words(field_value(data, ref, hint), ref)]
+    where = {
+        name: value["value"] if isinstance(value, Mapping) else field_value(data, value, hint)
+        for name, value in spec["where"].items()
+    }
+    run = _knowledge_run
+    digest = run.digests.get(searched_indexes(spec)) if run is not None else None
+    if run is None or digest is None:
+        raise ConfigurationError(
+            f"{spec['action']}: retrieve '{spec['entry']}' searches knowledge base "
+            f"'{spec['base']}', which this run did not build. Run the workflow with agac run.",
+            context={"tool": RETRIEVE, "base": spec["base"]},
+        )
+    result: dict[str, Any] = knowledge_api().retrieve(
+        run.project_root,
+        base=spec["base"],
+        digest=digest,
+        methods=dict(spec["methods"]),
+        query_text=" ".join(words),
+        where=where,
+        top_k=spec["top_k"],
+        candidates=spec["candidates"],
+        max_context_tokens=spec["max_context_tokens"],
+        max_per_origin=spec["max_per_origin"],
+        label=step_label(spec, f"{spec['action']}__{spec['entry']}"),
+    )
+    return result

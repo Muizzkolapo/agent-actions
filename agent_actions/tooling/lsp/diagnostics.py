@@ -80,7 +80,8 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
 
             # Skip validation for special namespaces (source, loop, workflow, seed, etc.)
             # These are built-in data sources, not user-defined actions
-            if action_name in SPECIAL_NAMESPACES:
+            # `retrieve.<entry>` names the action's own retrieve step.
+            if action_name in SPECIAL_NAMESPACES or action_name == "retrieve":
                 continue
 
             action_location = index.get_action(action_name, file_path)
@@ -243,6 +244,9 @@ def _guard_is_unresolvable(action, index: ProjectIndex, file_path: Path, variabl
     because the alternative is warning about clauses the runtime answers.
     """
     namespace, dot, _field = variable.partition(".")
+    if namespace == "retrieve" and dot:
+        # The action's own retrieve step, which the load names `<action>__<entry>`.
+        return False
 
     if not dot:
         # A bare name resolves through three promotions, so it is only wrong when none of

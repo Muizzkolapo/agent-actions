@@ -73,7 +73,14 @@ _LOADED = re.compile(f"{_LOADED_OPEN}(\\d+){_LOADED_CLOSE}")
 _HOLD_LOADED = "_agac_hold_loaded"
 
 # Names only a record supplies, whatever the workflow declares.
-_RECORD_NAMES = FRAMEWORK_NAMESPACES | {"source", "i", "idx", "base_name", "param_name"}
+_RECORD_NAMES = FRAMEWORK_NAMESPACES | {
+    "source",
+    "retrieve",
+    "i",
+    "idx",
+    "base_name",
+    "param_name",
+}
 _VERSION_NAMES = frozenset({"version", "i", "idx", "base_name", "param_name"})
 
 _OPENER = re.compile(r"\{[{%#]")

@@ -32,8 +32,10 @@ from agent_actions.cli.exit_codes import (
 )
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config import sandbox
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.errors import AgentActionsError, ProviderQuotaStop
+from agent_actions.llm.providers.tools.builtin import knowledge_run
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.storage.run_lock import hold_run_lock
@@ -227,6 +229,7 @@ class RunCommand:
             with (
                 hold_run_lock(paths.io_dir, self.agent_name),
                 holding_the_lock() if holding_the_lock is not None else nullcontext(),
+                knowledge_run(resolve_project_root(project_root), sandbox.is_active()),
             ):
                 started = time.monotonic()
                 if self.args.refresh_input:

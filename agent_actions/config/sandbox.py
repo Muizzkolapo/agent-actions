@@ -277,7 +277,13 @@ def tool_actions(action_configs: Mapping[str, Mapping[str, Any]]) -> dict[str, T
         if _kind(config) != "tool":
             continue
         cannot_stub = None
-        if builtin_tool(config) is not None:
+        spec = builtin_tool(config)
+        if spec is not None and spec["tool"] == "retrieve":
+            cannot_stub = (
+                "is a retrieve step: a sandbox run searches its knowledge base for real, as a "
+                "run does"
+            )
+        elif spec is not None:
             cannot_stub = "is a built-in tool: it runs no code of the project"
         elif str(config.get("granularity") or "").lower() == "file":
             cannot_stub = (

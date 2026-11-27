@@ -24,7 +24,7 @@ from agent_actions.cli.cli_decorators import (
 )
 from agent_actions.cli.inspect_base import branch_of, render_title_row
 from agent_actions.config.loops import is_loop_pick, loop_of
-from agent_actions.llm.providers.tools.builtin import PICK, ROUTE, builtin_tool
+from agent_actions.llm.providers.tools.builtin import PICK, RETRIEVE, ROUTE, builtin_tool
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.project_root import ensure_in_project
 
@@ -78,7 +78,7 @@ def _in_loop(config: dict[str, Any]) -> bool:
 
 
 def _note(config: dict[str, Any]) -> str | None:
-    """What an action is beyond its name: its branch, or the router or join it was written as."""
+    """What an action is beyond its name: its branch, or the entry it was written as."""
     spec = builtin_tool(config)
     loop = loop_of(config) if is_loop_pick(config) else None
     if loop is not None:
@@ -94,6 +94,12 @@ def _note(config: dict[str, Any]) -> str | None:
         return f"route on {spec['field']}: {cases}"
     if spec is not None and spec["tool"] == PICK:
         return f"join of {', '.join(spec['of'])}"
+    if spec is not None and spec["tool"] == RETRIEVE:
+        return (
+            f"{spec['action']}: retrieve '{spec['entry']}' from knowledge base {spec['base']} "
+            f"by {', '.join(spec['methods'])} on {', '.join(spec['query'])}, "
+            f"top {spec['top_k']}"
+        )
     branch = branch_of(config)
     if branch is None:
         return None
