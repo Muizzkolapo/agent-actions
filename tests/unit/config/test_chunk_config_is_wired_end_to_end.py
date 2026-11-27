@@ -200,3 +200,16 @@ def test_an_overlap_at_or_above_the_chunk_size_is_refused_at_load():
 
     message = str(exc.value)
     assert "chunk_overlap" in message and "chunk_size" in message
+
+
+def test_a_markdown_split_is_refused_at_load_as_the_splitter_refuses_it():
+    root = _project_tree(
+        {
+            "api_key": "k",
+            "model_name": "gpt-4",
+            "chunk_config": {"chunk_size": 200, "chunk_overlap": 200, "split_method": "markdown"},
+        },
+    )
+
+    with pytest.raises(ConfigurationError, match="for a 'markdown' split"):
+        _manager(root).get_user_agents()
