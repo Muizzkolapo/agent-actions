@@ -1,7 +1,8 @@
 """A filtered rerun runs the action it names and what reads it, whatever the action is.
 
 The sandbox template uses each feature once: a guard, versions and their merge, a
-loop, a router with two branches and a join, a HITL action and a batch action. The
+loop with a retrieve entry, a router with two branches and a join, a HITL action and a
+batch action. The
 two high-priority tickets are answered again from each kind of action, offline, and
 only the actions that read the named one run, on those tickets alone.
 """
@@ -23,6 +24,8 @@ RAN = re.compile(r"✓ (\w+)\s+(\d+) records?")
 LOOP = {
     "reply_round_iter1__draft_reply": 2,
     "reply_round_iter1__check_reply": 2,
+    # The retrieve step of the second round takes the round's guard, so it reads round 1.
+    "reply_round_iter2__draft_reply__help": 2,
     "reply_round_iter2__draft_reply": 2,
     "reply_round_iter2__check_reply": 2,
 }

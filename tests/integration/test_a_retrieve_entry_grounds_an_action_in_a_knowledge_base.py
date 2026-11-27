@@ -1,90 +1,77 @@
-"""The starter template with a knowledge base: classify retrieves help articles for each ticket."""
+"""The starter template grounds its reply in help articles: draft_reply retrieves for each ticket.
+
+The retrieve entry ``help`` of ``draft_reply`` (in the ``reply_round`` loop) searches the
+``help_center`` knowledge base with ``source.text``, so the search reads real ticket text in a
+sandbox run. Its step in the first round is ``reply_round_iter1__draft_reply__help``.
+"""
 
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
-import yaml
 
 from tests._support.agac_cli import run_agac
 
-TEMPLATE = Path(__file__).parents[2] / "agent_actions/cli/project_templates/sandbox"
 WORKFLOW = "support_desk"
-ARTICLES = {
-    "billing.md": "# Billing\n\n## Charged twice\n\nIf you were charged twice for one invoice, "
-    "we refund the second charge within five days.\n",
-    "app.md": "# App\n\n## The app closes\n\nIf the app closes when you upload a photo, "
-    "install the latest version.\n",
-    "account.md": "# Account\n\n## Change your email\n\nTo change the email address of your "
-    "account, open Settings and choose Email.\n",
-}
+STEP = "reply_round_iter1__draft_reply__help"
+ENV = {"OPENAI_API_KEY": ""}
 
 
 @pytest.fixture
 def project(tmp_path: Path) -> Path:
-    root = tmp_path / "demo"
-    shutil.copytree(TEMPLATE, root)
-    config = root / "agent_actions.yml"
-    config.write_text(
-        config.read_text().replace("__PROJECT_NAME__", "demo")
-        + "knowledge:\n  help_center:\n    sources: [knowledge/help_center/*.md]\n"
-    )
-    folder = root / "knowledge" / "help_center"
-    folder.mkdir(parents=True)
-    for name, text in ARTICLES.items():
-        (folder / name).write_text(text)
-    workflow = root / "agent_workflow" / WORKFLOW / "agent_config" / f"{WORKFLOW}.yml"
-    data = yaml.safe_load(workflow.read_text())
-    classify = next(a for a in data["actions"] if a.get("name") == "classify")
-    classify["context_scope"]["retrieve"] = {
-        "help": {"from": "help_center", "query": "read_ticket.text", "top_k": 1}
-    }
-    workflow.write_text(yaml.safe_dump(data, sort_keys=False))
-    return root
+    created = run_agac(tmp_path, "init", "demo", "--template", "sandbox", env=ENV)
+    assert created.returncode == 0, created.stdout + created.stderr
+    return tmp_path / "demo"
 
 
 def _run(root: Path, *extra: str):
-    result = run_agac(root, "run", "-w", WORKFLOW, "--sandbox", "--wait", *extra)
+    result = run_agac(root, "run", "-w", WORKFLOW, "--sandbox", "--wait", *extra, env=ENV)
     assert result.returncode == 0, result.stdout + result.stderr
     return result
 
 
-def _top_origins(root: Path) -> dict[str, str]:
-    shown = run_agac(root, "records", "-w", WORKFLOW, "-A", "classify__help", "--sandbox")
+def _outputs(root: Path) -> dict[str, dict]:
+    shown = run_agac(root, "records", "-w", WORKFLOW, "-A", STEP, "--sandbox", env=ENV)
     assert shown.returncode == 0, shown.stdout + shown.stderr
-    origins = {}
-    for record in json.loads(shown.stdout):
-        output = record["content"]["classify__help"]
-        ticket = record["content"]["read_ticket"]["ticket_id"]
-        origins[ticket] = output["matches"][0]["origin"] if output["matches"] else ""
-    return origins
+    return {
+        record["content"]["source"]["ticket_id"]: record["content"][STEP]
+        for record in json.loads(shown.stdout)
+    }
 
 
 def test_each_ticket_retrieves_the_article_that_answers_it(project):
     _run(project)
 
-    origins = _top_origins(project)
+    outputs = _outputs(project)
 
-    assert origins["T-1001"].endswith("billing.md")
-    assert origins["T-1002"].endswith("app.md")
-    assert origins["T-1004"].endswith("account.md")
-    assert "T-1003" not in origins  # spam is filtered before the step, as before classify
+    top = {ticket: (output["matches"] or [{}])[0] for ticket, output in outputs.items()}
+    assert top["T-1001"]["title"] == "Billing > Duplicate charges"
+    assert top["T-1001"]["id"] == "knowledge/help_center/billing.md#1"
+    # The spam ticket is searched too: the step reads only source.text, so it runs before
+    # classify's guard filters the ticket.
+    assert top["T-1003"]["title"] == "Account access > Suspicious messages"
+    assert top["T-1004"]["title"] == "Account access > Change your email address"
+    assert top["T-1005"]["origin"] == "knowledge/help_center/refunds.md"
+    # T-1006 shares no word with the articles once stopwords are dropped and words stemmed.
+    assert outputs["T-1006"]["matches"] == []
+    assert outputs["T-1006"]["count"] == 0
+    assert len({output["index"] for output in outputs.values()}) == 1
 
 
 def test_an_edited_article_warns_the_step_and_rerun_answers_it_again(project):
     _run(project)
     (project / "knowledge/help_center/billing.md").write_text(
-        "# Billing\n\nRefunds take a week.\n"
+        "# Billing\n\n## Duplicate charges\n\nIf you were charged twice, we refund it in a week.\n"
     )
 
     warned = _run(project)
 
     assert (
-        "classify: retrieve 'help' (classify__help): knowledge base 'help_center' changed "
-        "since it answered; run again with --rerun classify__help"
+        f"reply_round_iter1__draft_reply: retrieve 'help' ({STEP}): knowledge base "
+        f"'help_center' changed since it answered; run again with --rerun {STEP}"
     ) in " ".join((warned.stdout + warned.stderr).split())
-    again = _run(project, "--rerun", "classify")
+    again = _run(project, "--rerun", STEP)
     assert "knowledge base 'help_center' changed" not in again.stdout + again.stderr
+    assert "in a week" in _outputs(project)["T-1001"]["matches"][0]["text"]

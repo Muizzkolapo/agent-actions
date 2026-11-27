@@ -1,3 +1,4 @@
 name: reply
 fields:
   - {id: reply, type: string, required: true}
+  - {id: citations, type: array, items: {type: string}, required: true}
