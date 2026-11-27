@@ -164,9 +164,17 @@ def _project_files(root: Path) -> dict[str, Path]:
     files: dict[str, Path] = {}
     for pattern in PROJECT_FILES:
         for path in sorted(root.glob(pattern)):
-            if path.is_file() and root in path.resolve().parents:
+            if path.is_file() and _not_linked(root, path):
                 files[PROJECT_SCHEME + path.relative_to(root).as_posix()] = path
     return files
+
+
+def _not_linked(root: Path, path: Path) -> bool:
+    """Whether *path* is the file it names: no symlink on the way can point elsewhere."""
+    try:
+        return path.resolve().relative_to(root.resolve()) == path.relative_to(root)
+    except ValueError:
+        return False
 
 
 def _project_resources(root: Path) -> list[dict[str, str]]:

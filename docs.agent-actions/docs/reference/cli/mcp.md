@@ -22,6 +22,8 @@ The server is safe by default:
 - The server refuses a real run, a real retry and an export. To permit them, start the server with `--allow-real-runs`.
 - The assistant can always read the output of real runs. A read changes nothing.
 - The resources never include `.env` or stored data.
+- A scenario file or an expectations file must be a `.yml` file of the project, outside `agent_io`. The server refuses other paths, because the command shows the line where a YAML file fails.
+- A resource is never a symbolic link.
 
 ## Options
 

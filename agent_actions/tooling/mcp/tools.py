@@ -55,6 +55,7 @@ SANDBOX_RUN = {
         "unless it was started with --allow-real-runs"
     ),
 }
+NAMED_SCENARIOS = ("happy", "chaos")
 SCENARIO = {
     **STRING,
     "description": (
@@ -481,6 +482,7 @@ def check_arguments(tool: Tool, args: dict[str, Any]) -> None:
     }
     for name, value in args.items():
         wanted = tool.properties[name]["type"]
+        least = tool.properties[name].get("minimum")
         right = isinstance(value, kinds[wanted]) and not (
             wanted == "integer" and isinstance(value, bool)
         )
@@ -488,6 +490,40 @@ def check_arguments(tool: Tool, args: dict[str, Any]) -> None:
             right = all(isinstance(item, str) for item in value)
         if not right:
             raise ToolRefused(f"{tool.name}: '{name}' must be {_a(wanted)}")
+        if least is not None and value < least:
+            raise ToolRefused(f"{tool.name}: '{name}' must be {least} or more")
+        texts = value if isinstance(value, list) else [value]
+        if any(isinstance(text, str) and not _printable(text) for text in texts):
+            raise ToolRefused(f"{tool.name}: '{name}' holds a NUL or an unpaired surrogate")
+
+
+def _printable(text: str) -> bool:
+    if "\x00" in text:
+        return False
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def refuse_a_file_outside_the_project(tool: Tool, args: dict[str, Any], context: Context) -> None:
+    """Refuse a scenario or expectations file that is not a YAML file of the project.
+
+    The CLI shows the line a YAML file fails on, so any other file could be read through it.
+    """
+    root = context.project_root.resolve()
+    for name in ("scenario", "expected"):
+        value = args.get(name)
+        if value is None or (name == "scenario" and value in NAMED_SCENARIOS):
+            continue
+        path = (root / value).resolve()
+        inside = root in path.parents and "agent_io" not in path.relative_to(root).parts
+        if not inside or path.suffix not in (".yml", ".yaml"):
+            raise ToolRefused(
+                f"{tool.name}: '{name}' must be a .yml file of the project, outside agent_io"
+                + (", or 'happy' or 'chaos'" if name == "scenario" else "")
+            )
 
 
 def _a(kind: str) -> str:
@@ -520,8 +556,11 @@ class Outcome:
 
 def call_tool(tool: Tool, args: dict[str, Any], context: Context) -> Outcome:
     """Run *tool* with *args* and return what `agac` printed."""
+    # Some clients send null for an argument they leave out.
+    args = {name: value for name, value in args.items() if value is not None}
     check_arguments(tool, args)
     refuse_a_real_call(tool, args, context)
+    refuse_a_file_outside_the_project(tool, args, context)
     with tempfile.TemporaryDirectory(prefix="agac-mcp-") as scratch:
         call = dict(args)
         if call.get("records") is not None and tool.name == "run_workflow":
@@ -534,7 +573,14 @@ def call_tool(tool: Tool, args: dict[str, Any], context: Context) -> Outcome:
 
 def _run_agac(tool: Tool, argv: list[str], args: dict[str, Any], context: Context) -> Outcome:
     shown = "agac " + " ".join(argv)
-    env = {**os.environ, "NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "160"}
+    env = {
+        **os.environ,
+        "NO_COLOR": "1",
+        "TERM": "dumb",
+        "COLUMNS": "160",
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+    }
     command = [sys.executable, "-m", "agent_actions.cli.main", *argv]
     try:
         done = subprocess.run(  # nosec B603
@@ -543,6 +589,8 @@ def _run_agac(tool: Tool, argv: list[str], args: dict[str, Any], context: Contex
             env=env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdin=subprocess.DEVNULL,
             timeout=context.timeout_seconds,
         )

@@ -287,3 +287,74 @@ def test_the_workflows_of_a_project_are_listed_by_their_config_files(tmp_path):
         {"workflow": "a_flow", "config": "agent_workflow/a_flow/agent_config/a_flow.yml"},
         {"workflow": "b_flow", "config": "agent_workflow/b_flow/agent_config/b_flow.yml"},
     ]
+
+
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("run_workflow", {"scenario": ".env"}),
+        ("run_workflow", {"scenario": "/etc/passwd"}),
+        ("retry_workflow", {"scenario": "../outside.yml"}),
+        ("inspect_workflow", {"scenario": "agent_io/kept.yml"}),
+        ("sandbox_check", {"expected": ".env"}),
+        ("sandbox_check", {"expected": "/home/someone/.aws/credentials"}),
+    ],
+)
+def test_a_scenario_or_expectations_file_must_be_a_yaml_file_of_the_project(
+    ran, tmp_path, name, args
+):
+    # The CLI quotes the line a YAML file fails on, so another file would be read through it.
+    calls, _ = ran
+
+    with pytest.raises(ToolRefused, match=".yml file of the project"):
+        call_tool(TOOLS[name], {"workflow": "wf", **args}, Context(project_root=tmp_path))
+
+    assert calls == []
+
+
+@pytest.mark.parametrize("scenario", ["happy", "chaos", "sandbox.yml", "scenarios/late.yaml"])
+def test_a_named_scenario_or_a_yaml_file_of_the_project_is_taken(ran, tmp_path, scenario):
+    calls, _ = ran
+
+    call_tool(TOOLS["run_workflow"], {"workflow": "wf", "scenario": scenario}, Context(tmp_path))
+
+    assert f"--scenario={scenario}" in calls[0]["argv"]
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_a_limit_below_one_is_refused(limit):
+    with pytest.raises(ToolRefused, match="'limit' must be 1 or more"):
+        check_arguments(TOOLS["records"], {"workflow": "wf", "limit": limit})
+
+
+@pytest.mark.parametrize("value", ["a\x00b", "a\ud800b"])
+def test_a_nul_or_an_unpaired_surrogate_is_refused(value):
+    with pytest.raises(ToolRefused, match="NUL or an unpaired surrogate"):
+        check_arguments(TOOLS["records"], {"workflow": value})
+
+
+def test_an_argument_sent_as_null_is_left_out(ran, tmp_path):
+    calls, _ = ran
+
+    call_tool(
+        TOOLS["run_workflow"],
+        {"workflow": "wf", "where": None, "scenario": None},
+        Context(project_root=tmp_path),
+    )
+
+    assert calls[0]["argv"] == ["run", "--workflow=wf", "--sandbox", "--wait"]
+
+
+def test_the_command_speaks_utf_8_whatever_the_locale(monkeypatch, tmp_path):
+    seen = {}
+
+    def run(command, **options):
+        seen.update(options)
+        return _Done()
+
+    monkeypatch.setattr(mcp_tools.subprocess, "run", run)
+
+    call_tool(TOOLS["usage"], {"workflow": "wf"}, Context(project_root=tmp_path))
+
+    assert (seen["encoding"], seen["errors"]) == ("utf-8", "replace")
+    assert seen["env"]["PYTHONIOENCODING"] == "utf-8"

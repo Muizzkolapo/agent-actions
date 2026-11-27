@@ -1,5 +1,6 @@
 """MCP command: serve this project to an AI assistant over the Model Context Protocol."""
 
+import io
 import sys
 from pathlib import Path
 
@@ -63,4 +64,7 @@ def mcp(project: Path | None, allow_real_runs: bool, timeout: int) -> None:
         f"({'real runs allowed' if allow_real_runs else 'sandbox runs only'})",
         err=True,
     )
-    build_server(context).serve(sys.stdin, sys.stdout)
+    # The protocol is UTF-8 whatever the locale, and a line ends with \n alone.
+    reader = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", errors="replace")
+    writer = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", newline="\n")
+    build_server(context).serve(reader, writer)

@@ -24,8 +24,8 @@ ENV = {"OPENAI_API_KEY": ""}
 class Client:
     """One MCP session with an `agac mcp` process."""
 
-    def __init__(self, project: Path, *flags: str) -> None:
-        env = {**os.environ, **ENV, "PYTHONPATH": str(REPO)}
+    def __init__(self, project: Path, *flags: str, **extra_env: str) -> None:
+        env = {**os.environ, **ENV, "PYTHONPATH": str(REPO), **extra_env}
         self.process = subprocess.Popen(
             [
                 sys.executable,
@@ -40,6 +40,7 @@ class Client:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
             env=env,
         )
         self.sent = 0
@@ -205,3 +206,21 @@ def test_outside_a_project_the_command_says_so(tmp_path):
 
     assert result.returncode != 0
     assert "No Agent Actions project" in result.stdout + result.stderr
+
+
+def test_the_protocol_is_utf_8_whatever_the_locale_of_the_server(project):
+    client = Client(project, PYTHONIOENCODING="ascii", PYTHONUTF8="0")
+    try:
+        client.ask("initialize", {"protocolVersion": "2025-06-18"})
+        is_error, text = client.call(
+            "run_workflow",
+            workflow=WORKFLOW,
+            rerun=["classify"],
+            where='source.priority == "hïgh"',
+            dry_run=True,
+        )
+    finally:
+        client.close()
+
+    assert not is_error, text
+    assert "hïgh" in text
