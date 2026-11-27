@@ -73,6 +73,7 @@ const sidebars: SidebarsConfig = {
             'reference/cli/sandbox',
             'reference/cli/usage',
             'reference/cli/skills',
+            'reference/cli/mcp',
             'reference/cli/troubleshooting',
           ],
         },

@@ -81,6 +81,26 @@ def run_agac(
     return _WARM.call(argv, cwd, merged)
 
 
+def start_agac(
+    cwd: Path, *args: str, env: Mapping[str, str] | None = None
+) -> subprocess.Popen[str]:
+    """Start `agac` in *cwd* with this tree first on its import path, and leave it running.
+
+    For a command a test speaks to while it runs, such as `agac mcp`: its pipes are
+    UTF-8 text, and the caller closes its standard input and waits for it.
+    """
+    return subprocess.Popen(
+        [str(AGAC), *args],
+        cwd=cwd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        env=_merged_env(os.environ, env),
+    )
+
+
 def run_in_warm_process(
     cwd: Path, *args: str, env: Mapping[str, str] | None = None, entry: str, timeout: float
 ) -> subprocess.CompletedProcess[str]:
