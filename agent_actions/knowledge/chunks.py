@@ -121,17 +121,27 @@ def check_sources(project_root: Path, name: str, base: KnowledgeBase) -> None:
             matched_files(project_root, name, pattern)
 
 
-def scan(project_root: Path, name: str, base: KnowledgeBase, *, connect: bool = True) -> Scan:
+def scan(
+    project_root: Path,
+    name: str,
+    base: KnowledgeBase,
+    *,
+    connect: bool = True,
+    refresh: bool = False,
+) -> Scan:
     """Read every source of *base*.
 
     A database source reads its snapshot; with no snapshot it reads the query when
-    *connect* allows it, and refuses otherwise.
+    *connect* allows it, and refuses otherwise. Only *refresh* (``agac knowledge build
+    --refresh``) reads an existing snapshot's query again, not a run's ``--refresh-input``.
     """
     found = Scan(name=name, base=base)
     root = project_root.resolve()
     for number, source in enumerate(base.sources, 1):
         if isinstance(source, DatabaseSource):
-            found.tables.append(_scan_rows(project_root, name, number, source, connect))
+            found.tables.append(
+                _scan_rows(project_root, name, number, source, connect=connect, refresh=refresh)
+            )
             continue
         pattern = source if isinstance(source, str) else source.path
         for path in matched_files(project_root, name, pattern):
@@ -160,7 +170,13 @@ def _read(path: Path, name: str, relpath: str) -> bytes:
 
 
 def _scan_rows(
-    project_root: Path, name: str, number: int, source: DatabaseSource, connect: bool
+    project_root: Path,
+    name: str,
+    number: int,
+    source: DatabaseSource,
+    *,
+    connect: bool,
+    refresh: bool,
 ) -> ScannedRows:
     from agent_actions.connections import connection_settings, open_connection
     from agent_actions.connections.settings import settings_as_resolved
@@ -173,7 +189,7 @@ def _scan_rows(
     settings = settings_as_resolved(connection_settings(source.connection, project_root))
     fingerprint = snapshot_fingerprint(source.connection, source.sql, settings)
     snapshot_dir = snapshot_root(project_root, name, number) / fingerprint / "data"
-    if snapshot_needs_reading(snapshot_dir):
+    if not snapshot_dir.exists() or (refresh and snapshot_needs_reading(snapshot_dir)):
         if not connect:
             raise ConfigurationError(
                 f"knowledge base '{name}': source {number} reads connection "

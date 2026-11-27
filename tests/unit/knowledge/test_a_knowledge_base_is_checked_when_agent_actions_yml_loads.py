@@ -106,3 +106,12 @@ def test_key_is_usable_only_when_every_source_names_its_ids():
 )
 def test_a_bad_base_is_refused_by_name(raw, message):
     assert message in _refused(raw)
+
+
+def test_a_fuzzy_index_is_refused_where_sqlite_has_no_trigram_tokenizer(monkeypatch):
+    monkeypatch.setattr("agent_actions.knowledge.methods.trigram_supported", lambda: False)
+
+    message = _refused({"help": {"sources": ["kb/*.md"], "index": ["keyword", "fuzzy"]}})
+
+    assert "index 'fuzzy' needs the SQLite trigram tokenizer" in message
+    assert "knowledge base 'help'" in message

@@ -94,7 +94,7 @@ def build(project_root: Path, name: str | None, refresh: bool, prune: bool) -> N
     current: dict[str, set[Path]] = {}
     try:
         for base_name, base in bases.items():
-            found = scan(project_root, base_name, base)
+            found = scan(project_root, base_name, base, refresh=refresh)
             current[base_name] = set()
             for kind in base.index:
                 digest, built = build_indexes(project_root, found, [kind])

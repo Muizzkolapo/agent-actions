@@ -193,6 +193,29 @@ def test_a_database_source_reads_rows_once_into_a_snapshot(tmp_path):
     assert again == only
 
 
+def test_a_refresh_of_the_run_input_does_not_read_a_knowledge_snapshot_again(tmp_path):
+    """Only ``agac knowledge build --refresh`` reads the query again, not ``--refresh-input``."""
+    from agent_actions.input.loaders.database_source import (
+        forget_refresh_request,
+        request_refresh,
+    )
+
+    root = _sqlite_project(tmp_path)
+    (only,) = _chunks(root)
+    with sqlite3.connect(root / "warehouse.db") as conn:
+        conn.execute("UPDATE kb SET body = 'Money back in 9 days.'")
+
+    request_refresh()
+    try:
+        (kept,) = _chunks(root)
+        (refreshed,) = chunk(scan(root, "kb", load_knowledge(root)["kb"], refresh=True))
+    finally:
+        forget_refresh_request()
+
+    assert kept == only
+    assert refreshed.body == "Money back in 9 days."
+
+
 def test_a_database_source_with_no_snapshot_refuses_when_it_may_not_connect(tmp_path):
     root = _sqlite_project(tmp_path)
 

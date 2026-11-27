@@ -7,6 +7,7 @@ Adding a method changes only this module, its tests and one docs row.
 
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sqlite3
@@ -185,6 +186,7 @@ INDEX_FOR_METHOD = {name: method.index for name, method in METHODS.items()}
 COMBINABLE = tuple(name for name in METHODS if name != "key")
 
 
+@functools.cache
 def trigram_supported() -> bool:
     try:
         sqlite3.connect(":memory:").execute(

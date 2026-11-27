@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -161,6 +162,14 @@ class KnowledgeBase(_Strict):
                 )
         if len(set(index)) != len(index):
             raise ValueError("index lists a kind twice")
+        if "fuzzy" in index:
+            from agent_actions.knowledge.methods import trigram_supported
+
+            if not trigram_supported():
+                raise ValueError(
+                    "index 'fuzzy' needs the SQLite trigram tokenizer with remove_diacritics "
+                    f"(SQLite 3.45 or later); this Python has SQLite {sqlite3.sqlite_version}"
+                )
         return index
 
     @field_validator("chunk_config", mode="before")
