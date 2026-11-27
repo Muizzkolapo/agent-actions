@@ -226,6 +226,51 @@ defaults:
 `data_source`, `expect` and `batch_max_workers` are workflow-level defaults. They can also occur in the `defaults:` block. [Defaults](../configuration/defaults.md) and [Run Modes](../execution/run-modes.md) give the documentation for these keys.
 :::
 
+## Retrieve {/* #retrieve */}
+
+`retrieve` searches a [knowledge base](../../guides/knowledge.md) for each record. The prompt and the guard of the action read the matches as `retrieve.<entry>`. Each entry is one search:
+
+```yaml
+context_scope:
+  observe: [source.text]
+  retrieve:
+    help:
+      from: help_center                    # a knowledge base of agent_actions.yml
+      method: {keyword: 0.7, fuzzy: 0.3}   # or keyword, or [keyword, fuzzy]
+      query: [source.text]
+      where: {category: classify.category}
+      top_k: 4
+      candidates: 20
+      max_context_tokens: 1000
+      max_per_origin: 2
+```
+
+| Key | Default | Range | Meaning |
+|-----|---------|-------|---------|
+| `from` | required | | The name of a knowledge base under `knowledge:` in `agent_actions.yml`. The name of an action is refused: `retrieval from an action comes in a later version` |
+| `query` | required | | A field reference, or a list of field references. The values are turned into text and joined with spaces |
+| `method` | `keyword` | | `keyword`, `all_words`, `phrase`, `fuzzy` or `key`. A list merges methods with equal weights. A mapping gives each method its weight. `key` cannot be merged |
+| `where` | none | | A mapping of a metadata field to a value. A value whose first part is `source` or an upstream action is a field reference. Any other value is a constant. `{value: "a.b"}` is always a constant. A null or missing reference matches nothing |
+| `top_k` | `5` | 1 to 50 | The number of matches, at most |
+| `candidates` | the larger of 20 and 4 × `top_k` | | The number of results of each method, before the merge and the limits |
+| `max_context_tokens` | none | | The total number of tokens of the matches. Chunks are added in rank order until the next chunk passes the limit. A chunk is never cut |
+| `max_per_origin` | none | | The number of matches from one file, or from one connection |
+
+The load turns each entry into an internal step named `<action>__<entry>`, for example `write_reply__help`. It adds the step to the dependencies of the action and the step's output to the `observe` of the action. `retrieve.help` in a prompt or a guard is the output of that step. `agac records`, `agac inspect`, `--rerun` and the messages name the step.
+
+The output of each entry is `{matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`.
+
+The load refuses these entries:
+
+- `retrieve` in `defaults:` or in `default_agent_config:`.
+- An entry name that ends in `_<digits>`, or an entry whose step name is the name of an action.
+- An action named `retrieve`.
+- A `query` or `where` reference to an action that is not upstream of the action.
+- `text`, `title` or `id` on an entry. Set them on the source of the knowledge base.
+- A method whose index the knowledge base does not build, a `where` field that no source of the base lists under `metadata:`, and `key` on a base whose sources do not all set `id:`.
+
+A guard that reads `retrieve.<entry>` runs after the search of that entry. See [A record with no match](../../guides/knowledge.md#a-record-with-no-match).
+
 ## Version Field Patterns
 
 Each iteration of a version action keeps its output in a separate namespace. The name of the namespace contains the iteration number (`extract_raw_qa_1`, `extract_raw_qa_2`). A consumer declares `version_consumption` and uses the wildcard syntax to refer to all iterations:
@@ -368,3 +413,4 @@ Enable `prompt_debug` to print the rendered prompt and its context data:
 - [Version Actions](../execution/versions) - Loop configuration and consumption patterns
 - [Field References](./field-references) - Field reference syntax and validation
 - [Seed Data](./seed-data) - Loading static reference data
+- [Knowledge Bases and Retrieval](../../guides/knowledge.md) - Searching a large reference for each record

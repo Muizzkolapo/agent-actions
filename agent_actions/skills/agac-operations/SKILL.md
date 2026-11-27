@@ -42,6 +42,7 @@ agac run -w <workflow> -u tools --rerun <action> --records ids.txt             #
 agac retry -w <workflow> --all                     # retry from the earliest failure until no pass helps
 agac retry -w <workflow> --filter <action>:<record_id> --reason "<why>"   # stop retrying one record
 agac run -w <workflow> -u tools --refresh-input    # read a database source's query again (refused while a batch is open)
+agac knowledge build --refresh                     # re-read the database sources of the knowledge bases; then --rerun <action>__<entry>, as the run warns
 agac export -w <workflow>                          # write the workflow's `outputs:` tables again, no model calls
 agac dispositions -w <workflow> --json             # counts per action, for scripts
 agac status -w <workflow> --json                   # status of each action and of the run

@@ -387,6 +387,7 @@ The workflow `support_desk` triages five support tickets. It has these actions:
 | `by_queue`, `assigned` | A router that sends each ticket to `billing_team` or `support_team`, and the join of the two branches |
 | `approve_reply` | A HITL action. A sandbox run approves each record |
 | `tag_reply` | A batch action (`run_mode: batch`), with a guard on the HITL status |
+| `retrieve.help` | Help-article retrieval: a `retrieve` entry that searches the knowledge base `help_center` (the files in `knowledge/help_center/`) for each ticket. The search runs for real in a sandbox run. See [Knowledge Bases and Retrieval](./knowledge.md) |
 
 Its `sandbox.yml` makes faults that heal, so the run completes:
 
