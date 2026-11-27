@@ -12,6 +12,7 @@ and the language-server experience for workflows, prompts, tools, and schemas.
 | Sub-Module | Description |
 |------------|-------------|
 | [docs](docs/_MANIFEST.md) | CLI tooling and servers for generating the docs artefact, catalog, scanner, and static site. |
+| [mcp](mcp/_MANIFEST.md) | Model Context Protocol server: an AI assistant runs and inspects workflows through `agac` commands, sandbox by default. |
 | [lsp](lsp/_MANIFEST.md) | Language Server Protocol components (indexer, resolver, navigation) for IDE integration. |
 
 ## Project Surface

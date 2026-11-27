@@ -564,4 +564,5 @@ Then reload VS Code: `Cmd+Shift+P` → "Developer: Reload Window".
 ## See Also
 
 - [Skills Command](../reference/cli/skills): Install skills for AI coding assistants
+- [mcp Command](../reference/cli/mcp): Let an AI assistant run and inspect workflows through an MCP server
 - [Troubleshooting](./troubleshooting): Common problems and their solutions

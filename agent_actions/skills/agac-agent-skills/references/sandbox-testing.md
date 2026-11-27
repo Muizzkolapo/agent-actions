@@ -30,6 +30,8 @@ agac sandbox check -w {workflow} -u tools                       # run --sandbox 
 agac init my_sandbox --template sandbox                         # a starter project that uses each feature once
 ```
 
+Through the MCP server (`agac mcp`), `run_workflow`, `retry_workflow`, `inspect_workflow` and `sandbox_check` do the same. They run in the sandbox by default.
+
 ## What is mocked and what is real
 
 | Part | In a sandbox run |

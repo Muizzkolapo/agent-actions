@@ -455,6 +455,63 @@ def _index_entry_actions(
         index.actions[name] = meta.location
         if workflow_name:
             index.workflow_actions.setdefault(workflow_name, {})[name] = meta.location
+    _index_retrieve_steps(index, yaml_file, lines, actions)
+
+
+def _index_retrieve_steps(
+    index: ProjectIndex, yaml_file: Path, lines: list[str], actions: list
+) -> None:
+    """Index the step each `context_scope.retrieve` entry becomes: `<action>__<entry>`.
+
+    Another action reads the matches by that name; the step's fields are fixed.
+    """
+    known = index.file_actions.setdefault(yaml_file, {})
+    workflow_name = index.file_to_workflow.get(yaml_file)
+    for action in actions:
+        scope = action.get("context_scope") if isinstance(action, dict) else None
+        entries = scope.get("retrieve") if isinstance(scope, dict) else None
+        if not isinstance(entries, dict) or not isinstance(action.get("name"), str):
+            continue
+        owner = known.get(action["name"])
+        start = owner.location.line if owner is not None else 0
+        for entry in entries:
+            name = f"{action['name']}__{entry}"
+            if not isinstance(entry, str) or name in known:
+                continue
+            line_no = next(
+                (
+                    i
+                    for i in range(start, len(lines))
+                    if re.match(rf"^\s*{re.escape(entry)}:\s*(?:#.*)?$", lines[i])
+                ),
+                start,
+            )
+            column = len(lines[line_no]) - len(lines[line_no].lstrip()) if lines else 0
+            location = Location(
+                file_path=yaml_file,
+                line=line_no,
+                column=column,
+                end_line=line_no,
+                end_column=column + len(entry),
+            )
+            meta = ActionMetadata(name=name, location=location)
+            meta.dependencies.extend(_retrieve_reads(entries[entry]))
+            known[name] = meta
+            index.actions[name] = location
+            if workflow_name:
+                index.workflow_actions.setdefault(workflow_name, {})[name] = location
+
+
+def _retrieve_reads(entry: Any) -> list[str]:
+    """The actions the `query` and `where` refs of a retrieve entry read."""
+    if not isinstance(entry, dict):
+        return []
+    query = entry.get("query")
+    refs = [query] if isinstance(query, str) else query if isinstance(query, list) else []
+    where = entry.get("where")
+    refs += [v for v in where.values() if isinstance(v, str)] if isinstance(where, dict) else []
+    roots = [ref.split(".", 1)[0] for ref in refs if isinstance(ref, str) and "." in ref]
+    return list(dict.fromkeys(root for root in roots if root != "source"))
 
 
 def _entry_reads(key: str, entry: dict) -> list[str]:

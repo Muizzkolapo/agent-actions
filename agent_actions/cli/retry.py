@@ -45,8 +45,10 @@ from agent_actions.cli.run import (
 )
 from agent_actions.cli.workflow_loader import load_workflow
 from agent_actions.config import sandbox
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.project_paths import ProjectPaths, ProjectPathsFactory
 from agent_actions.errors import ProviderQuotaStop
+from agent_actions.llm.providers.tools.builtin import knowledge_run
 from agent_actions.logging.factory import LoggerFactory
 from agent_actions.processing.disposition_gate import (
     answered_by_repair,
@@ -226,7 +228,10 @@ class RetryCommand:
             try:
                 # Before the store is opened: a retry rewrites dispositions and runs the
                 # workflow. Held from the first pass of --all to the last.
-                with hold_run_lock(paths.io_dir, self.agent_name):
+                with (
+                    hold_run_lock(paths.io_dir, self.agent_name),
+                    knowledge_run(resolve_project_root(project_root), sandbox.is_active()),
+                ):
                     code = passes(paths, project_root)
                     # Once, after the last pass: --all writing after each pass
                     # showed a pass's partial tables and paid for each load.

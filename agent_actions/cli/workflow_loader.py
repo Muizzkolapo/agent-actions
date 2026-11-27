@@ -64,6 +64,8 @@ def load_workflow(
     except AgentActionsError as e:
         enrich_exception_context(e, agent=full_path.stem)
         raise
+    if sends_requests:
+        _build_knowledge_indexes(rendered_workflow, project_root)
     return AgentWorkflow(
         WorkflowRuntimeConfig(
             paths=WorkflowPaths(
@@ -83,6 +85,21 @@ def load_workflow(
         ),
         read_only=read_only,
     )
+
+
+def _build_knowledge_indexes(rendered_workflow: str, project_root: Path | None) -> None:
+    """Build the knowledge indexes the workflow's retrieve steps search, once per run."""
+    if "agac.retrieve" not in rendered_workflow:
+        return
+    import yaml
+
+    from agent_actions.config import sandbox
+    from agent_actions.config.path_config import resolve_project_root
+    from agent_actions.llm.providers.tools.builtin import resolve_knowledge
+
+    actions = (yaml.safe_load(rendered_workflow) or {}).get("actions") or []
+    configs = {a["name"]: a for a in actions if isinstance(a, dict) and "name" in a}
+    resolve_knowledge(configs, resolve_project_root(project_root), sandbox.is_active())
 
 
 def validate_action_exists(action_name: str, action_configs: Mapping[str, Any]) -> None:

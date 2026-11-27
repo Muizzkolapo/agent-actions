@@ -36,6 +36,7 @@ EVERY_COMMAND = [
     "inspect",
     "knowledge",
     "list-udfs",
+    "mcp",
     "preview",
     "records",
     "retry",

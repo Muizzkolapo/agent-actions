@@ -196,6 +196,7 @@ The tables give each command, in groups by the purpose of the command:
 | [`docs`](./utilities#docs) | Generate documentation |
 | [`status`](./utilities#status) | Show the status of a workflow |
 | [`skills`](./skills) | Install AI assistant skills (Claude Code or Codex) |
+| [`mcp`](./mcp) | Start an MCP server, so that an AI assistant can run and inspect workflows |
 
 ## Next Steps
 
