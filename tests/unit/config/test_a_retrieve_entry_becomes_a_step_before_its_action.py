@@ -170,13 +170,11 @@ class TestTheStep:
     ):
         import sys
 
-        monkeypatch.delitem(sys.modules, "agent_actions.knowledge.api")
-        monkeypatch.setattr(
-            "agent_actions.config.retrieve.knowledge_api",
-            lambda: pytest.fail("the knowledge config was read"),
-        )
+        monkeypatch.delitem(sys.modules, "agent_actions.knowledge.api", raising=False)
 
         expand_retrieves({"name": "wf", "actions": [_action("a")]}, WF, tmp_path)
+
+        assert "agent_actions.knowledge.api" not in sys.modules
 
 
 class TestTheAlias:

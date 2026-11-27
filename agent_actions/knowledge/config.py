@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -251,7 +252,7 @@ def load_knowledge(project_root: Path) -> dict[str, KnowledgeBase]:
     return parse_knowledge(load_project_config(project_root).get(KNOWLEDGE_KEY))
 
 
-def unknown_base_message(name: str, bases: dict[str, KnowledgeBase]) -> str:
+def unknown_base_message(name: str, bases: Mapping[str, Any]) -> str:
     """The refusal of a base name agent_actions.yml does not declare, with a suggestion."""
     import difflib
 

@@ -8,13 +8,11 @@ matches a search of a knowledge base finds for the record's query.
 
 from __future__ import annotations
 
-import importlib
 import threading
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
@@ -144,18 +142,14 @@ def step_label(spec: Mapping[str, Any], name: str) -> str:
     return f"{spec.get('action')}: retrieve '{spec.get('entry')}' ({name})"
 
 
-def knowledge_api() -> ModuleType:
-    """The knowledge base API, imported when a workflow first uses it."""
-    return importlib.import_module("agent_actions.knowledge.api")
-
-
 def searched_indexes(spec: Mapping[str, Any]) -> tuple[str, frozenset[str]]:
     """The knowledge base a retrieve step searches and the index kinds its methods read.
 
     One digest covers one set of kinds, so a run resolves a digest for each such pair.
     """
-    index_for = knowledge_api().INDEX_FOR_METHOD
-    return spec["base"], frozenset(index_for[method] for method in spec["methods"])
+    from agent_actions.knowledge.api import INDEX_FOR_METHOD
+
+    return spec["base"], frozenset(INDEX_FOR_METHOD[method] for method in spec["methods"])
 
 
 @dataclass
@@ -204,13 +198,12 @@ def resolve_knowledge(
     if run is None or run.project_root != project_root or run.sandbox != sandbox:
         # A load outside a run command: its digests serve this load only.
         run = _knowledge_run = KnowledgeRun(project_root=project_root, sandbox=sandbox)
-    api = knowledge_api()
+    from agent_actions.knowledge.api import ensure_indexes
+
     for key in sorted(wanted, key=lambda pair: (pair[0], sorted(pair[1]))):
         if key not in run.digests:
             base, indexes = key
-            run.digests[key] = api.ensure_indexes(
-                project_root, base, set(indexes), sandbox=sandbox
-            )
+            run.digests[key] = ensure_indexes(project_root, base, set(indexes), sandbox=sandbox)
 
 
 def knowledge_hash(spec: Mapping[str, Any]) -> str | None:
@@ -218,10 +211,12 @@ def knowledge_hash(spec: Mapping[str, Any]) -> str | None:
     run = _knowledge_run
     if run is None:
         return None
+    from agent_actions.knowledge.api import knowledge_hash as current_hash
+
     key = searched_indexes(spec)
     with run.lock:
         if key not in run.hashes:
-            run.hashes[key] = knowledge_api().knowledge_hash(
+            run.hashes[key] = current_hash(
                 run.project_root, key[0], set(key[1]), sandbox=run.sandbox
             )
         return run.hashes[key]
@@ -256,7 +251,9 @@ def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any
             f"'{spec['base']}', which this run did not build. Run the workflow with agac run.",
             context={"tool": RETRIEVE, "base": spec["base"]},
         )
-    result: dict[str, Any] = knowledge_api().retrieve(
+    from agent_actions.knowledge.api import retrieve
+
+    return retrieve(
         run.project_root,
         base=spec["base"],
         digest=digest,
@@ -269,4 +266,3 @@ def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any
         max_per_origin=spec["max_per_origin"],
         label=step_label(spec, f"{spec['action']}__{spec['entry']}"),
     )
-    return result

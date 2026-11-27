@@ -11,11 +11,6 @@ import yaml
 
 from tests._support.agac_cli import run_agac
 
-pytestmark = pytest.mark.skip(
-    reason="needs agent_actions.knowledge from the knowledge base stream; the integration "
-    "step removes this marker"
-)
-
 TEMPLATE = Path(__file__).parents[2] / "agent_actions/cli/project_templates/sandbox"
 WORKFLOW = "support_desk"
 ARTICLES = {

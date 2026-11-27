@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.llm.providers.tools import builtin
 from agent_actions.llm.providers.tools.builtin import (
     knowledge_hash,
     knowledge_run,
     resolve_knowledge,
     run_builtin,
 )
-from tests.helpers.knowledge import FakeBase, install_fake_knowledge
+from tests.helpers.knowledge import API_MODULE, FakeBase, install_fake_knowledge
 
 ROOT = Path("/project")
 
@@ -128,9 +128,11 @@ class TestTheRunResolvesEachIndexOnce:
         assert len(knowledge.ensured) == 2
 
     def test_a_workflow_with_no_retrieve_step_never_imports_the_api(self, monkeypatch):
-        monkeypatch.setattr(builtin, "knowledge_api", lambda: pytest.fail("imported"))
+        monkeypatch.delitem(sys.modules, API_MODULE, raising=False)
 
         resolve_knowledge({"a": {"name": "a", "kind": "tool"}}, ROOT, sandbox=False)
+
+        assert API_MODULE not in sys.modules
 
 
 class TestTheKnowledgeHash:

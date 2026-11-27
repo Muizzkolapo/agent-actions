@@ -10,7 +10,6 @@ load writes as the step's name, so every later check sees an ordinary action.
 from __future__ import annotations
 
 import copy
-import difflib
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -23,7 +22,6 @@ from agent_actions.llm.providers.tools.builtin import (
     RETRIEVE,
     ROUTE,
     builtin_tool,
-    knowledge_api,
 )
 from agent_actions.record.elsewhere import SENDS_ELSEWHERE_KEY
 
@@ -129,7 +127,9 @@ def expand_retrieves(data: Any, workflow_file: str, project_root: Path | None = 
             expanded.append(entry)
             continue
         if bases is None:
-            bases = knowledge_api().load_knowledge_config(resolve_project_root(project_root))
+            from agent_actions.knowledge.api import load_knowledge_config
+
+            bases = load_knowledge_config(resolve_project_root(project_root))
         where = f"Action '{entry['name']}' in {workflow_file}"
         upstream = _upstream(entry["name"], graph)
         steps: dict[str, str] = {}
@@ -255,13 +255,13 @@ def _step(
     _refuse_unknown_keys(config, where)
     base = bases.get(source)
     if base is None:
+        from agent_actions.knowledge.config import unknown_base_message
+
         raise ConfigurationError(
-            f"{where}: 'from: {source}' names no knowledge base of agent_actions.yml."
-            f"{_suggestion(source, bases)}",
+            f"{where}: {unknown_base_message(source, bases)}",
             context={"action_name": name, "entry": entry, "from": source},
         )
-    api = knowledge_api()
-    methods = _methods(config.get("method", DEFAULT_METHOD), base, api, where)
+    methods = _methods(config.get("method", DEFAULT_METHOD), base, where)
     names = _instance_names(action)
     query = _query(config.get("query"), names, graph, upstream, where)
     filters = _where(config.get("where"), base, names, graph, upstream, where)
@@ -316,15 +316,9 @@ def _refuse_unknown_keys(config: Mapping[str, Any], where: str) -> None:
         )
 
 
-def _suggestion(name: str, bases: Mapping[str, Any]) -> str:
-    if not bases:
-        return " The project declares no knowledge base under 'knowledge:'."
-    close = difflib.get_close_matches(name, list(bases), n=1)
-    hint = f" Did you mean '{close[0]}'?" if close else ""
-    return f"{hint} Knowledge bases: {', '.join(sorted(bases))}."
+def _methods(raw: Any, base: Any, where: str) -> dict[str, float]:
+    from agent_actions.knowledge.api import INDEX_FOR_METHOD, KNOWN_METHODS
 
-
-def _methods(raw: Any, base: Any, api: Any, where: str) -> dict[str, float]:
     if isinstance(raw, str):
         methods: dict[str, float] = {raw: 1.0}
     elif isinstance(raw, list) and raw and all(isinstance(m, str) for m in raw):
@@ -350,9 +344,9 @@ def _methods(raw: Any, base: Any, api: Any, where: str) -> dict[str, float]:
             f"{where}: 'method:' must be a method, a list of methods (equal weights), or a "
             f"mapping of methods to weights; got {raw!r}.",
         )
-    known = sorted(api.KNOWN_METHODS)
+    known = sorted(KNOWN_METHODS)
     for method in methods:
-        if method not in api.KNOWN_METHODS:
+        if method not in KNOWN_METHODS:
             raise ConfigurationError(
                 f"{where}: '{method}' is no search method. Methods: {', '.join(known)}.",
                 context={"method": method},
@@ -368,7 +362,7 @@ def _methods(raw: Any, base: Any, api: Any, where: str) -> dict[str, float]:
             f"'{base.name}' to set 'id:'.",
         )
     for method in methods:
-        index = api.INDEX_FOR_METHOD[method]
+        index = INDEX_FOR_METHOD[method]
         if index not in base.index:
             raise ConfigurationError(
                 f"{where}: method '{method}' searches the '{index}' index, which knowledge base "

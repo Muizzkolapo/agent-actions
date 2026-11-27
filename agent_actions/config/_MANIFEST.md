@@ -135,7 +135,7 @@ Key Functions
 | `agent_actions/errors` | outbound | Raises `ConfigurationError`, `ConfigValidationError`, `FileSystemError`, `FileLoadError`, `TemplateRenderingError`. |
 | `agent_actions/llm/providers/agac` | outbound | `sandbox.load_scenario` reads the scenario with `scenario.load`, imported there, not at module level. |
 | `agent_actions/llm/providers/tools` | outbound | `sandbox.tool_actions` tells a built-in tool with `builtin.builtin_tool`, imported there, not at module level. |
-| `agent_actions/knowledge` | outbound | `retrieve.expand_retrieves` reads the `knowledge:` bases with `knowledge.api.load_knowledge_config` (through `builtin.knowledge_api`) when an action has a retrieve entry. |
+| `agent_actions/knowledge` | outbound | `retrieve.expand_retrieves` reads the `knowledge:` bases with `knowledge.api.load_knowledge_config` when an action has a retrieve entry, and names an unknown base with `knowledge.config.unknown_base_message`. |
 | `agent_actions/llm/config` | outbound | `ConfigManager.get_user_agents` validates the project's `endpoints:` block with `load_project_endpoints`. |
 | `agent_actions/guards` | outbound | `GuardParser`/`parse_guard_config` used by `ActionConfig.validate_guard`. |
 | `agent_actions/logging` | outbound | Fires config load and validation events via `fire_event`. |
