@@ -121,9 +121,7 @@ def check_sources(project_root: Path, name: str, base: KnowledgeBase) -> None:
             matched_files(project_root, name, pattern)
 
 
-def scan(
-    project_root: Path, name: str, base: KnowledgeBase, *, connect: bool = True
-) -> Scan:
+def scan(project_root: Path, name: str, base: KnowledgeBase, *, connect: bool = True) -> Scan:
     """Read every source of *base*.
 
     A database source reads its snapshot; with no snapshot it reads the query when

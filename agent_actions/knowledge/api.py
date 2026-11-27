@@ -54,7 +54,9 @@ def _base(project_root: Path, base: str) -> KnowledgeBase:
 
     bases = load_knowledge_config(project_root)
     if base not in bases:
-        raise KnowledgeConfigError(unknown_base_message(base, bases), context={"knowledge_base": base})
+        raise KnowledgeConfigError(
+            unknown_base_message(base, bases), context={"knowledge_base": base}
+        )
     return bases[base]
 
 
@@ -119,8 +121,7 @@ def retrieve(
     unknown = sorted(set(methods) - KNOWN_METHODS)
     if unknown:
         raise KnowledgeConfigError(
-            f"Unknown search method {', '.join(unknown)}; the methods are "
-            f"{', '.join(METHODS)}",
+            f"Unknown search method {', '.join(unknown)}; the methods are {', '.join(METHODS)}",
             context={"knowledge_base": base},
         )
     try:

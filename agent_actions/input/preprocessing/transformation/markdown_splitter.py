@@ -29,7 +29,8 @@ class MarkdownChunk:
 
 def count_tokens(text: str) -> int:
     return sum(
-        max(1, math.ceil(len(token) / _CHARS_PER_TOKEN)) if token[0].isalnum() or token[0] == "_"
+        max(1, math.ceil(len(token) / _CHARS_PER_TOKEN))
+        if token[0].isalnum() or token[0] == "_"
         else 1
         for token in _TOKEN.findall(text)
     )

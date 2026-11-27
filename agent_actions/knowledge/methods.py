@@ -104,7 +104,9 @@ def _build_fts(kind: str) -> Callable[[sqlite3.Connection], None]:
             f"CREATE VIRTUAL TABLE {table} USING fts5(title, body, "
             f"content='chunks', content_rowid='rowid', tokenize='{TOKENIZERS[kind]}')"
         )
-        conn.execute(f"INSERT INTO {table}(rowid, title, body) SELECT rowid, title, body FROM chunks")
+        conn.execute(
+            f"INSERT INTO {table}(rowid, title, body) SELECT rowid, title, body FROM chunks"
+        )
 
     return build
 

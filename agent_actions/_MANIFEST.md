@@ -11,6 +11,7 @@
 | [expectations](expectations/_MANIFEST.md) | Declarative output expectations: typed rules, results, and the service that runs them. |
 | [guards](guards/_MANIFEST.md) | Guard expression parsing and configuration. |
 | [input](input/_MANIFEST.md) | Data ingestion utilities (context loaders, preprocessors, and transformers). |
+| [knowledge](knowledge/_MANIFEST.md) | Knowledge bases: sources, chunks, content-addressed indexes and search. |
 | [llm](llm/_MANIFEST.md) | LLM runtime connectors for batch/online execution. |
 | [logging](logging/_MANIFEST.md) | Agent Actions logging infrastructure. |
 | [models](models/_MANIFEST.md) | Unified data models for agent-actions. |

@@ -105,4 +105,6 @@ class ProjectInitializer:
             "seed_data_path": "seed_data",
         }
         self.create_file(self.config_file, yaml.safe_dump(config_data, default_flow_style=False))
+        # Derived state, such as the knowledge indexes, is rebuilt from the project's files.
+        self.create_file(self.project_dir / ".gitignore", ".agac/\n")
         logger.info("Successfully initialized project: %s", self.project_name)

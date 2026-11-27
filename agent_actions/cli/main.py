@@ -40,6 +40,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
         "agent_actions.cli.inspect:inspect",
         "Inspect workflow structure and validation status.",
     ),
+    "knowledge": (
+        "agent_actions.cli.knowledge:knowledge",
+        "List, build and search the knowledge bases.",
+    ),
     "preview": (
         "agent_actions.cli.preview:preview",
         "Preview data stored in the SQLite storage backend.",

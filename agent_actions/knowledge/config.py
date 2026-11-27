@@ -6,7 +6,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from agent_actions.config.schema import ChunkConfig
 from agent_actions.errors import ConfigurationError
@@ -102,7 +109,9 @@ class KnowledgeBase(_Strict):
     @classmethod
     def _no_written_name(cls, data: Any) -> Any:
         if isinstance(data, dict) and "name" in data:
-            raise ValueError("a base takes its name from its key under 'knowledge:'; remove 'name'")
+            raise ValueError(
+                "a base takes its name from its key under 'knowledge:'; remove 'name'"
+            )
         return data
 
     @property
@@ -146,7 +155,9 @@ class KnowledgeBase(_Strict):
             if kind == "vector":
                 raise ValueError("index 'vector' comes in a later version; use keyword or fuzzy")
             if kind not in INDEXES:
-                raise ValueError(f"index '{kind}' is unknown; the indexes are {', '.join(INDEXES)}")
+                raise ValueError(
+                    f"index '{kind}' is unknown; the indexes are {', '.join(INDEXES)}"
+                )
         if len(set(index)) != len(index):
             raise ValueError("index lists a kind twice")
         return index
@@ -247,7 +258,4 @@ def unknown_base_message(name: str, bases: dict[str, KnowledgeBase]) -> str:
     near = difflib.get_close_matches(name, list(bases), n=1)
     hint = f" Did you mean '{near[0]}'?" if near else ""
     known = ", ".join(sorted(bases)) or "none"
-    return (
-        f"No knowledge base named '{name}' in agent_actions.yml.{hint} "
-        f"Knowledge bases: {known}"
-    )
+    return f"No knowledge base named '{name}' in agent_actions.yml.{hint} Knowledge bases: {known}"

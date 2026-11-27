@@ -34,6 +34,7 @@ EVERY_COMMAND = [
     "export",
     "init",
     "inspect",
+    "knowledge",
     "list-udfs",
     "preview",
     "records",
