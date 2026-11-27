@@ -105,6 +105,7 @@ Switch providers per-action by changing `model_vendor`.
 - **Databases** — read input rows from a query and write results to tables on SQLite, DuckDB, Postgres, MySQL, Redshift, Snowflake, BigQuery or Databricks ([docs](docs.agent-actions/docs/reference/data-io/databases.md))
 - **Expectations** — declare rules the output must satisfy; failures are regenerated with the rule's feedback
 - **Observability** — per-action timing, token counts, and structured event logs
+- **MCP server** — `agac mcp` lets an AI assistant (Claude Code, Claude Desktop, Cursor) validate, run, retry and inspect workflows; every run is an offline sandbox run unless you start it with `--allow-real-runs` ([docs](docs.agent-actions/docs/reference/cli/mcp.md))
 - **Interactive docs** — `agac docs` builds and serves a visual workflow dashboard
 
 ## Documentation

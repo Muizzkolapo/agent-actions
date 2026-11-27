@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: '`agac mcp` starts a Model Context Protocol server for a project, so an AI assistant (Claude Code, Claude Desktop, Cursor) can list, inspect, run, retry and check workflows and read records, dispositions, traces and usage. Each run is a sandbox run unless the server is started with `--allow-real-runs`. Register it with `claude mcp add agac -- agac mcp`.'
+time: 2026-11-27T09:00:00.000000000+00:00

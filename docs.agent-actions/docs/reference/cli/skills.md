@@ -16,6 +16,8 @@ agac skills <subcommand> [options]
 You can run this command from any subdirectory in your project.
 :::
 
+To let the assistant also run and inspect workflows, connect it to the MCP server. See the [`mcp` command](./mcp).
+
 ## Subcommands
 
 | Subcommand | Description |

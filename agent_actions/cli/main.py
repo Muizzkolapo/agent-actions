@@ -69,6 +69,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     ),
     "docs": ("agent_actions.cli.docs:docs", "Build and serve workflow documentation."),
     "example": ("agent_actions.cli.example:example", "Browse and install example projects."),
+    "mcp": (
+        "agent_actions.cli.mcp:mcp",
+        "Start an MCP server for this project, on standard input and output.",
+    ),
     "export": (
         "agent_actions.cli.export:export",
         "Write the outputs a workflow declares to their database tables.",
