@@ -358,6 +358,15 @@ Use `source_guid` to trace the record. Each action stores its output as a JSON a
 agac records -w <workflow> --source-guid 37812c37-80a2-596b-8747-8f93e7a34e7f --field _action
 ```
 
+If the record is not in the output of an action, follow it through the workflow. The command shows the disposition and the reason of the record at each action, in run order. It also shows the guard that stopped the record:
+
+```bash
+# Where did the record go, and which guard stopped it?
+agac dispositions -w <workflow> --record 37812c37-80a2-596b-8747-8f93e7a34e7f
+```
+
+See [Follow One Record](../reference/cli/dispositions#follow-one-record).
+
 ### Step 3: Check Action Outputs {/* #step-3-check-node-outputs */}
 
 Compare the data at each action. Select the same record at each action by its `source_guid`. The store keeps records compressed, so use [`agac records`](../reference/cli/records) to read them, not sqlite3:
