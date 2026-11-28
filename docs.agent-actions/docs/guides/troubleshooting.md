@@ -296,7 +296,7 @@ This table gives the messages that occur most often for the `knowledge:` section
 | `method 'fuzzy' searches the 'fuzzy' index, which knowledge base '<base>' does not build (index: keyword)` | load | Add `fuzzy` to the `index:` list of the base, or use another method. |
 | `'where:' names '<field>', which is no metadata field of knowledge base '<base>'` | load | Add the field to the `metadata:` list of a structured or database source. |
 | `'from: <action>' names an action that is not upstream of the action` | load | Add the action, or an action below it, to the `dependencies` of the action. |
-| `... A query or 'where:' reads source or an action the action depends on.` | load | The `query` or the `where` reads an action that is not upstream. Add that action to the `dependencies` of the action. A route case that names an include instance can cause this. See [Limits](./knowledge.md#limits-of-an-action-corpus). |
+| `... A query or 'where:' reads source or an action the action depends on.` | load | `is no action of the workflow`: correct the action name of the reference. `is an action of the workflow that is not upstream`: add that action to the `dependencies` of the action. A route case that names an include instance can cause this. See [Limits](./knowledge.md#limits-of-an-action-corpus). |
 | `knowledge base '<base>': source '<glob>' matches no file` | run start, `agac knowledge` | Correct the glob. A glob is relative to the project root. |
 | `knowledge base '<base>': source <n> reads connection '<c>', and no snapshot of it exists, and this command does not connect to a database ...` | sandbox run, `agac knowledge list` | Run `agac knowledge build <base>` one time where the connection works. A sandbox run never connects to a database. |
 | `knowledge base '<base>' changed since it answered; run again with --rerun <step>` | run (warning) | The files or the snapshot of the base changed. The stored matches stand. To search again, run `agac run -w <workflow> --rerun <step>`. |
@@ -310,7 +310,7 @@ This table gives the messages that occur most often for the `knowledge:` section
 If `count` is `0` for a record, do these checks in this order:
 
 1. Print the matches of each record: `agac records -w <workflow> -A <action>__<entry>`. Read the `query` field. It is the query that the search ran.
-2. Try the query on the base: `agac knowledge search <base> "<text>"`. The command uses the same index and the same methods as a run.
+2. Try the query on the base: `agac knowledge search <base> "<text>"`. The command uses the same index as a run. It uses the method `keyword` unless you give `--method`. Give the methods of the entry, for example `--method keyword --method fuzzy`.
 3. Make sure that the words of the query occur in the base. Keyword search finds words, not meanings. Write the query with an LLM action, or use `method: [keyword, fuzzy]` for typing errors.
 4. Examine the `where` filter. A null or missing reference matches nothing. A chunk of a file glob source has no metadata, so a `where` never keeps it. `2.0` does not match `2`.
 5. Examine `max_context_tokens`. If the best chunk alone is larger than the limit, the record gets no match.

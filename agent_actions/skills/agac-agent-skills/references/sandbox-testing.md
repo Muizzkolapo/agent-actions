@@ -199,7 +199,7 @@ feature once and passes `agac sandbox check -w support_desk` offline in a few se
 | `by_queue` → `assigned` | Router and join |
 | `approve_reply` | HITL (auto-approved in a sandbox run) |
 | `tag_reply` | `run_mode: batch`, guarded on the HITL status |
-| `retrieve.help` (on `draft_reply`) | Help-article retrieval from the knowledge base `help_center` (real search in a sandbox run; step `reply_round_iter1__draft_reply__help`; see `knowledge-retrieval.md`) |
+| `retrieve.help` (on `draft_reply`) | Help-article retrieval from the knowledge base `help_center` (real search in a sandbox run; steps `reply_round_iter1__draft_reply__help` and `reply_round_iter2__draft_reply__help`; see `knowledge-retrieval.md`) |
 
 Its `sandbox.yml` breaks `classify`'s regex rule once per record (repair heals it), gives each
 rater one rate limit (retry heals it) and drops half the first batch results (the retry batch

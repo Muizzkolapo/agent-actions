@@ -349,7 +349,7 @@ Two tickets that say the same thing in other words then share their keywords, an
 A search of an earlier action has these limits:
 
 - **A record can match its own origin below a split.** The step finds the record itself by its `source_guid`. A step that splits a record into several records gives each new record a new `source_guid`. Thus, below such a step, a record can match the record of the `from:` action that it came from. To prevent this, name in `from:` an action below the split.
-- **A route case that names an include instance hides what is above the router.** A case of a [route](../reference/configuration/routes.md#route-entry) can name an include instance (`as:`). The load then does not count the router and the actions above it as upstream of the first actions of that instance. Thus the load can refuse a `from:`, `query` or `where` reference in such an action to an action above the router. To fix this, add that action to the `dependencies` of the action.
+- **A route case that names an include instance hides what is above the router.** A case of a [route](../reference/configuration/routes.md#route-entry) can name an include instance (`as:`). The load then does not count the router and the actions above it as upstream of the actions of that instance. Thus the load can refuse a `from:`, `query` or `where` reference in such an action to an action above the router. To fix this, add that action to the `dependencies` of the action.
 - **An interrupted run can lose the line about added records.** The step builds the new index when it starts, and it compares the records after it runs. If the run stops between these two points, the next run finds the index file. That run does not print the line that says that records were added. This limit does not apply to the warning about records that changed or left. Each run gives that warning until you search again.
 - **Keyword search finds words, not meanings.** A paraphrase does not match. See [Find duplicates in other words](#find-duplicates-in-other-words).
 
@@ -393,7 +393,7 @@ method: [keyword, fuzzy]                 # equal weights
 method: {keyword: 0.7, fuzzy: 0.3}       # your weights
 ```
 
-A merged search uses only the ranks, not the scores of the methods. Its `score` is the sum of the merge. A search with one method keeps the score of that method. The merge puts two chunks with the same merged score in the order of their best rank in one method, then of their `id`.
+A merged search uses only the ranks, not the scores of the methods. Its `score` is the sum of the merge. A search with one method keeps the score of that method. If two chunks have the same merged score, the chunk with the better rank in one method comes first. If the ranks are also equal, the merge sorts by `id`.
 
 Use `[keyword, fuzzy]` when the records have typing errors. The base must have both indexes: `index: [keyword, fuzzy]`.
 

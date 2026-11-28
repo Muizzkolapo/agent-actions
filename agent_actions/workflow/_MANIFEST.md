@@ -70,7 +70,7 @@ action holds no record, and otherwise clears it.
 | `AgentWorkflow._clear_for_fresh_run()` | `.agac/batch_state/` | Deletes | `--fresh` |
 | `AgentWorkflow._clear_for_fresh_run()` | `agent_io/retrieve/` (`agent_io/sandbox/retrieve/` in a sandbox run) | Deletes | `--fresh` |
 | `ActionExecutor._index_action_corpus()` | `agent_io/retrieve/<step>/<digest>.db` (`agent_io/sandbox/retrieve/` in a sandbox run) | Writes, before a retrieve step with `from: <action>` runs | `actions[].context_scope.retrieve.<entry>.from` |
-| `ActionExecutor._note_action_corpus_change()` | `agent_io/retrieve/<step>/` | Reads the stored answers' index files; removes the files no answer names | — |
+| `ActionExecutor._note_action_corpus_change()` | `agent_io/retrieve/<step>/` | Reads the stored answers' index files; removes the files that neither the current index nor a stored answer names | — |
 | `AgentWorkflow._clear_for_fresh_run()` | `agent_io/store/{workflow_name}.db` | Deletes the stored token usage | `--fresh` |
 | `ActionExecutor._counted()` | `agent_io/store/{workflow_name}.db` | Writes each action's token usage for the run | — |
 | `ActionExecutor._counted()` | `artefact/runs.json` | Writes `actions[].usage`, `actions[].tokens`, `usage`, `total_tokens` | — |

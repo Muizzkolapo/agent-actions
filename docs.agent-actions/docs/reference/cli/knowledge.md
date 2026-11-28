@@ -62,7 +62,7 @@ The first build of a database source reads its rows and keeps them as a snapshot
 | `--refresh` | Read the query of each database source again, and replace its snapshot. This is the only command that reads the query of an existing snapshot again: `agac run --refresh-input` does not |
 | `--prune` | After the build, remove the index files of earlier digests. It keeps the current file of each index kind that the base declares or that a `retrieve` entry uses, `key` included. Refused while a run of the project is in progress, and when a workflow of the project does not load (the index kinds it searches are not known) |
 
-The index files are in `.agac/knowledge/<base>/`. Old files stay until `--prune` removes them. If you change a source back, the next build or run finds the old file again and builds nothing. The command builds each index that the base declares, and the `key` index when a `retrieve` entry of a workflow uses the method `key`. The command names a workflow that does not load on stderr (`Not read (does not load): ...`). It still builds the other indexes. `knowledge list` gives the same note.
+The index files are in `.agac/knowledge/<base>/`. Old files stay until `--prune` removes them. If you change a source back before a prune, the next build or run finds the old file again and builds nothing. The command builds each index that the base declares, and the `key` index when a `retrieve` entry of a workflow uses the method `key`. If a workflow does not load, the command writes its name to stderr (`Not read (does not load): ...`). It still builds the other indexes. `knowledge list` gives the same note.
 
 ## `knowledge search`
 
