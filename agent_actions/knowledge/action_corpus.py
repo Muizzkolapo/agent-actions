@@ -31,7 +31,6 @@ PROCESSED = "processed"
 # Each record searches the whole corpus, so the step's time grows with its square.
 MANY_RECORDS = 20_000
 OVERSIZED_TOKENS = 2_000
-RECORDS_TABLE = "records"
 # Under the run folder: agent_io/, or agent_io/sandbox/ in a sandbox run.
 RETRIEVE_DIR = "retrieve"
 
@@ -213,9 +212,9 @@ def corpus_digest(
 
 def _records_table(records: Sequence[CorpusRecord]):
     def write(conn: sqlite3.Connection) -> None:
-        conn.execute(f"CREATE TABLE {RECORDS_TABLE} (source_guid TEXT PRIMARY KEY, hash TEXT)")
+        conn.execute("CREATE TABLE records (source_guid TEXT PRIMARY KEY, hash TEXT)")
         conn.executemany(
-            f"INSERT INTO {RECORDS_TABLE} (source_guid, hash) VALUES (?, ?)",  # nosec B608
+            "INSERT INTO records (source_guid, hash) VALUES (?, ?)",
             ((r.source_guid, r.hash) for r in records),
         )
 
@@ -229,7 +228,7 @@ def stored_records(path: Path) -> dict[str, str] | None:
     except sqlite3.Error:
         return None
     try:
-        rows = conn.execute(f"SELECT source_guid, hash FROM {RECORDS_TABLE}").fetchall()  # nosec B608
+        rows = conn.execute("SELECT source_guid, hash FROM records").fetchall()
     except sqlite3.Error:
         return None
     finally:

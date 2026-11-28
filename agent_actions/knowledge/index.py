@@ -80,11 +80,11 @@ def write_index_file(
     path: Path,
     chunks: list,
     kinds: Iterable[str],
-    extra: Callable[[sqlite3.Connection], None] | None = None,
+    finish: Callable[[sqlite3.Connection], None] | None = None,
 ) -> None:
     """Write *chunks* and the index of each of *kinds* to *path* through a temporary file.
 
-    *extra* adds what else the file holds before it is renamed into place.
+    *finish* adds what else the file holds before it is renamed into place.
     """
     partial = _partial(path)
     conn = sqlite3.connect(partial)
@@ -92,8 +92,8 @@ def write_index_file(
         build_chunks_table(conn, chunks)
         for kind in sorted(set(kinds)):
             INDEX_BUILDERS[kind](conn)
-        if extra is not None:
-            extra(conn)
+        if finish is not None:
+            finish(conn)
         conn.commit()
     except BaseException:
         conn.close()
