@@ -73,6 +73,8 @@ class ActionMetadata:
     # A FILE-granularity version-merge tool spreads its output flat over record content
     # instead of namespacing it, so its fields resolve bare and its own name does not.
     spreads_output_flat: bool = False
+    # The entries of `context_scope.retrieve`: a prompt or guard reads `retrieve.<entry>`.
+    retrieve_entries: list[str] = field(default_factory=list)
 
 
 @dataclass

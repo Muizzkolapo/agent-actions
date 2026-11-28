@@ -1,0 +1,146 @@
+[
+  {
+    "slug": "billing-duplicate",
+    "section": "Billing",
+    "heading": "Duplicate charges",
+    "body": "If you see two charges for the same invoice, the second is usually a pending authorization that drops off within 3 business days. If both charges posted, we refund the duplicate automatically."
+  },
+  {
+    "slug": "billing-invoice",
+    "section": "Billing",
+    "heading": "Downloading invoices",
+    "body": "Invoices are available under Settings > Billing. Each monthly invoice lists the plan, seats and taxes."
+  },
+  {
+    "slug": "billing-payment",
+    "section": "Billing",
+    "heading": "Updating a payment method",
+    "body": "Add a new card under Settings > Billing > Payment methods, then set it as default. The old card can then be removed."
+  },
+  {
+    "slug": "billing-tax",
+    "section": "Billing",
+    "heading": "Sales tax and VAT",
+    "body": "We collect VAT for customers in the EU. Enter your VAT number to be exempted."
+  },
+  {
+    "slug": "refund-policy",
+    "section": "Refunds",
+    "heading": "Refund policy",
+    "body": "Annual plans can be cancelled within 30 days for a full refund. Monthly plans are not refunded for partial months."
+  },
+  {
+    "slug": "refund-timing",
+    "section": "Refunds",
+    "heading": "When will my refund arrive",
+    "body": "Refunds are issued to the original payment method. Banks take 5 to 10 business days to show the money back on your statement."
+  },
+  {
+    "slug": "orders-cancel",
+    "section": "Orders",
+    "heading": "Cancelling an order",
+    "body": "You can cancel an order before it ships from the Orders page. Cancelled orders are refunded to the original card."
+  },
+  {
+    "slug": "orders-track",
+    "section": "Orders",
+    "heading": "Tracking a shipment",
+    "body": "Each shipped order has a tracking number in the confirmation email."
+  },
+  {
+    "slug": "app-crash",
+    "section": "Mobile app",
+    "heading": "App crashes on upload",
+    "body": "If the app closes while uploading photos or images, update to the latest version and allow photo library access. Large videos over 2 GB are not supported."
+  },
+  {
+    "slug": "app-offline",
+    "section": "Mobile app",
+    "heading": "Working offline",
+    "body": "Changes made offline sync when the device reconnects."
+  },
+  {
+    "slug": "app-notif",
+    "section": "Mobile app",
+    "heading": "Push notifications",
+    "body": "Enable notifications in your phone settings and in the app under Profile > Notifications."
+  },
+  {
+    "slug": "account-email",
+    "section": "Account",
+    "heading": "Changing your email address",
+    "body": "Go to Profile > Account and edit the email field. We send a confirmation link to the new address before the change takes effect."
+  },
+  {
+    "slug": "account-password",
+    "section": "Account",
+    "heading": "Resetting your password",
+    "body": "Use Forgot password on the sign-in page. The reset link expires after one hour."
+  },
+  {
+    "slug": "account-2fa",
+    "section": "Account",
+    "heading": "Two-factor authentication",
+    "body": "Turn on two-factor authentication under Security. Keep your recovery codes safe; support cannot bypass 2FA."
+  },
+  {
+    "slug": "account-delete",
+    "section": "Account",
+    "heading": "Deleting your account",
+    "body": "Account deletion is permanent and removes all projects after 14 days."
+  },
+  {
+    "slug": "account-login",
+    "section": "Account",
+    "heading": "Cannot sign in",
+    "body": "If you cannot log in, check caps lock, reset your password, and make sure SSO is not required by your organization."
+  },
+  {
+    "slug": "security-phishing",
+    "section": "Security",
+    "heading": "Phishing and spam",
+    "body": "We never ask for your password by email. Report suspicious messages, prize offers or links to abuse@example.com and do not click them."
+  },
+  {
+    "slug": "team-invite",
+    "section": "Teams",
+    "heading": "Inviting teammates",
+    "body": "Admins can invite members by email from the Team page. Each invite uses one seat."
+  },
+  {
+    "slug": "team-roles",
+    "section": "Teams",
+    "heading": "Roles and permissions",
+    "body": "Owners manage billing; admins manage members; members edit projects."
+  },
+  {
+    "slug": "api-keys",
+    "section": "Developers",
+    "heading": "API keys",
+    "body": "Create API keys under Developer settings. Keys are shown once; rotate them if leaked."
+  },
+  {
+    "slug": "api-rate",
+    "section": "Developers",
+    "heading": "Rate limits",
+    "body": "The API allows 100 requests per minute per key. A 429 response means you hit the limit."
+  },
+  {
+    "slug": "export-data",
+    "section": "Data",
+    "heading": "Exporting your data",
+    "body": "Export all projects as CSV or JSON from Settings > Data export."
+  },
+  {
+    "slug": "plans-upgrade",
+    "section": "Plans",
+    "heading": "Upgrading your plan",
+    "body": "Upgrades take effect immediately and are prorated on the next invoice."
+  },
+  {
+    "slug": "plans-downgrade",
+    "section": "Plans",
+    "heading": "Downgrading your plan",
+    "body": "Downgrades take effect at the end of the billing period."
+  }
+]

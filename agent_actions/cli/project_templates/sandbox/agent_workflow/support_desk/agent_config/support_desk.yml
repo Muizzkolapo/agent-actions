@@ -7,7 +7,8 @@
 #   classify      guard, expect rules with repair: auto, an llm_judge rule
 #   score         versions: two raters run in parallel
 #   merge_scores  the merge of the two raters (version_consumption)
-#   reply_round   loop: write a reply, check it, write it again
+#   reply_round   loop: write a reply, check it, write it again. Its draft_reply
+#                 retrieves help articles (context_scope.retrieve, branches/reply_round.yml)
 #   by_queue      router, with a join (assigned) after its two branches
 #   approve_reply HITL review (a sandbox run approves each record)
 #   tag_reply     batch action (run_mode: batch)

@@ -16,7 +16,7 @@ import yaml
 
 from agent_actions.cli.args import InitCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors
-from agent_actions.config.init import ProjectInitializer
+from agent_actions.config.init import ProjectInitializer, ignore_derived_state
 from agent_actions.errors import (
     ConfigurationError,
     FileSystemError,
@@ -176,6 +176,7 @@ def _install_example(
     out = Path(output_dir) if output_dir else Path.cwd()
     dest = out / dest_name
     _fetch_example(name, dest, force=force)
+    ignore_derived_state(dest)
 
     config_file = dest / "agent_actions.yml"
     if config_file.exists():

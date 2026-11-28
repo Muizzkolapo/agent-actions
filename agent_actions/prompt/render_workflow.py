@@ -20,6 +20,11 @@ from agent_actions.config.includes import (
 )
 from agent_actions.config.loops import expand_loops, finish_loops
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.config.retrieve import (
+    alias_retrieve_prompts,
+    expand_retrieves,
+    finish_retrieve_routes,
+)
 from agent_actions.config.routes import expand_routes, finish_routes
 from agent_actions.config.schema import refuse_agents_format, validate_version_block
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
@@ -734,7 +739,9 @@ def render_pipeline_with_templates(
     # Step 2a: Put the actions of each included branch file in place of its include entry
     data, inclusions = expand_includes(data, yaml_path, project_root=project_root)
     data = expand_loops(data)
+    data = _with_file(workflow_file, expand_retrieves, data, workflow_file, project_root)
     data = _with_file(workflow_file, expand_routes, data, workflow_file, inclusions)
+    finish_retrieve_routes(data)
 
     # Step 3: Resolve prompt references
     data = load.fill_loaded(data)
@@ -747,6 +754,8 @@ def render_pipeline_with_templates(
     )
     # Step 3a: A prompt of an `as:` include reads a short name through an alias header
     alias_prompts(data)
+    # A prompt reads an entry of its action's context_scope.retrieve as retrieve.<entry>
+    _with_file(workflow_file, alias_retrieve_prompts, data, workflow_file)
 
     # Step 4: Expand versioned actions
     if data:

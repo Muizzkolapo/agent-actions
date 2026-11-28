@@ -23,6 +23,9 @@ OPTIONAL_DIRECTIVE = "optional"
 _OPTIONAL_MARK = "?"
 _OPTIONAL_ENTRY_KEYS = ("field", "optional", "default")
 
+# An action's searches of a knowledge base; the load turns each entry into a step.
+RETRIEVE_DIRECTIVE = "retrieve"
+
 # Namespaces users write in prompt references when they mean the 'seed' namespace.
 SEED_CONFIG_KEYS = frozenset({"seed_data", "seed_path", "static_data"})
 
@@ -50,6 +53,13 @@ def normalize_context_scope(
                 for expanded_ref in _expand_list_directive([ref], version_base_map)
             }
             continue
+        if directive_name == RETRIEVE_DIRECTIVE:
+            # The load turns an action's own entries into steps; any left came from defaults.
+            raise ConfigurationError(
+                "context_scope.retrieve is set on the action that reads it, not under "
+                "'defaults:' or 'default_agent_config:'.",
+                context={"directive": directive_name},
+            )
         if directive_name not in DIRECTIVE_REGISTRY:
             raise ConfigurationError(
                 f"context_scope.{directive_name} is not a valid directive. "

@@ -53,6 +53,11 @@ prices:                     # per million tokens; `agac usage` estimates the cos
     cache_read: 0.075
     batch_discount: 0.5
 
+knowledge:                  # reference text that context_scope.retrieve searches
+  help_center:
+    sources: [knowledge/help_center/**/*.md]
+    index: [keyword]
+
 logging:
   level: WARNING            # console level; the run log keeps every level
   module_levels:
@@ -71,6 +76,7 @@ logging:
 | `seed_data_paths` | Shared seed folders, relative to the project root. Agent Actions searches them after the folder of the workflow and the folder of the project. See [Seed Data](../context/seed-data#shared-folders) |
 | `connections` | Named databases that a workflow reads its input from or writes its results to. Each entry has a `type` (`sqlite`, `duckdb`, `postgres`, `mysql`, `redshift`, `snowflake`, `bigquery` or `databricks`) and the settings of that type. Write each credential as `${NAME}`: the load refuses a credential that is written in the file. See [Databases](../data-io/databases.md#connections) |
 | `endpoints` | OpenAI-compatible servers with structured output. Each server has a `url`, an `auth` source and optional `headers`. An action selects one with `model_vendor: <name>`. See [Endpoints](./endpoints) |
+| `knowledge` | Named knowledge bases that an action searches with [`context_scope.retrieve`](../context/context-scope.md#retrieve). Each base has `sources` (file globs, structured files with `path:`, or database queries with `connection:` and `sql:`), an optional `index` (`keyword`, `fuzzy` or both, default `[keyword]`) and an optional `chunk_config` (default `split_method: markdown`, `chunk_size: 200`, `chunk_overlap: 0`). A base does not inherit the `chunk_config` of `default_agent_config`. The indexes are built under `.agac/knowledge/`. See [Knowledge Bases and Retrieval](../../guides/knowledge.md) |
 | `prices` | The price of one million tokens for each model. `input` and `output` are required. `cache_read`, `cache_write` and `batch_discount` are optional. `batch_discount` is the part, from 0 to 1, that the provider removes from the price of a batch call. Agent Actions has no built-in prices. [`agac usage`](../cli/usage#estimated-cost) reads this block to estimate a cost. A run does not read it. |
 | `required_by_default` | When `true`, flat schema fields (`fields:` list) are required, unless they are marked `optional: true`. When `false` (default), they are optional, unless they are marked `required: true`. This applies to the full project. A schema that declares its own `required_by_default` overrides it. |
 | `logging` | Logging for each command that runs in the project. `level` is the console level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, default `INFO`). `module_levels` maps Python logger names to levels. It is the only way to re-open a logger that the framework clamps (`httpx`, `openai`, ...), or to make another logger quiet. `file.max_bytes` and `file.backup_count` set the size and the rotation of the run log. The CLI loads this block when it boots, before any command runs. If an `AGENT_ACTIONS_*` variable is set, it overrides the matching key. `--debug` / `--verbose` / `--quiet` override both. A key under `logging:` that nothing reads (`file.path`, `file.enabled`, `file.level`, `file.format` and any other) configures nothing. The CLI reports such a key on stderr at boot. The run log always writes to `agent_io/logs/events.json` of the workflow. See [Logging](../architecture/logging). |
@@ -179,7 +185,7 @@ actions:
 | `dependencies` | list | The upstream actions to wait for |
 | `prompt` | string | An inline prompt or a `$store.template` reference |
 | `schema` | string | The output validation schema |
-| `context_scope` | object | Controls data visibility: `observe`, `drop`, `passthrough`, `seed`. Each action must declare one. See [Context Scope](../context/context-scope.md) |
+| `context_scope` | object | Controls data visibility: `observe`, `drop`, `passthrough`, `seed`, `retrieve`. Each action must declare one. See [Context Scope](../context/context-scope.md) |
 | `context_block` | string | Which observed fields the request sends in its context block. `auto` (default) leaves out a field that the prompt prints. `all` sends every field. `none` sends none. See [The context block](../context/context-scope.md#the-context-block) |
 
 ### Model Fields
@@ -509,6 +515,7 @@ Agent Actions uses a structure with two levels: **project-level** assets that al
 ```
 project/
 ├── agent_actions.yml           # Project config
+├── .agac/knowledge/            # Built knowledge indexes (generated, keep .agac/ out of git)
 │
 ├── # ════════════════════════════════════════════════════════
 ├── # PROJECT-LEVEL (shared across all workflows)
@@ -516,6 +523,7 @@ project/
 ├── schema/                     # Output schemas (folder named by schema_path)
 ├── tools/                      # Custom tools (shared)
 ├── prompt_store/               # Shared prompt templates (optional)
+├── knowledge/                  # Source files of the knowledge bases (optional)
 │
 ├── # ════════════════════════════════════════════════════════
 ├── # WORKFLOW-LEVEL (domain-specific)
@@ -542,6 +550,7 @@ project/
 | **Prompts** | `prompt_store/` | `workflow/prompt_store/` | Either or both. Searched recursively |
 | **Seed Data** | `seed_data/` and the folders of `seed_data_paths` | `workflow/seed_data/` | Searched in that order, workflow first. A shared file exists one time. See [Seed Data](../context/seed-data#shared-folders) |
 | **Input/Output** | — | `workflow/agent_io/` | Always workflow-level |
+| **Knowledge bases** | `knowledge/<base>/` by convention, and the paths that `knowledge:` names | — | Declared in `agent_actions.yml`. Indexes are built in `.agac/knowledge/<base>/`. See [Knowledge Bases and Retrieval](../../guides/knowledge.md) |
 
 This structure keeps your workflows organized and permits reuse. Shared schemas make sure that data contracts are consistent. The seed folder of a workflow customizes that workflow. A shared seed folder holds what each workflow reads.
 

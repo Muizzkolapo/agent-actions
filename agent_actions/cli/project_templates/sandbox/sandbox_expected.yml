@@ -14,15 +14,17 @@ scenario:
 
 # Per action: its status, and the record counts of `agac dispositions --sandbox`.
 actions:
-  read_ticket: {status: completed, records: 5}
-  classify: {status: completed, records: 4, total: 5, success: 4, filtered: 1}  # 5 reach it (total); the guard filters the spam ticket, so 4 are stored (records)
+  read_ticket: {status: completed, records: 6}
+  classify: {status: completed, records: 4, total: 6, success: 4, filtered: 2}  # 6 reach it (total); the guard filters the 2 spam tickets, so 4 are stored (records)
   score_1: {status: completed, success: 4}
   score_2: {status: completed, success: 4}
   merge_scores: {status: completed, success: 4}
+  reply_round_iter1__draft_reply__help: {status: completed, success: 4}  # the retrieve step of draft_reply: it has draft_reply's dependencies, so the 2 spam tickets that classify filters are not searched
   reply_round_iter1__draft_reply: {status: completed, success: 4}
-  reply_round_iter2__draft_reply: {status: completed, success: 2, sent_elsewhere: 2}  # success: the 2 high-priority tickets, written again; sent_elsewhere: the 2 that passed in round 1
+  reply_round_iter2__draft_reply__help: {status: completed, success: 2, sent_elsewhere: 2}  # the step takes the round's guard: success: the 2 high-priority tickets, searched again; sent_elsewhere: the 2 that passed in round 1
+  reply_round_iter2__draft_reply: {status: completed, success: 2}  # the 2 high-priority tickets, written again
   reply_round: {status: completed, records: 4}
-  by_queue: {status: completed, success: 5}
+  by_queue: {status: completed, success: 6}
   billing_team: {status: completed, success: 2, sent_elsewhere: 2}
   support_team: {status: completed, success: 2, sent_elsewhere: 2}
   assigned: {status: completed, records: 4}

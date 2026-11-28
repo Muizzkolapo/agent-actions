@@ -2,10 +2,10 @@
 
 `agac init <name> --template sandbox` makes one workflow that uses each feature once: a tool
 action, a guard, expect rules with repair and an llm_judge rule, versions and their merge, a
-loop, a router and a join, a HITL action and a batch action. `agac sandbox check` runs it
-offline with no key and compares the result with the project's `sandbox_expected.yml`. A
-value that does not hold names the row and exits 1; a file the check cannot read exits 2
-before any run.
+loop with retrieval from a knowledge base, a router and a join, a HITL action and a batch
+action. `agac sandbox check` runs it offline with no key and compares the result with the
+project's `sandbox_expected.yml`. A value that does not hold names the row and exits 1; a
+file the check cannot read exits 2 before any run.
 """
 
 from __future__ import annotations
@@ -63,7 +63,7 @@ def test_a_real_run_with_no_key_stops_at_preflight(project):
 
 def test_a_value_that_does_not_hold_is_named_and_exits_1(project):
     def wrong(data):
-        data["actions"]["classify"]["filtered"] = 2
+        data["actions"]["classify"]["filtered"] = 3
         data["scenario"]["errors"] = 9
 
     _edit_expected(project, wrong)
@@ -72,7 +72,7 @@ def test_a_value_that_does_not_hold_is_named_and_exits_1(project):
 
     assert result.returncode == 1, result.stdout + result.stderr
     assert "FAIL: 2 of" in result.stdout, result.stdout
-    assert "  classify filtered: expected 2, got 1" in result.stdout
+    assert "  classify filtered: expected 3, got 2" in result.stdout
     assert "  scenario errors: expected 9, got 8" in result.stdout
 
 
@@ -98,7 +98,7 @@ def test_an_unknown_key_exits_2_before_any_run(project):
 
 def _expect_only_action_values(project: Path) -> None:
     (project / "f.yml").write_text(
-        "actions:\n  classify: {status: completed, success: 4, filtered: 1}\n"
+        "actions:\n  classify: {status: completed, success: 4, filtered: 2}\n"
     )
 
 
@@ -214,6 +214,6 @@ def test_the_template_completes_under_the_chaos_preset(project):
 
     output = result.stdout + result.stderr
     assert result.returncode == 0, output[-3000:]
-    assert "16 completed" in output, output[-3000:]
+    assert "18 completed" in output, output[-3000:]
     faults = output.split("SANDBOX scenario chaos: ")[-1].split(" errors")[0]
     assert int(faults) > 0, "chaos injected no fault, so the run proved nothing"

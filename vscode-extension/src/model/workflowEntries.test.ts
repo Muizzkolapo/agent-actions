@@ -46,6 +46,25 @@ describe('parseEntries', () => {
         assert.equal(router?.type, 'route');
     });
 
+    it('gives each retrieve entry a step node that the action depends on', () => {
+        const parsed = nodes([
+            { name: 'classify' },
+            {
+                name: 'write_reply',
+                dependencies: ['classify'],
+                context_scope: {
+                    retrieve: {
+                        help: { from: 'kb', query: ['source.text'], where: { product: 'classify.product' } },
+                    },
+                },
+            },
+        ]);
+
+        assert.deepEqual(parsed.get('write_reply__help')?.dependencies, ['classify']);
+        assert.equal(parsed.get('write_reply__help')?.type, 'retrieve');
+        assert.deepEqual(parsed.get('write_reply')?.dependencies, ['classify', 'write_reply__help']);
+    });
+
     it('makes the entry actions of each case depend on the router', () => {
         const parsed = nodes(ENTRIES);
 

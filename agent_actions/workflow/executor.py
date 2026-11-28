@@ -29,7 +29,15 @@ from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
-from agent_actions.llm.providers.tools.builtin import runs_udf
+from agent_actions.llm.providers.tools.builtin import (
+    RETRIEVE,
+    builtin_tool,
+    first_knowledge_warning,
+    knowledge_hash,
+    retrieve_steps_of,
+    runs_udf,
+    step_label,
+)
 from agent_actions.llm.providers.usage_tracker import (
     UsageLedger,
     accounting,
@@ -232,6 +240,20 @@ def _compute_endpoint_hash(action_config: ActionConfigDict) -> str:
     )
 
 
+def _compute_knowledge_hash(action_config: ActionConfigDict) -> str | None:
+    """The digest of the knowledge base a retrieve step searches; empty for any other action.
+
+    None outside a run, which alone resolves knowledge bases, so a read-only load does not
+    compare it.
+    """
+    spec = builtin_tool(action_config)  # type: ignore[arg-type]
+    if spec is None or spec["tool"] != RETRIEVE:
+        return ""
+    return knowledge_hash(spec)
+
+
+KNOWLEDGE_EDIT = "knowledge base"
+
 # What an action reads and how it is asked, each stamped under its own key and named
 # by its label when an edit is logged.
 _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], ...] = (
@@ -242,6 +264,7 @@ _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], 
     ("schema_options_hash", "schema options", _compute_schema_options_hash),
     ("output_settings_hash", "output settings", _compute_output_settings_hash),
     ("endpoint_hash", "provider endpoint", _compute_endpoint_hash),
+    ("knowledge_hash", KNOWLEDGE_EDIT, _compute_knowledge_hash),
 )
 
 
@@ -310,7 +333,9 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
         edits.append(CONFIG_EDIT)
     for key, label, compute in _READS_STAMPS:
         if key not in stamp:
-            edits.append(label)
+            # A stamp written before knowledge bases read none.
+            if label != KNOWLEDGE_EDIT or compute(action_config) != "":
+                edits.append(label)
             continue
         stored, current = stamp[key], compute(action_config)
         if stored is not None and current is not None and stored != current:
@@ -860,6 +885,20 @@ class ActionExecutor:
 
     def _warn_of_an_edit(self, action_name: str, edits: list[str]) -> None:
         """Name the edit, and every action whose input is the output the edit left standing."""
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        spec = builtin_tool(configs.get(action_name))
+        if KNOWLEDGE_EDIT in edits and spec is not None and spec["tool"] == RETRIEVE:
+            # A run with --wait makes several passes; it warns on the first.
+            if first_knowledge_warning(action_name):
+                logger.warning(
+                    "%s: knowledge base '%s' changed since it answered; run again with --rerun %s",
+                    step_label(spec, action_name),
+                    spec["base"],
+                    action_name,
+                )
+            edits = [edit for edit in edits if edit != KNOWLEDGE_EDIT]
+            if not edits:
+                return
         readers = self.readers_of(action_name)
         logger.warning(
             "%s was edited since it completed (%s): its answers stand, and only records "
@@ -881,6 +920,10 @@ class ActionExecutor:
         """
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
         names = list(action_names)
+        # An action's retrieve steps answer again with it: their matches feed its answers.
+        names = list(
+            dict.fromkeys(step for n in names for step in [*retrieve_steps_of(configs, n), n])
+        )
         mixed_before = set()
         for name in [*names, *(r for n in names for r in self._stale_readers(n))]:
             details = self.deps.state_manager.get_status_details(name)

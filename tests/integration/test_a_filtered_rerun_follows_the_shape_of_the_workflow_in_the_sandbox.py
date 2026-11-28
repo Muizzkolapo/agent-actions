@@ -1,7 +1,8 @@
 """A filtered rerun runs the action it names and what reads it, whatever the action is.
 
 The sandbox template uses each feature once: a guard, versions and their merge, a
-loop, a router with two branches and a join, a HITL action and a batch action. The
+loop with a retrieve entry, a router with two branches and a join, a HITL action and a
+batch action. The
 two high-priority tickets are answered again from each kind of action, offline, and
 only the actions that read the named one run, on those tickets alone.
 """
@@ -23,12 +24,21 @@ RAN = re.compile(r"✓ (\w+)\s+(\d+) records?")
 LOOP = {
     "reply_round_iter1__draft_reply": 2,
     "reply_round_iter1__check_reply": 2,
+    # The retrieve step of the second round takes the round's guard, so it reads round 1.
+    "reply_round_iter2__draft_reply__help": 2,
     "reply_round_iter2__draft_reply": 2,
     "reply_round_iter2__check_reply": 2,
 }
 AFTER_THE_LOOP = {"reply_round": 2, "approve_reply": 2, "tag_reply": 2}
 TEAMS = {"billing_team": 1, "support_team": 1, "assigned": 2}
-BELOW_THE_MERGE = {"merge_scores": 2, **LOOP, **TEAMS, **AFTER_THE_LOOP}
+# The retrieve step of the first round has draft_reply's dependencies, so it reads the merge.
+BELOW_THE_MERGE = {
+    "merge_scores": 2,
+    "reply_round_iter1__draft_reply__help": 2,
+    **LOOP,
+    **TEAMS,
+    **AFTER_THE_LOOP,
+}
 
 
 @pytest.fixture(scope="module")
@@ -95,6 +105,17 @@ def test_only_the_named_action_and_what_reads_it_run_on_the_matching_tickets(pro
     output = result.stdout + result.stderr
     assert result.returncode == 0, output[-3000:]
     assert {name: int(count) for name, count in RAN.findall(output)} == ran, output[-3000:]
+
+
+def test_a_filtered_rerun_of_an_action_does_not_search_again(project):
+    result = _rerun(project, "reply_round_iter1__draft_reply", "--wait")
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output[-3000:]
+    ran = dict(RAN.findall(output))
+    assert ran["reply_round_iter1__draft_reply"] == "2"
+    # Its retrieve step keeps its matches: name the step to search again.
+    assert "reply_round_iter1__draft_reply__help" not in ran
 
 
 def test_a_batch_action_pauses_the_rerun_and_a_plain_run_collects_it(project):

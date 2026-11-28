@@ -88,6 +88,7 @@ RUN_OUTPUT = [
     "agent_workflow/support_desk/agent_io/sandbox/artefact/runs.json",
     "artefact/runs.json",
     ".agac/batch_state/b.json",
+    ".agac/knowledge/help_center/0123456789abcdef.db",
     "stray.db",
 ]
 

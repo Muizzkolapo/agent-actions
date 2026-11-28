@@ -195,6 +195,7 @@ The tables give each command, in groups by the purpose of the command:
 | [`clean`](./utilities#clean) | Remove the working directories of a workflow (output and staging only if you select them) |
 | [`docs`](./utilities#docs) | Generate documentation |
 | [`status`](./utilities#status) | Show the status of a workflow |
+| [`knowledge`](./knowledge) | List, build and search the knowledge bases that `context_scope.retrieve` searches |
 | [`skills`](./skills) | Install AI assistant skills (Claude Code or Codex) |
 | [`mcp`](./mcp) | Start an MCP server, so that an AI assistant can run and inspect workflows |
 

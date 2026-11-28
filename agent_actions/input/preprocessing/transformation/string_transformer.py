@@ -5,6 +5,7 @@ import os
 import tiktoken
 
 from agent_actions.errors import AgentActionsError, ConfigurationError
+from agent_actions.input.preprocessing.transformation.markdown_splitter import split_markdown
 from agent_actions.utils.module_loader import load_module_from_directory
 from agent_actions.utils.tools_resolver import anchor_to_project_root, parse_udf_call
 
@@ -122,7 +123,7 @@ class Tokenizer:
                 "overlap cannot be negative",
                 context={"overlap": overlap, "operation": "split_text_content"},
             )
-        if overlap >= chunk_size and split_method in ("tiktoken", "chars"):
+        if overlap >= chunk_size and split_method in ("tiktoken", "chars", "markdown"):
             raise ConfigurationError(
                 "overlap must be smaller than chunk_size for token/character splits",
                 context={
@@ -137,6 +138,8 @@ class Tokenizer:
                 return Tokenizer._split_with_tiktoken(text, chunk_size, overlap, tokenizer_model)
             if split_method == "chars":
                 return Tokenizer._split_by_chars(text, chunk_size, overlap)
+            if split_method == "markdown":
+                return [chunk.text for chunk in split_markdown(text, chunk_size, overlap)]
             if split_method == "spacy":
                 return Tokenizer._split_with_spacy(text, chunk_size, overlap, tokenizer_model)
             return Tokenizer._split_with_custom_method(

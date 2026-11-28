@@ -376,17 +376,18 @@ cd my_sandbox
 agac sandbox check -w support_desk
 ```
 
-The workflow `support_desk` triages five support tickets. It has these actions:
+The workflow `support_desk` triages six support tickets. It has these actions:
 
 | Action | Feature |
 |--------|---------|
 | `read_ticket` | A tool action. Plain Python in `tools/support_desk/`, with no network. It marks spam and picks a queue |
-| `classify` | A guard that filters the spam ticket. An `expect:` block with `repair: auto` and an `llm_judge` rule with `severity: warn` |
+| `classify` | A guard that filters the two spam tickets. An `expect:` block with `repair: auto` and an `llm_judge` rule with `severity: warn` |
 | `score`, `merge_scores` | Versions: two raters, `score_1` and `score_2`, and the merge of the two (`version_consumption`) |
 | `reply_round` | A loop: write a reply, then check it. A high-priority reply passes its check in round 2 |
 | `by_queue`, `assigned` | A router that sends each ticket to `billing_team` or `support_team`, and the join of the two branches |
 | `approve_reply` | A HITL action. A sandbox run approves each record |
 | `tag_reply` | A batch action (`run_mode: batch`), with a guard on the HITL status |
+| `draft_reply` (in `reply_round`) | Help-article retrieval: the `retrieve` entry `help` of `draft_reply` searches the knowledge base `help_center` (the files in `knowledge/help_center/`) with the text of the ticket. The prompt puts the matches between `<doc>` tags and asks for their ids in `citations`. Its step in round 1 is `reply_round_iter1__draft_reply__help`, and in round 2 `reply_round_iter2__draft_reply__help`. The search runs for real in a sandbox run. The step has the dependencies of `draft_reply`, so the spam tickets are not searched. See [Knowledge Bases and Retrieval](./knowledge.md) |
 
 Its `sandbox.yml` makes faults that heal, so the run completes:
 
@@ -411,7 +412,7 @@ The file is `sandbox_expected.<workflow>.yml` at the project root, else `sandbox
 exit_code: 0
 scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 2}
 actions:
-  classify: {status: completed, success: 4, filtered: 1}   # the guard filters one record
+  classify: {status: completed, success: 4, filtered: 2}   # the guard filters two records
   billing_team: {success: 2, sent_elsewhere: 2}            # the router sends two records here
 ```
 

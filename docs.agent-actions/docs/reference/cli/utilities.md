@@ -109,11 +109,12 @@ The project has these files, together with the standard folders:
 
 ```
 my_sandbox/
-├── agent_actions.yml
+├── agent_actions.yml                   # with the knowledge base help_center
 ├── agent_workflow/support_desk/
 │   ├── agent_config/support_desk.yml   # the workflow, with a comment on each part
-│   └── agent_io/staging/tickets.json   # five tickets, one of them spam
-├── branches/reply_round.yml            # one round of the loop
+│   └── agent_io/staging/tickets.json   # six tickets, two of them spam
+├── branches/reply_round.yml            # one round of the loop; draft_reply retrieves help articles
+├── knowledge/help_center/              # three help articles: billing, refunds, account access
 ├── prompt_store/support_desk.md
 ├── schema/support_desk/                # the output schemas
 ├── seed_data/teams.json

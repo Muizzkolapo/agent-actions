@@ -16,5 +16,6 @@ These guides give practical help for common tasks and workflows.
 | [Custom Tools](./custom-tools.md) | Add Python tools to your workflows |
 | [Human-in-the-Loop](./human-in-the-loop.md) | Add gates for manual review and approval to workflows |
 | [Sandbox Runs](./sandbox.md) | Run a workflow end to end offline, with the mock provider and separate output |
+| [Knowledge Bases and Retrieval](./knowledge.md) | Give each record the passages of a large reference that match it, with a local search and no model call |
 | [Editor Setup](./editor-setup.md) | LSP support for VS Code, Neovim and other editors |
 | [Troubleshooting](./troubleshooting.md) | Common problems and their solutions |

@@ -21,6 +21,14 @@ actions:
     dependencies: [ticket, rating]
     context_scope:
       observe: [ticket.ticket_id, ticket.text, rating.urgency, prior.*]
+      # Retrieval: search the help_center knowledge base (agent_actions.yml) with the
+      # ticket text. The prompt reads the matches as retrieve.help. The search runs for
+      # real in a sandbox run; it makes no model call.
+      retrieve:
+        help:
+          from: help_center
+          query: source.text
+          top_k: 2
 
   # A tool stands in for a real reviewer: a high-priority reply passes in round 2.
   - name: check_reply
