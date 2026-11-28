@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: 'CI runs the test suite as four shards at once, each on all the runner''s cores (`pytest -n auto --shard N/4`), in place of one serial run; one `Tests` check still reports the result. `--shard N/M` (tests/_support/sharding.py) deals whole test files to shards, balanced by the per-file seconds in tests/shard_durations.json, which `--store-shard-durations` records. The newest-SDK provider tests also run with `-n auto`.'
+time: 2026-11-28T14:00:00.000000000+00:00

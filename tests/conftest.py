@@ -8,6 +8,14 @@ from unittest.mock import MagicMock, Mock
 import pytest
 from click.testing import CliRunner
 
+# Hooks of `pytest --shard N/M`, which CI runs the suite in.
+from tests._support.sharding import (  # noqa: F401
+    pytest_addoption,
+    pytest_collection_modifyitems,
+    pytest_runtest_logreport,
+    pytest_sessionfinish,
+)
+
 
 def pytest_configure():
     root = Path(__file__).resolve().parents[1]
