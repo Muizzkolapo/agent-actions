@@ -91,6 +91,15 @@ def _run(root):
     return result.returncode, " ".join((result.stdout + result.stderr).split())
 
 
+def _says(output: str, text: str) -> bool:
+    """Whether *output* holds *text*, wherever the console wrapped a line.
+
+    The message names the file by its absolute path, so where a line wraps, even inside a
+    word, depends on the length of the temporary folder; under xdist it is longer.
+    """
+    return "".join(text.split()) in "".join(output.split())
+
+
 @pytest.fixture(autouse=True)
 def _no_record_limit(monkeypatch):
     monkeypatch.delenv("AGAC_RECORD_LIMIT", raising=False)
@@ -103,7 +112,7 @@ def test_a_workflow_using_none_of_its_tools_runs_and_names_the_skipped_file(tmp_
 
     assert code == 0, output
     assert "Skipped tool file" in output
-    assert "broken.py: it failed to import (boom at import)" in output
+    assert _says(output, "broken.py: it failed to import (boom at import)"), output
     assert "2 completed" in output
 
 
@@ -116,5 +125,5 @@ def test_a_workflow_using_one_of_its_tools_is_refused_before_any_action_runs(tmp
     assert "Function 'broken_second' not found" in output
     assert "Action: second " in output
     assert "These tool files failed to import and were skipped:" in output
-    assert "broken.py: boom at import" in output
+    assert _says(output, "broken.py: boom at import"), output
     assert not (root / "first.log").exists(), "an action ran before the refusal"

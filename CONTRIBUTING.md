@@ -279,6 +279,19 @@ task test:integration
 
 # Run in parallel
 task test:fast
+
+# Run one of four shards, as CI does
+uv run pytest -n auto --shard 2/4
+```
+
+CI runs the suite as four shards at once (`Tests (shard N of 4)`), each with `-n auto`,
+and one `Tests` check passes when every shard passed. A shard holds whole test files,
+balanced by the seconds `tests/shard_durations.json` records for each file; a new file
+counts as the median until the file is recorded again. When the shards drift apart in
+time, record the durations again and commit the file:
+
+```bash
+uv run pytest -n auto --store-shard-durations
 ```
 
 ## Code Style
