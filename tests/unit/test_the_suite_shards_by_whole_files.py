@@ -6,7 +6,7 @@ shard, and one shard must not hold most of the time.
 
 import pytest
 
-from tests._support.sharding import assign, shard_of
+from tests._support.sharding import assign, shard_of, updated
 
 
 def test_every_file_lands_in_exactly_one_shard():
@@ -53,3 +53,9 @@ def test_a_shard_that_names_no_part_of_the_suite_is_refused(spec, said):
 
 def test_a_shard_is_read_as_its_number_and_count():
     assert shard_of("2/4") == (2, 4)
+
+
+def test_a_partial_run_updates_the_files_it_ran_and_keeps_the_rest():
+    recorded = {"a.py": 1.0, "b.py": 2.0}
+
+    assert updated(recorded, {"b.py": 5.0, "c.py": 3.0}) == {"a.py": 1.0, "b.py": 5.0, "c.py": 3.0}
