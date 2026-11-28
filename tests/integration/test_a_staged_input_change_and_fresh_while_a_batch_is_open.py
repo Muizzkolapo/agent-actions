@@ -82,7 +82,24 @@ PROMPT = (
 )
 
 
-def _project(tmp_path: Path) -> Path:
+def _tag_first(text: str) -> str:
+    """The workflow with the batch action as its first stage, reading staging itself."""
+    without_step1 = text.replace(
+        """  - name: step1
+    kind: tool
+    intent: "Read"
+    impl: step1
+    schema: s1
+    context_scope: { observe: [source.*] }
+""",
+        "",
+    ).replace("    dependencies: [step1]\n    run_mode: batch", "    run_mode: batch")
+    return without_step1.replace("step1.", "source.").replace(
+        'data["step1"]["id"]', 'str(data["source"]["id"])'
+    )
+
+
+def _project(tmp_path: Path, shape: str = "tag_after_a_tool") -> Path:
     root = tmp_path / "project"
     workflow = root / "agent_workflow" / WORKFLOW
     for folder in ("agent_io/staging", "agent_config"):
@@ -94,11 +111,15 @@ def _project(tmp_path: Path) -> Path:
         "project_name: bat\ntool_path: [tools]\nschema_path: schema\n"
     )
     (root / "sandbox.yml").write_text("seed: 2\nbatch:\n  polls_until_complete: 3\n")
-    (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(WORKFLOW_YML)
-    (root / "tools" / WORKFLOW / "tools.py").write_text(TOOLS)
+    first = shape == "tag_first"
+    (workflow / "agent_config" / f"{WORKFLOW}.yml").write_text(
+        _tag_first(WORKFLOW_YML) if first else WORKFLOW_YML
+    )
+    (root / "tools" / WORKFLOW / "tools.py").write_text(_tag_first(TOOLS) if first else TOOLS)
     for name, text in SCHEMAS.items():
         (root / "schema" / WORKFLOW / f"{name}.yml").write_text(text)
-    (root / "prompt_store" / f"{WORKFLOW}.md").write_text(PROMPT)
+    (root / "prompt_store" / f"{WORKFLOW}.md").write_text(_tag_first(PROMPT) if first else PROMPT)
+    _SHAPES[root] = shape
     _stage(root, "a.json", [{"id": "a1", "n": 1}, {"id": "a2", "n": 2}])
     _stage(root, "b.json", [{"id": "b1", "n": 3}])
     return root
@@ -114,26 +135,53 @@ def _run(root: Path, *extra: str):
     return result.returncode, " ".join((result.stdout + result.stderr).split())
 
 
-def _ids(root: Path, action: str) -> list[str]:
-    """The record ids an action stored: every row carries step1's namespace."""
+_SHAPES: dict[Path, str] = {}
+
+
+def _actions(root: Path) -> list[str]:
+    return ["tag", "step3"] if _SHAPES[root] == "tag_first" else ["step1", "tag", "step3"]
+
+
+def _field(root: Path, action: str, name: str) -> list:
+    """*name* of every row the action stored, sorted: every row carries the first namespace."""
+    namespace = "source" if _SHAPES[root] == "tag_first" else "step1"
     result = run_agac(
-        root, "records", "-w", WORKFLOW, "--sandbox", "-A", action, "--field", "content.step1.id"
+        root,
+        "records",
+        "-w",
+        WORKFLOW,
+        "--sandbox",
+        "-A",
+        action,
+        "--field",
+        f"content.{namespace}.{name}",
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    return sorted(json.loads(result.stdout))
+    return sorted(json.loads(result.stdout), key=str)
+
+
+def _ids(root: Path, action: str) -> list[str]:
+    return [str(value) for value in _field(root, action, "id")]
+
+
+def _held(root: Path, name: str = "id") -> dict[str, list]:
+    return {action: _field(root, action, name) for action in _actions(root)}
 
 
 def _collect(root: Path) -> list[int]:
-    """Run again, as a person does, until the run is no longer paused (at most 6 runs)."""
+    """Run again, as a person does, until the run is no longer paused.
+
+    At most 12 runs: a change answered once the batch is collected sends a second batch.
+    """
     codes = [_run(root)[0]]
-    while codes[-1] == 4 and len(codes) < 6:
+    while codes[-1] == 4 and len(codes) < 12:
         codes.append(_run(root)[0])
     return codes
 
 
-@pytest.fixture
-def paused(tmp_path):
-    root = _project(tmp_path)
+@pytest.fixture(params=["tag_after_a_tool", "tag_first"])
+def paused(tmp_path, request):
+    root = _project(tmp_path, request.param)
     code, output = _run(root)
     assert code == 4, output
     return root
@@ -146,9 +194,8 @@ class TestAStagedInputChangeWhileABatchIsOpen:
         codes = _collect(paused)
 
         assert codes[-1] == 0
-        assert _ids(paused, "step1") == ["a1", "a2", "b1", "c1"]
-        assert _ids(paused, "tag") == ["a1", "a2", "b1", "c1"]
-        assert _ids(paused, "step3") == ["a1", "a2", "b1", "c1"]
+        every = ["a1", "a2", "b1", "c1"]
+        assert _held(paused) == {action: every for action in _actions(paused)}
 
     def test_a_file_removed_is_not_written_back_when_the_batch_is_collected(self, paused):
         (paused / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "b.json").unlink()
@@ -156,9 +203,15 @@ class TestAStagedInputChangeWhileABatchIsOpen:
         codes = _collect(paused)
 
         assert codes[-1] == 0
-        assert _ids(paused, "step1") == ["a1", "a2"]
-        assert _ids(paused, "tag") == ["a1", "a2"]
-        assert _ids(paused, "step3") == ["a1", "a2"]
+        assert _held(paused) == {action: ["a1", "a2"] for action in _actions(paused)}
+
+    def test_a_record_changed_or_added_in_a_file_is_answered(self, paused):
+        _stage(paused, "b.json", [{"id": "b1", "n": 9}, {"id": "b2", "n": 5}])
+
+        codes = _collect(paused)
+
+        assert codes[-1] == 0
+        assert _held(paused, "n") == {action: [1, 2, 5, 9] for action in _actions(paused)}
 
     def test_no_change_collects_the_batch_as_before(self, paused):
         codes = _collect(paused)
@@ -174,10 +227,17 @@ class TestFreshWhileABatchIsOpen:
         assert code == 2, output
         assert "--fresh would drop the batch still open for tag" in output
         assert "--abandon-in-flight" in output
-        assert _ids(paused, "step1") == ["a1", "a2", "b1"]
+        assert _collect(paused)[-1] == 0
+        assert _ids(paused, "step3") == ["a1", "a2", "b1"]
 
     def test_fresh_with_abandon_in_flight_drops_the_batch_and_starts_again(self, paused):
         code, output = _run(paused, "--fresh", "--abandon-in-flight")
 
         assert code == 4, output
         assert "--fresh: cleared stored results" in output
+
+    def test_abandon_in_flight_without_fresh_is_refused(self, paused):
+        code, output = _run(paused, "--abandon-in-flight")
+
+        assert code == 2, output
+        assert "--abandon-in-flight goes with --fresh" in output
