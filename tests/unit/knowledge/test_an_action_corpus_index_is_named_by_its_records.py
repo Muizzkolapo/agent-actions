@@ -66,6 +66,12 @@ class TestTheDigest:
 
         assert len(digests) == 5
 
+    def test_another_from_action_with_the_same_output_changes_the_digest(self):
+        outputs = _outputs(a="one")
+        renamed = CorpusSettings("condense", ("summary",), title="product", id="ticket_id")
+
+        assert _digest(outputs) != _digest(outputs, renamed)
+
 
 class TestTheIndexFile:
     def test_the_file_is_named_by_the_digest_and_holds_each_record_and_its_hash(self, tmp_path):
@@ -105,8 +111,8 @@ class TestWhatChangedSinceAnAnswer:
         level, line = change.message("link__similar", LABEL)
         assert level == logging.INFO
         assert line == (
-            f"{LABEL}: 3 records (1 this run, 2 earlier); 2 earlier answers did not see the "
-            "1 new ones; --rerun link__similar to search again"
+            f"{LABEL}: 1 record was added since 2 earlier answers searched; "
+            "--rerun link__similar to search again"
         )
         assert index.digest != first.digest
 
@@ -133,8 +139,54 @@ class TestWhatChangedSinceAnAnswer:
 
         level, line = change.message("link__similar", LABEL)
         assert level == logging.WARNING
-        assert (
-            "since 1 earlier answers searched the records, 0 changed, 1 left and 0 were " in line
+        assert "since 1 earlier answer searched the records, 0 changed, 1 left and 0 were " in line
+
+    def test_a_later_run_with_no_new_record_gives_no_info_line(self, tmp_path):
+        first = self._first(tmp_path, a="one", b="two")
+        answers = [("g-a", first.digest), ("g-b", first.digest)]
+        rows = _rows(a="one", b="two", c="three")
+        prepare(tmp_path, CORPUS, ["keyword"], rows, answers, label=LABEL)
+
+        _, change = prepare(tmp_path, CORPUS, ["keyword"], rows, answers, label=LABEL)
+
+        assert change.added == 1
+        assert change.message("link__similar", LABEL) is None
+
+    def test_a_record_counts_once_against_each_older_index_that_lacks_it(self, tmp_path):
+        first = self._first(tmp_path, a="one", b="two")
+        older = [("g-a", first.digest), ("g-b", first.digest)]
+        rows = _rows(a="one", b="two", c="three")
+        second, _ = prepare(tmp_path, CORPUS, ["keyword"], rows, older, label=LABEL)
+        answers = [*older, ("g-c", second.digest)]
+
+        _, change = prepare(
+            tmp_path,
+            CORPUS,
+            ["keyword"],
+            _rows(a="one", b="two", c="three", d="four"),
+            answers,
+            label=LABEL,
+        )
+
+        assert (change.added, change.stale_answers) == (2, 3)
+        level, line = change.message("link__similar", LABEL)
+        assert level == logging.INFO
+        assert line.startswith(f"{LABEL}: 2 records were added since 3 earlier answers searched")
+
+    def test_answers_whose_index_is_gone_give_a_warning(self, tmp_path):
+        first = self._first(tmp_path, a="one", b="two")
+        answers = [("g-a", first.digest), ("g-b", first.digest)]
+        first.path.unlink()
+
+        _, change = prepare(
+            tmp_path, CORPUS, ["keyword"], _rows(a="one", b="two", c="three"), answers, label=LABEL
+        )
+
+        level, line = change.message("link__similar", LABEL)
+        assert level == logging.WARNING
+        assert line == (
+            f"{LABEL}: 2 earlier answers searched an index that is gone, so the changes since "
+            "are not known. Run again with --rerun link__similar to search again"
         )
 
     def test_answers_that_searched_the_current_index_give_nothing(self, tmp_path):

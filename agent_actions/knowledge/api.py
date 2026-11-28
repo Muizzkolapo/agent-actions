@@ -180,7 +180,7 @@ def action_corpus_change(
     """
     from agent_actions.knowledge.action_corpus import corpus_change, prune
 
-    change = corpus_change(folder, index.records, answers, index.digest)
+    change = corpus_change(folder, index.records, answers, index.digest, new_index=index.built)
     prune(folder, {index.digest} | {digest for _, digest in answers})
     return change
 

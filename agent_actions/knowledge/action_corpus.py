@@ -14,7 +14,7 @@ import json
 import logging
 import sqlite3
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -72,10 +72,16 @@ class CorpusIndex:
     chunk_ids: Mapping[str, str]
     # Each record's source_guid and hash, to compare with an older index.
     records: Mapping[str, str]
+    # Whether this call wrote the file (False when an earlier run built it).
+    built: bool = False
 
     @property
     def paths(self) -> dict[str, Path]:
         return dict.fromkeys(self.kinds, self.path)
+
+
+def _many(count: int, one: str, many: str) -> str:
+    return f"{count:,} {one if count == 1 else many}"
 
 
 @dataclass
@@ -83,30 +89,41 @@ class CorpusChange:
     """How the corpus differs from what the step's stored answers searched."""
 
     records: int
+    # Whether this run built the index the step searched: the corpus changed since the last run.
+    new_index: bool = False
     added: int = 0
     changed: int = 0
     removed: int = 0
     # Stored answers of records still in the corpus that searched an older index.
     stale_answers: int = 0
-    unknown: list[str] = field(default_factory=list)
+    # Of those, the answers whose index file is gone, so what they saw is not known.
+    unknown_answers: int = 0
 
     def message(self, step: str, label: str) -> tuple[int, str] | None:
-        """The log level and line to report, or None when nothing is to be said."""
-        if not self.stale_answers:
-            return None
+        """The log level and line to report, or None when nothing is to be said.
+
+        Records only added are reported once, by the run that adds them; changed or
+        removed records, and answers whose index is gone, warn on each run until a rerun.
+        """
+        answers = _many(self.stale_answers, "earlier answer", "earlier answers")
         if self.changed or self.removed:
+            was = "was" if self.added == 1 else "were"
             return logging.WARNING, (
-                f"{label}: since {self.stale_answers:,} earlier answers searched the records, "
-                f"{self.changed:,} changed, {self.removed:,} left and {self.added:,} were "
-                "added, so those answers may show old text or cite a record that is gone. "
+                f"{label}: since {answers} searched the records, {self.changed:,} changed, "
+                f"{self.removed:,} left and {self.added:,} {was} added, so those answers may "
+                "show old text or cite a record that is gone. "
                 f"Run again with --rerun {step} to search again"
             )
-        if self.added:
-            earlier = self.records - self.added
+        if self.unknown_answers:
+            unknown = _many(self.unknown_answers, "earlier answer", "earlier answers")
+            return logging.WARNING, (
+                f"{label}: {unknown} searched an index that is gone, so the changes since "
+                f"are not known. Run again with --rerun {step} to search again"
+            )
+        if self.added and self.new_index:
+            added = _many(self.added, "record was", "records were")
             return logging.INFO, (
-                f"{label}: {self.records:,} records ({self.added:,} this run, {earlier:,} "
-                f"earlier); {self.stale_answers:,} earlier answers did not see the "
-                f"{self.added:,} new ones; --rerun {step} to search again"
+                f"{label}: {added} added since {answers} searched; --rerun {step} to search again"
             )
         return None
 
@@ -202,7 +219,8 @@ def corpus_digest(
 ) -> str:
     parts = {
         "format": [FORMAT_VERSION, CORPUS_FORMAT],
-        "settings": [list(settings.text), settings.title, settings.id],
+        # The action is each match's origin, so a renamed `from:` builds a new index.
+        "settings": [settings.action, list(settings.text), settings.title, settings.id],
         "indexes": {kind: INDEX_SETTINGS[kind] for kind in sorted(set(kinds))},
         "records": sorted((r.source_guid, r.hash) for r in records),
     }
@@ -241,26 +259,32 @@ def corpus_change(
     current: Mapping[str, str],
     answers: Sequence[tuple[str, str]],
     digest: str,
+    *,
+    new_index: bool = False,
 ) -> CorpusChange:
-    """Compare the corpus with the index each stored answer ``(source_guid, index)`` searched."""
-    change = CorpusChange(records=len(current))
-    older = {index for guid, index in answers if index != digest and guid in current}
-    change.stale_answers = sum(1 for guid, index in answers if index != digest and guid in current)
-    seen: set[str] = set()
+    """Compare the corpus with the index each stored answer ``(source_guid, index)`` searched.
+
+    Each older index is compared on its own, so a record counts once however many of the
+    older indexes lack it.
+    """
+    stale = [index for guid, index in answers if index != digest and guid in current]
+    change = CorpusChange(records=len(current), new_index=new_index, stale_answers=len(stale))
+    added: set[str] = set()
     changed: set[str] = set()
     removed: set[str] = set()
-    for index in sorted(older):
+    unknown: set[str] = set()
+    for index in sorted(set(stale)):
         stored = stored_records(folder / f"{index}.db")
         if stored is None:
-            change.unknown.append(index)
+            unknown.add(index)
             continue
-        seen.update(stored)
+        added.update(g for g in current if g not in stored)
         changed.update(g for g, h in stored.items() if g in current and current[g] != h)
         removed.update(g for g in stored if g not in current)
-    if seen:
-        change.added = sum(1 for guid in current if guid not in seen)
+    change.added = len(added)
     change.changed = len(changed)
     change.removed = len(removed)
+    change.unknown_answers = sum(1 for index in stale if index in unknown)
     return change
 
 
@@ -288,7 +312,8 @@ def build_corpus_index(
     kinds = frozenset(kinds)
     digest = corpus_digest(settings, kinds, records)
     path = folder / f"{digest}.db"
-    if not path.exists():
+    built = not path.exists()
+    if built:
         folder.mkdir(parents=True, exist_ok=True)
         write_index_file(path, [r.chunk for r in records], kinds, _records_table(records))
         logger.info("%s: built the index %s of %d records", label, digest, len(records))
@@ -299,6 +324,7 @@ def build_corpus_index(
         kinds=kinds,
         chunk_ids={r.source_guid: r.chunk.id for r in records},
         records={r.source_guid: r.hash for r in records},
+        built=built,
     )
 
 

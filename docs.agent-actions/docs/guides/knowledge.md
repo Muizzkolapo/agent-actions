@@ -287,23 +287,23 @@ The step builds its index once, when it starts, before it searches for the first
 - `agent_io/retrieve/<step>/<digest>.db` in a run.
 - `agent_io/sandbox/retrieve/<step>/<digest>.db` in a sandbox run, which reads the records of the sandbox store.
 
-The digest covers `text`, `title` and `id`, the methods, and each record. The step keeps the index files that a stored answer names, and removes the others. `agac clean --all` and `--fresh` remove the folder.
+The digest covers the `from:` action, `text`, `title` and `id`, the indexes that the methods read, and each record. The step keeps the index files that a stored answer names, and removes the others. `agac clean --all` and `--fresh` remove the folder.
 
 ### When the Records Change
 
-A run that adds records adds them to the corpus. The new records search all the records. The records that answered in an earlier run keep their matches: they did not see the new records. The run tells you once:
+A run that adds records adds them to the corpus. The new records search all the records. The records that answered in an earlier run keep their matches: they did not see the new records. The run that adds the records tells you once:
 
 ```
-link_duplicates: retrieve 'similar' (link_duplicates__similar): 1,240 records (40 this run, 1,200 earlier); 1,200 earlier answers did not see the 40 new ones; --rerun link_duplicates__similar to search again
+link_duplicates: retrieve 'similar' (link_duplicates__similar): 40 records were added since 1,200 earlier answers searched; --rerun link_duplicates__similar to search again
 ```
 
-A record that changed or that left the store is a different matter. A stored match can then show old text, or name a record that is gone. The run warns once, with the counts:
+A record that changed or that left the store is a different matter. A stored match can then show old text, or name a record that is gone. Each run warns once, with the counts, until you search again:
 
 ```
 link_duplicates: retrieve 'similar' (link_duplicates__similar): since 1,200 earlier answers searched the records, 0 changed, 3 left and 3 were added, so those answers may show old text or cite a record that is gone. Run again with --rerun link_duplicates__similar to search again
 ```
 
-The step finds the changes when it compares the index of each stored answer with the current records. An edited input record gets a new `source_guid`, so it counts as one record that left and one that was added.
+The step finds the changes when it compares the index of each stored answer with the current records. An edited input record gets a new `source_guid`, so it counts as one record that left and one that was added. If the index file of a stored answer is gone, the step cannot tell what changed, and each run warns that those answers searched an index that is gone.
 
 To search again for each record:
 

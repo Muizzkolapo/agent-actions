@@ -105,9 +105,10 @@ context_scope:
 - A repeated `source_guid` or `id` value fails the step, naming it.
 - The index is built once when the step starts: `agent_io/retrieve/<step>/<digest>.db`
   (`agent_io/sandbox/retrieve/...` in a sandbox run). `agac clean --all` and `--fresh` remove it.
-- Records added since earlier answers: one info line per run (`... 1,200 earlier answers did not
-  see the 40 new ones; --rerun <step> to search again`). Records changed or gone: a warning.
-  The earlier answers stand until `--rerun <step>`.
+- Records added since earlier answers: one info line, from the run that adds them (`... 40
+  records were added since 1,200 earlier answers searched; --rerun <step> to search again`).
+  Records changed or gone, or an answer's index file gone: a warning on each run. The earlier
+  answers stand until `--rerun <step>`.
 - Cost grows with the square of the corpus (about 14 ms a search at 10,000 records); the step
   warns above 20,000 records.
 - Paraphrases do not match: ask the earlier action for canonical `keywords` from a closed list

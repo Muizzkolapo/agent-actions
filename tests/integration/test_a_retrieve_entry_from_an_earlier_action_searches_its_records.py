@@ -283,15 +283,21 @@ class TestTheCorpus:
         # The answers of the earlier run stand: they did not see the new record.
         assert "T-2" not in similar["T-1"]
         assert (
-            f"{LABEL}: 5 records (1 this run, 4 earlier); 4 earlier answers did not see the "
-            f"1 new ones; --rerun {STEP} to search again"
+            f"{LABEL}: 1 record was added since 4 earlier answers searched; "
+            f"--rerun {STEP} to search again"
         ) in output
-        assert output.count("earlier answers did not see") == 1
+        assert output.count("earlier answers searched;") == 1
         (old,) = first
         assert len(_indexes(root)) == 2
         # The index each stored answer names is kept.
         assert {p.stem for p in _folder(root).iterdir()} == _indexes(root)
         assert old in _indexes(root)
+
+        # A later run that adds no record to the corpus says nothing again.
+        (root / "fail.marker").write_text("")
+        _stage(root, "failing.json", [{"id": "T-9", "text": "Nothing works.", "fail": True}])
+        output = _run(root, code=3)
+        assert "earlier answer" not in output
 
     def test_a_changed_record_input_warns_the_step_once(self, tmp_path):
         root = _project(tmp_path)
@@ -306,7 +312,7 @@ class TestTheCorpus:
 
         warning = (
             f"{LABEL}: since 4 earlier answers searched the records, 0 changed, 1 left and 1 "
-            "were added, so those answers may show old text or cite a record that is gone. "
+            "was added, so those answers may show old text or cite a record that is gone. "
             f"Run again with --rerun {STEP} to search again"
         )
         assert warning in output
@@ -333,7 +339,7 @@ class TestTheCorpus:
 
         output = _run(root, "--rerun", STEP)
 
-        assert "earlier answers did not see" not in output
+        assert "was added since" not in output
         assert _similar(root)["T-1"][0] == "T-2"
         assert len(_indexes(root)) == 1
         assert len(list(_folder(root).iterdir())) == 1
@@ -383,7 +389,7 @@ class TestARetriedRecord:
         similar = _similar(root)
         assert similar["T-2"][0] == "T-1"
         assert "T-2" not in similar["T-1"]
-        assert "1 this run, 4 earlier" in output
+        assert "1 record was added since 4 earlier answers searched" in output
 
 
 class TestTheSandbox:
