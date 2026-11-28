@@ -116,6 +116,9 @@ class TestAnActionThatGainsADependency:
         assert "The input files of tag changed" not in output
         assert "tag was edited since it completed (context scope, dependencies)" in output
         assert "--rerun tag" in output
+        # Neither the action nor what reads it runs again as if new input had arrived.
+        assert "tag — already complete" in output
+        assert "final — already complete" in output
 
     def test_the_edit_still_warns_on_the_next_run_while_the_old_answers_stand(self, tmp_path):
         root = _project(tmp_path)
