@@ -342,6 +342,41 @@ def _marked_as_taking_no_input(metadata):
     return sorted([*keys, f"batch_no_input:{ACTION}:gone.json"]), jobs
 
 
+def _disposed(backend, action=ACTION):
+    return sorted(row["record_id"] for row in backend.get_disposition(action, snapshots=False))
+
+
+class TestTheDispositionsOfAFileWhoseInputIsGone:
+    def test_its_records_lose_theirs_and_the_kept_file_keeps_its_own(self, backend, tmp_path):
+        """A batch collected after the input left wrote them; nothing else would clear them."""
+        _store(backend, "gone.json", "pages.json")
+        for record in ("gone.json", "pages.json"):
+            backend.set_disposition(ACTION, record, "success")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert _disposed(backend) == ["pages.json"]
+
+    def test_a_record_a_kept_file_also_holds_keeps_its_disposition(self, backend, tmp_path):
+        """Its identity is its content, so it may live on in another file."""
+        backend._write_target_raw(
+            ACTION,
+            "gone.json",
+            [{"source_guid": "moved", "_state": "processed", "_delta_mode": "full"}],
+        )
+        backend._write_target_raw(
+            ACTION,
+            "pages.json",
+            [{"source_guid": "moved", "_state": "processed", "_delta_mode": "full"}],
+        )
+        backend.set_disposition(ACTION, "moved", "success")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert _held(backend) == ["pages.json"]
+        assert _disposed(backend) == ["moved"]
+
+
 class TestTheBatchStateOfAFileWhoseInputIsGone:
     def test_it_goes_with_the_file_and_the_other_file_keeps_its_own(self, backend, tmp_path):
         _store(backend, "gone.json", "pages.json")
