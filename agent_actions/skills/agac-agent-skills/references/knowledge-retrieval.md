@@ -93,7 +93,9 @@ No document matched. Say that you do not know. Do not invent a policy.
 Put the ids of the documents that you used in `citations`.
 ```
 
-Add `citations` (array of strings) to the schema. For no match, use the `{% else %}` branch, or
+The template writes match text as it is: a chunk holding `</doc>`, or a title holding `"`,
+breaks the delimiter. Keep such text out of the sources. Add `citations` (array of strings)
+to the schema. For no match, use the `{% else %}` branch, or
 a guard `retrieve.help.count > 0`. Such a guard runs **after** the search: the step searches for
 every record that reaches it, then the action evaluates the guard.
 
@@ -116,7 +118,7 @@ agac run -w {workflow} --rerun write_reply__help          # search again after t
 2. **A changed base warns; it does not search again.** The warning reads
    `write_reply: retrieve 'help' (write_reply__help): knowledge base 'help_center' changed since
    it answered; run again with --rerun write_reply__help`. Rerun to update. A filtered rerun
-   (`--where`) of `write_reply` does not search again: name the step.
+   (`--where` or `--records`) of `write_reply` does not search again: name the step.
 3. **A database source is read once.** Later builds read the snapshot. `agac knowledge build
    --refresh` reads it again (`agac run --refresh-input` does not). A sandbox run with no
    snapshot stops: build once where the connection works.
