@@ -184,7 +184,7 @@ def ran(monkeypatch):
         )
         return answer["done"]
 
-    monkeypatch.setattr(mcp_tools.subprocess, "run", run)
+    monkeypatch.setattr(mcp_tools, "_execute", run)
     return calls, answer
 
 
@@ -266,7 +266,7 @@ def test_a_call_that_outlasts_the_timeout_says_the_run_can_be_resumed(monkeypatc
     def run(command, **options):
         raise mcp_tools.subprocess.TimeoutExpired(command, options["timeout"])
 
-    monkeypatch.setattr(mcp_tools.subprocess, "run", run)
+    monkeypatch.setattr(mcp_tools, "_execute", run)
 
     outcome = call_tool(
         TOOLS["run_workflow"],
@@ -357,7 +357,7 @@ def test_the_command_speaks_utf_8_whatever_the_locale(monkeypatch, tmp_path):
         seen.update(options)
         return _Done()
 
-    monkeypatch.setattr(mcp_tools.subprocess, "run", run)
+    monkeypatch.setattr(mcp_tools, "_execute", run)
 
     call_tool(TOOLS["usage"], {"workflow": "wf"}, Context(project_root=tmp_path))
 

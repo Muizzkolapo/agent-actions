@@ -102,6 +102,8 @@ The tools that take `sandbox` have it set to `true` by default. To read the outp
 
 `records` returns the first 20 records, and `traces` returns the last 20 (the newest). The `limit` argument changes the number. The server cuts an output that is longer than 60,000 characters, and tells the assistant that it did so.
 
+Tool calls run at the same time as other requests: while a long run continues, the server still answers a ping or a read. At most 4 tool calls run at the same time. If the client cancels a call (`notifications/cancelled`), the server stops the `agac` command of the call, as Ctrl-C would, and sends no reply for it. A stopped run keeps what it stored, so the next `run_workflow` continues it. When the client closes the connection, the server stops each call that still runs.
+
 A run that ends with exit code 3 (some records failed) or 4 (paused for a batch) is a result, not an error. The assistant reads the code and continues: `retry_workflow` after 3, `run_workflow` again after 4. See [Exit Codes](./run.md#exit-codes).
 
 ## Resources

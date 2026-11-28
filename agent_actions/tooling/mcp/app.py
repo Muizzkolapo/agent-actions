@@ -7,13 +7,19 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from agent_actions.tooling.mcp.server import INVALID_PARAMS, McpServer, RpcError
+from agent_actions.tooling.mcp.server import (
+    INVALID_PARAMS,
+    McpServer,
+    RpcError,
+    current_request,
+)
 from agent_actions.tooling.mcp.tools import (
     TOOLS,
     Context,
     ToolRefused,
     call_tool,
     list_workflows,
+    stop_call,
     tools_by_name,
 )
 
@@ -107,14 +113,16 @@ def build_server(context: Context) -> McpServer:
         if tool is None:
             raise RpcError(INVALID_PARAMS, f"Unknown tool: {name}")
         try:
-            outcome = call_tool(tool, arguments, context)
+            outcome = call_tool(tool, arguments, context, current_request.get())
         except ToolRefused as refused:
             # A refusal is the tool's answer, which the model can read and act on.
             return _text(str(refused), is_error=True)
         return _text(outcome.text, is_error=outcome.is_error)
 
     server.handle("tools/list", list_tools)
-    server.handle("tools/call", call)
+    # A run can take minutes: it runs beside other requests, and a cancel stops it.
+    server.handle("tools/call", call, in_background=True)
+    server.on_cancel(stop_call)
 
     def list_resources(params: dict[str, Any]) -> dict[str, Any]:
         return {"resources": [*_project_resources(context.project_root), *_skill_resources()]}

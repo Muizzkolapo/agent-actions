@@ -67,3 +67,27 @@ def test_the_filter_refusal_names_the_flag_only_in_a_sandbox(active):
         refusal = command._refusal(("classify", "r1"), None, ["classify"])
 
     assert ("--quarantined --sandbox" in refusal) is active
+
+
+@pytest.mark.parametrize(
+    ("wait", "then"), [(True, "--wait checks them again."), (False, "Run again")]
+)
+def test_a_paused_run_that_waits_says_it_waits(wait, then, capsys):
+    from types import SimpleNamespace
+
+    command = object.__new__(RunCommand)
+    command.args = SimpleNamespace(agent="wf", wait=wait)
+    state = SimpleNamespace(
+        get_summary=lambda: {"completed": 3},
+        get_batch_submitted_actions=lambda order: ["classify"],
+    )
+    workflow = SimpleNamespace(
+        services=SimpleNamespace(core=SimpleNamespace(state_manager=state)),
+        execution_order=["classify"],
+    )
+
+    command._report(RunOutcome.PAUSED_FOR_BATCH, workflow)
+
+    said = capsys.readouterr().out
+    assert "batch job(s) submitted for: classify (completed: 3)." in said
+    assert then in said

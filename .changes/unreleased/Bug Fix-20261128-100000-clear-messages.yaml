@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'An answer that did not parse is warned about as such ("the answer did not parse ... the record is marked failed, and agac retry can answer it again"), not as a schema mismatch that names `_parse_error` and `raw_response`. `agac run --wait` no longer tells you to run again while it checks the batch again itself.'
+time: 2026-11-28T10:00:00.000000000+00:00

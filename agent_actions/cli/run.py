@@ -428,10 +428,14 @@ class RunCommand:
             status_parts = ", ".join(f"{k}: {v}" for k, v in summary.items())
             if outcome is RunOutcome.PAUSED_FOR_BATCH:
                 batch_actions = state_mgr.get_batch_submitted_actions(execution_order)
+                then = (
+                    "--wait checks them again."
+                    if self.args.wait
+                    else "Run again to check status and continue."
+                )
                 click.echo(
                     f"Workflow paused - batch job(s) submitted for: "
-                    f"{', '.join(batch_actions)} ({status_parts}). "
-                    f"Run again to check status and continue."
+                    f"{', '.join(batch_actions)} ({status_parts}). {then}"
                 )
             else:
                 click.echo(
