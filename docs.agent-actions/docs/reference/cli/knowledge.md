@@ -31,7 +31,7 @@ help_center: 3 source(s), index: keyword, fuzzy
   fuzzy: 41d8a6e0c2b7f913 (not built)
 ```
 
-The command reads the source files to compute the digest of each index. It also reads the workflows: when a `retrieve` entry of a workflow uses the method `key`, the command shows the `key` index of that base too. It builds nothing and connects to no database. It counts the rows of a database source from its snapshot. A base that cannot be read prints `not built:` and the reason, and the command continues with the next base.
+The command reads the source files to compute the digest of each index. It also reads the workflows: when a `retrieve` entry of a workflow uses the method `key`, the command shows the `key` index of that base too. It builds nothing and connects to no database. It counts the rows of a database source from its snapshot. For a base that the command cannot read, it prints `not built:` and the reason. Then it continues with the next base. A database source with no snapshot gives this result, because the command does not connect to the database.
 
 The command takes no options.
 
@@ -62,7 +62,7 @@ The first build of a database source reads its rows and keeps them as a snapshot
 | `--refresh` | Read the query of each database source again, and replace its snapshot. This is the only command that reads the query of an existing snapshot again: `agac run --refresh-input` does not |
 | `--prune` | After the build, remove the index files of earlier digests. It keeps the current file of each index kind that the base declares or that a `retrieve` entry uses, `key` included. Refused while a run of the project is in progress, and when a workflow of the project does not load (the index kinds it searches are not known) |
 
-The index files are in `.agac/knowledge/<base>/`. Old files stay until `--prune` removes them, so the stored matches of earlier runs can still be compared with their index. The command builds each index that the base declares, and the `key` index when a `retrieve` entry of a workflow uses the method `key`. A workflow that does not load is named on stderr (`Not read (does not load): ...`). The other bases are still listed and built.
+The index files are in `.agac/knowledge/<base>/`. Old files stay until `--prune` removes them. If you change a source back before a prune, the next build or run finds the old file again and builds nothing. The command builds each index that the base declares, and the `key` index when a `retrieve` entry of a workflow uses the method `key`. If a workflow does not load, the command writes its name to stderr (`Not read (does not load): ...`). It still builds the other indexes. `knowledge list` gives the same note.
 
 ## `knowledge search`
 
@@ -91,7 +91,7 @@ The command builds a missing or old index first, as a run does. It prints the co
 | `NAME` | The knowledge base to search (required) |
 | `TEXT` | The query text (required). Quote it when it holds spaces |
 | `-k N` | The number of matches, from 1 to 50. Default: 5 |
-| `--method M` | A search method: `keyword`, `all_words`, `phrase`, `fuzzy` or `key`. Give it more than one time to merge methods with equal weights. Default: `keyword`. The base must have the index of each method. `key` needs `id:` on each source and cannot be merged |
+| `--method M` | A search method: `keyword`, `all_words`, `phrase`, `fuzzy` or `key`. Give it more than one time to merge methods with equal weights. Default: `keyword`. The base must have the index of each method. `key` needs `id:` on each source, and you cannot merge it with another method |
 | `--json` | Print the output as JSON, in the shape that a `retrieve` step stores: `matches`, `count`, `query` and `index` |
 
 The command takes no `where` and no limits other than `-k`. To test those, run the workflow and read the step with [`agac records`](./records.md):

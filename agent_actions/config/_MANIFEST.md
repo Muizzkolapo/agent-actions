@@ -109,6 +109,7 @@ Key Functions
 | `get_project_name` | `agent_actions.yml` | Reads | `project_name` |
 | `project_action_defaults`, `project_agent_config` | `agent_actions.yml` | Validates | `default_agent_config` (only the keys `DefaultsConfig` declares; another key is refused as unknown, with the list of valid keys) |
 | `ProjectInitializer.init_project` | `agent_actions.yml` | Writes | `project_name`, `default_agent_config`, `schema_path`, `tool_path`, `seed_data_path` |
+| `ignore_derived_state` | `.gitignore` | Writes the file, or adds the line `.agac/` | — |
 | `ProjectPathsFactory.create_project_paths` | `prompt_store/{workflow}.md` | Reads | — |
 | `ConfigManager.load_configs` | `agent_config/{workflow}.yml` | Reads | `tool_path` |
 | `expand_includes` | `branches/{name}.yml` | Reads, validates | `branch`, `description`, `inputs`, `outputs`, `actions` |
