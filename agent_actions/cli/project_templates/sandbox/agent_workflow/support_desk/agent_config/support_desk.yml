@@ -4,7 +4,8 @@
 # test the wiring of all of them in a few seconds, offline:
 #
 #   read_ticket   tool action (plain Python, no model)
-#   classify      guard, expect rules with repair: auto, an llm_judge rule
+#   classify      guard, expect rules with repair: auto, an llm_judge rule. It finds
+#                 similar tickets (context_scope.retrieve from read_ticket)
 #   score         versions: two raters run in parallel
 #   merge_scores  the merge of the two raters (version_consumption)
 #   reply_round   loop: write a reply, check it, write it again. Its draft_reply
@@ -64,6 +65,16 @@ actions:
       on_false: filter
     context_scope:
       observe: [read_ticket.ticket_id, read_ticket.text]
+      # Retrieval from an earlier action: each ticket searches the tickets that read_ticket
+      # read, by their text and canonical keywords. It never finds itself. The prompt reads
+      # the matches as retrieve.similar. The search runs for real in a sandbox run.
+      retrieve:
+        similar:
+          from: read_ticket
+          text: [text, keywords]
+          id: ticket_id
+          query: [read_ticket.text, read_ticket.keywords]
+          top_k: 2
     expect:
       repair: auto
       max_iterations: 2

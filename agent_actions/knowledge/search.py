@@ -68,19 +68,23 @@ def search(
     digest: str,
     *,
     label: str = "",
+    exclude: str | None = None,
 ) -> dict[str, Any]:
     """The step's output for one query: ``matches``, ``count``, ``query`` and ``index``.
 
-    *paths* holds the index file of each kind *methods* read.
+    *paths* holds the index file of each kind *methods* read. The chunk *exclude* names is
+    never a match: each method searches one candidate more, so the limits still fill.
     """
     ranked: dict[str, list[Hit]] = {}
     compiled: dict[str, str] = {}
+    wanted = limits.candidates + (exclude is not None)
     for name, method in METHODS.items():
         if name not in methods:
             continue
         compiled[name] = method.compile(text)
         conn = connection(paths[method.index])
-        ranked[name] = method.search(conn, text, limits.candidates, where)
+        found = method.search(conn, text, wanted, where)
+        ranked[name] = [hit for hit in found if hit[0] != exclude][: limits.candidates]
     hits = fused(ranked, methods)
     rows = _chunks(next(iter(paths.values())), [cid for cid, _ in hits])
     matches: list[dict[str, Any]] = []

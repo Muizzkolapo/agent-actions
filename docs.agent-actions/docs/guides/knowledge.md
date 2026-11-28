@@ -6,7 +6,7 @@ sidebar_position: 7
 
 # Knowledge Bases and Retrieval
 
-A knowledge base is a named set of reference text: help articles, policy pages, the rows of a JSON file or the rows of a database table. You declare it in `agent_actions.yml`. An action searches it with `context_scope.retrieve`. For each record, the search finds the few passages that match the record, and the prompt reads only those passages.
+A knowledge base is a named set of reference text: help articles, policy pages, the rows of a JSON file or the rows of a database table. You declare it in `agent_actions.yml`. An action searches it with `context_scope.retrieve`. For each record, the search finds the few passages that match the record, and the prompt reads only those passages. An action can also search what an earlier action of the workflow wrote for the other records. See [Retrieve from an earlier action](#retrieve-from-an-earlier-action).
 
 The search runs on your machine, in a local index. It makes no model call and needs no API key. Agent Actions stores the matches like the output of any action. Thus `agac records`, `--rerun`, guards and sandbox runs work with them as with other actions.
 
@@ -19,13 +19,13 @@ An action can get reference data that it does not process itself in two ways. **
 | Where the reference comes from | The whole reference | One part, by an exact value | The parts that match, by search |
 |--------------------------------|---------------------|-----------------------------|---------------------------------|
 | Files or a database | [`seed: $file:`](../reference/context/seed-data.md) | [`seed` with `select_by`](../reference/context/seed-data.md#choosing-a-seed-file-per-record) | `retrieve` from a knowledge base (this page) |
-| The output of an earlier action | [`granularity: file`](../reference/execution/granularity.md): the action sees each record | Not available | `retrieve` from an action. This comes in a later version |
+| The output of an earlier action, for each record | [`granularity: file`](../reference/execution/granularity.md): the action sees each record | Not available | [`retrieve` from an action](#retrieve-from-an-earlier-action) |
 
 Use this rule to select:
 
 - Each record needs the same small reference: use `seed`.
 - Each record needs a different part of a large reference: use `retrieve`.
-- The reference is what other records produced: use `retrieve` from an action. Until that comes, write the records of one workflow to a table and search it from another workflow. See [Share knowledge between workflows](#share-knowledge-between-workflows).
+- The reference is what other records produced: use `retrieve` from an action. See [Retrieve from an earlier action](#retrieve-from-an-earlier-action). The records of another workflow go through a table. See [Share knowledge between workflows](#share-knowledge-between-workflows).
 
 A reference that fits in the prompt is usually a seed. A reference that is too large for the prompt, or that costs too many tokens for each record, is a knowledge base.
 
@@ -157,7 +157,7 @@ The prompt reads the matches as `retrieve.help`. See [The prompt](#the-prompt).
 
 | Key | Default | Range | Meaning |
 |-----|---------|-------|---------|
-| `from` | required | | The name of a knowledge base. `from: <action>` comes in a later version: the load refuses it with `retrieval from an action comes in a later version` |
+| `from` | required | | The name of a knowledge base, or of an earlier action. See [Retrieve from an earlier action](#retrieve-from-an-earlier-action) |
 | `query` | required | | A field reference (`source.text`) or a list of field references. Each must be `source` or an action upstream of this action |
 | `method` | `keyword` | | A [search method](#search-methods), a list of methods with equal weights, or a mapping of methods to weights. See [Merge methods](#merge-methods) |
 | `where` | none | | An exact match on the metadata of the chunks. See [Filter with where](#filter-with-where) |
@@ -168,7 +168,7 @@ The prompt reads the matches as `retrieve.help`. See [The prompt](#the-prompt).
 
 Agent Actions turns the value of each `query` reference into text. A list of strings gives each string. A null value gives nothing. Another value gives its text. Agent Actions joins the texts with spaces, and each search method makes its own query from the joined text.
 
-An entry of a knowledge base does not take `text`, `title` or `id`. Set them on the source of the base.
+An entry of a knowledge base does not take `text`, `title` or `id`. Set them on the source of the base. An entry that searches an earlier action takes them. See [Retrieve from an earlier action](#retrieve-from-an-earlier-action).
 
 ### The Generated Step
 
@@ -196,6 +196,155 @@ The load refuses these entries:
 - A `top_k` outside 1 to 50, a `candidates` below `top_k` or above 1000, a `method` that the base has no index for, or `key` with another method.
 - A `where` field that no source of the base lists under `metadata:`.
 - `key` on a base with a source that does not set `id:`.
+
+## Retrieve from an Earlier Action {/* #retrieve-from-an-earlier-action */}
+
+`from:` can name an earlier action of the workflow. Then each record searches what that action wrote for the other records. Use it to find duplicate tickets, to compare the labels of similar records, or to find the related parts of a long document that staging cut into records.
+
+```yaml
+# agent_config/support_desk.yml
+actions:
+  - name: summarize                      # an LLM action: one summary for each ticket
+    prompt: $support_desk.summarize
+    schema: ticket_summary               # {ticket_id, summary, keywords, product}
+
+  - name: link_duplicates
+    dependencies: [summarize]
+    prompt: $support_desk.link_duplicates
+    schema: duplicates
+    context_scope:
+      observe: [summarize.*]
+      retrieve:
+        similar:
+          from: summarize                # an earlier action: its records are the corpus
+          text: [summary, keywords]      # the output fields that are searched
+          title: product                 # optional
+          id: ticket_id                  # optional: a short, unique output field
+          query: [summarize.summary, summarize.keywords]
+          top_k: 3                       # the record itself is never a match
+```
+
+The prompt reads the matches as `retrieve.similar`, as for a knowledge base:
+
+```jinja
+Tickets like this one: {% for m in retrieve.similar.matches %}{{ m.id }} {% else %}none{% endfor %}
+```
+
+The entry is the step `link_duplicates__similar`, as for a knowledge base. `agac inspect` shows it with this note:
+
+```
+link_duplicates: retrieve 'similar' from action summarize by keyword on summarize.summary, summarize.keywords, top 3
+```
+
+### The Keys of an Action Corpus
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `from` | required | An action upstream of this action. The step depends on it, and on all the dependencies of the action |
+| `text` | required | An output field of the action, or a list of output fields. The step joins them with spaces. It also joins a list of strings with spaces. The load refuses a field of the schema that holds an object, or a list of objects |
+| `title` | none | An output field. The title has weight 2 in the search, as the title of a chunk of a knowledge base |
+| `id` | `source_guid` | A short output field that is unique for each record, for example `ticket_id`. A model copies a short id more easily than a `source_guid` |
+| `query`, `top_k`, `candidates`, `max_context_tokens` | as for a knowledge base | See [Every key](#every-key) |
+| `method` | `keyword` | `keyword`, `all_words`, `phrase` or `fuzzy`, or a mix of them. `key` comes in a later version |
+| `where` | none | An exact match on an output field of the record that is not a `text` field. The step compares the values as text |
+
+The load checks `text`, `title`, `id` and the `where` fields against the output schema of the action, as it checks `observe`. A field that the schema does not have is refused. `max_per_origin` is refused: each record has the same origin, the action.
+
+The load also refuses a `from:` that names one of these, because their records are not one record for each input record:
+
+- An action that is not upstream of the action.
+- A tool with `granularity: file`. It can write several records for one input record, or none.
+- A versioned action or one of its versions, for example `score` or `score_1`. Name the action that merges the versions (`version_consumption`).
+- A router. Name an action of one branch, or the join after the branches. A join is accepted.
+- A loop. Name an action of one iteration.
+- A name that is both a knowledge base and an action.
+
+### Which Records Are Searched
+
+The corpus is each record that the action **processed**, from the store of the workflow: the records of this run and of earlier runs. A record that failed, that a guard filtered or skipped, or that retries exhausted is not in the corpus. `--fresh` empties the store, and so the corpus too.
+
+Agent Actions runs the actions level by level, and a batch action pauses the run until its results arrive. Thus the earlier action has answered each record when the search starts.
+
+Each record of the action is one chunk. Two records with the same text both stay: they are often what you look for. Each match names its record:
+
+| Field | Value in an action corpus |
+|-------|---------------------------|
+| `matches[].id` | The value of the `id:` field, or the `source_guid` of the record |
+| `matches[].text` | The `text` fields of the record, joined with spaces |
+| `matches[].title` | The value of the `title:` field, or empty |
+| `matches[].origin` | The name of the action |
+| `matches[].hash` | The hash of the text |
+| `matches[].metadata` | The other output fields of the record, and always its `source_guid` |
+
+A record is never one of its own matches. The step searches for one match more and removes the record itself. Thus each record gets `top_k` matches. It gets fewer only when fewer records match.
+
+The step knows a record by its `source_guid`. A step that splits a record into several records gives each new record a new `source_guid`. Thus, below such a step, a record can match the record of the `from:` action that it came from. To prevent this, name in `from:` an action below the split.
+
+Two records with the same `source_guid`, or with the same value of the `id:` field, fail the step, and the error names the value. A citation must name one record.
+
+### The Index
+
+The step builds its index once, when it starts, before it searches for the first record. Thus each record of one run searches the same corpus and reports the same `index`. The index is a file in the folder of the run:
+
+- `agent_io/retrieve/<step>/<digest>.db` in a run.
+- `agent_io/sandbox/retrieve/<step>/<digest>.db` in a sandbox run, which reads the records of the sandbox store.
+
+The digest covers the `from:` action, `text`, `title` and `id`, the indexes that the methods read, and each record. The step keeps the index files that a stored answer names, and removes the others. `agac clean --all` and `--fresh` remove the folder.
+
+### When the Records Change
+
+A run that adds records adds them to the corpus. The new records search all the records. The records that answered in an earlier run keep their matches: they did not see the new records. The run that adds the records tells you once:
+
+```
+link_duplicates: retrieve 'similar' (link_duplicates__similar): 40 records were added since 1,200 earlier answers searched; --rerun link_duplicates__similar to search again
+```
+
+A record that changed or that left the store is a different matter. A stored match can then show old text, or name a record that is gone. Each run in which the step runs warns once, with the counts, until you search again:
+
+```
+link_duplicates: retrieve 'similar' (link_duplicates__similar): since 1,200 earlier answers searched the records, 0 changed, 3 left and 3 were added, so those answers may show old text or cite a record that is gone. Run again with --rerun link_duplicates__similar to search again
+```
+
+The step finds the changes when it compares the index of each stored answer with the current records. An edited input record gets a new `source_guid`, so it counts as one record that left and one that was added. If the index file of a stored answer is gone, the step cannot tell what changed, and each run of the step warns that those answers searched an index that is gone.
+
+To search again for each record:
+
+```bash
+agac run -w support_desk --rerun link_duplicates__similar
+```
+
+A record that `agac retry` answers searches all the records. The records that answered before it do not see it until you search again. `--rerun summarize` answers each record of `summarize` again, and searches again for each record too.
+
+### Cost
+
+Each record searches the whole corpus, so the time of the step grows with the square of the number of records. A keyword search of 10,000 records takes about 14 ms, so 10,000 records take about 2.3 minutes in all. A search of 100,000 records takes about 140 ms, so 100,000 records take hours. The step warns when the corpus has more than 20,000 records. Building the index is fast: 100,000 records take a few seconds.
+
+### Find Duplicates in Other Words
+
+Keyword search finds words, not meanings. "Billed twice" does not find "double payment". Ask the earlier action for canonical terms in a `keywords` field, and search it with the summary:
+
+```yaml
+# schema/support_desk/ticket_summary.yml
+fields:
+  - {id: ticket_id, type: string, required: true}
+  - {id: summary, type: string, required: true}
+  - id: keywords
+    type: array
+    items: {type: string}
+    required: true
+    description: "Two to five terms from this list: billing, refund, login, crash, email, delivery"
+```
+
+Two tickets that say the same thing in other words then share their keywords, and the search finds one for the other. A closed list of terms works better than free words. `fuzzy` finds words with typing errors, but not synonyms.
+
+### In the Starter Project
+
+The [starter project](./sandbox.md#starter-project) has an action corpus. `read_ticket`, a tool action, writes the text of each ticket and its canonical `keywords`. `classify` has the entry `similar`, which searches the records of `read_ticket`. Its step is `classify__similar`. The tickets T-1001 ("charged twice for my March invoice") and T-1005 ("the refund for my cancelled order") share no search word, but both have the keyword `billing`, so each one finds the other:
+
+```bash
+agac run -w support_desk --sandbox --wait
+agac records -w support_desk --sandbox -A classify__similar
+```
 
 ## Search Methods
 
@@ -424,7 +573,7 @@ A sandbox run that builds an index writes it to `.agac/knowledge/`, as a real ru
 ## Limits of Keyword Search
 
 - The stopwords and the stems are English. A base in another language gets a worse search: no stopword is removed, and words do not match their stems.
-- Keyword search finds words, not meanings. "Billed twice" does not find "duplicate charge". Write the query with an LLM action, or put the words of the articles in the `title` field.
+- Keyword search finds words, not meanings. "Billed twice" does not find "duplicate charge". Write the query with an LLM action, or put the words of the articles in the `title` field. For an action corpus, see [Find duplicates in other words](#find-duplicates-in-other-words).
 - `fuzzy` finds many typing errors, but not all of them. A word that is spelled in a very different way, for example "Smyth" for "Smith", does not match.
 - `vector` search, which finds the same meaning, comes in a later version.
 - No `min_score`: a weak match is still a match. Use `top_k`, `where` and the `{% else %}` branch to control what the model reads.
@@ -480,7 +629,7 @@ The prompt then reads `find_help.matches` in place of `retrieve.help.matches`. A
 
 ## Share Knowledge Between Workflows {/* #share-knowledge-between-workflows */}
 
-One workflow can write a table that another workflow searches. Workflow A writes the records of an action to a database table with [`outputs:`](../reference/data-io/databases.md#writing-results). Workflow B declares a knowledge base on that table.
+One workflow can write a table that another workflow searches. Workflow A writes the records of an action to a database table with [`outputs:`](../reference/data-io/databases.md#writing-results). Workflow B declares a knowledge base on that table. In one workflow, [retrieve from the action](#retrieve-from-an-earlier-action) instead.
 
 For example, a workflow `resolved_tickets` summarizes each resolved ticket, and `support_desk` searches the summaries for similar cases:
 

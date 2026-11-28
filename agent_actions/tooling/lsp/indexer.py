@@ -3,6 +3,7 @@
 import ast
 import logging
 import re
+from collections.abc import Container
 from pathlib import Path
 from typing import Any
 
@@ -497,23 +498,26 @@ def _index_retrieve_steps(
                 end_column=column + len(entry),
             )
             meta = ActionMetadata(name=name, location=location)
-            meta.dependencies.extend(_retrieve_reads(entries[entry]))
+            meta.dependencies.extend(_retrieve_reads(entries[entry], known))
             known[name] = meta
             index.actions[name] = location
             if workflow_name:
                 index.workflow_actions.setdefault(workflow_name, {})[name] = location
 
 
-def _retrieve_reads(entry: Any) -> list[str]:
-    """The actions the `query` and `where` refs of a retrieve entry read."""
+def _retrieve_reads(entry: Any, actions: Container[str] = ()) -> list[str]:
+    """The actions the `query` and `where` refs of a retrieve entry read, and the action its
+    `from:` names when it names one of *actions* rather than a knowledge base."""
     if not isinstance(entry, dict):
         return []
+    searched = entry.get("from")
+    corpus = [searched] if isinstance(searched, str) and searched in actions else []
     query = entry.get("query")
     refs = [query] if isinstance(query, str) else list(query) if isinstance(query, list) else []
     where = entry.get("where")
     refs += [v for v in where.values() if isinstance(v, str)] if isinstance(where, dict) else []
     roots = [ref.split(".", 1)[0] for ref in refs if isinstance(ref, str) and "." in ref]
-    return list(dict.fromkeys(root for root in roots if root != "source"))
+    return list(dict.fromkeys([*(root for root in roots if root != "source"), *corpus]))
 
 
 def _entry_reads(key: str, entry: dict) -> list[str]:

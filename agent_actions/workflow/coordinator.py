@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import shutil
 from collections.abc import Container, Iterable
 from datetime import datetime
 from pathlib import Path
@@ -261,6 +262,16 @@ class AgentWorkflow:
                 log_file.unlink(missing_ok=True)
             except OSError as e:
                 logger.warning("Failed to clear %s: %s", log_file, e)
+
+        # The indexes of the records the cleared results held.
+        from agent_actions.knowledge.action_corpus import RETRIEVE_DIR
+
+        retrieve_dir = sandbox.run_dir(io_dir) / RETRIEVE_DIR
+        if retrieve_dir.is_dir():
+            try:
+                shutil.rmtree(retrieve_dir)
+            except OSError as e:
+                logger.warning("Failed to clear %s: %s", retrieve_dir, e)
 
         self.console.print(
             "[yellow]--fresh: cleared stored results and reset all actions to pending[/yellow]"

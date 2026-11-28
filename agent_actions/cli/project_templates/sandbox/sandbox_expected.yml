@@ -10,12 +10,13 @@ exit_code: 0
 scenario:
   errors: 8                  # each first call of score_1 and score_2: 4 records x 2 raters
   rules_broken: 4            # each first answer of classify
-  batch_results_dropped: 2   # tag_reply results the first batch left out
+  batch_results_dropped: 4   # tag_reply results the first batch left out: all 4
 
 # Per action: its status, and the record counts of `agac dispositions --sandbox`.
 actions:
   read_ticket: {status: completed, records: 6}
-  classify: {status: completed, records: 4, total: 6, success: 4, filtered: 2}  # 6 reach it (total); the guard filters the 2 spam tickets, so 4 are stored (records)
+  classify__similar: {status: completed, success: 4, filtered: 2}  # the retrieve step of classify (similar tickets from read_ticket): it takes classify's guard, so it filters the 2 spam tickets
+  classify: {status: completed, records: 4, total: 4, success: 4}  # its retrieve step filtered the 2 spam tickets already, so 4 reach it
   score_1: {status: completed, success: 4}
   score_2: {status: completed, success: 4}
   merge_scores: {status: completed, success: 4}

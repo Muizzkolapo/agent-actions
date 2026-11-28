@@ -65,6 +65,25 @@ describe('parseEntries', () => {
         assert.deepEqual(parsed.get('write_reply')?.dependencies, ['classify', 'write_reply__help']);
     });
 
+    it('makes a retrieve step depend on the earlier action its from: names', () => {
+        const parsed = nodes([
+            { name: 'summarize' },
+            {
+                name: 'link',
+                dependencies: ['summarize'],
+                context_scope: {
+                    retrieve: {
+                        similar: { from: 'summarize', text: ['summary'], query: ['source.text'] },
+                        help: { from: 'kb', query: ['source.text'] },
+                    },
+                },
+            },
+        ]);
+
+        assert.deepEqual(parsed.get('link__similar')?.dependencies, ['summarize']);
+        assert.deepEqual(parsed.get('link__help')?.dependencies, []);
+    });
+
     it('makes the entry actions of each case depend on the router', () => {
         const parsed = nodes(ENTRIES);
 

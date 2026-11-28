@@ -3,7 +3,8 @@
 ``route`` writes ``{"case": <case>}``: the value of the ``field`` field when it is one of
 ``cases``, else ``default`` when the router has a default branch. ``pick`` writes the
 output of the one action of ``of`` the record holds an output of. ``retrieve`` writes the
-matches a search of a knowledge base finds for the record's query.
+matches a search of a knowledge base, or of the records an earlier action processed, finds
+for the record's query.
 """
 
 from __future__ import annotations
@@ -13,9 +14,12 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import ConfigurationError
+
+if TYPE_CHECKING:
+    from agent_actions.knowledge.action_corpus import CorpusIndex
 
 BUILTIN_KEY = "_builtin"
 ROUTE = "route"
@@ -110,7 +114,10 @@ def route_case_counts(
     return counts
 
 
-def run_builtin(spec: Mapping[str, Any], data: Any) -> dict[str, Any]:
+def run_builtin(
+    spec: Mapping[str, Any], data: Any, source_guid: str | None = None
+) -> dict[str, Any]:
+    """The output of the built-in tool *spec* for one record; *source_guid* names the record."""
     if not isinstance(data, Mapping):
         raise ConfigurationError(
             f"The built-in tool '{spec['tool']}' reads one record at a time",
@@ -119,7 +126,7 @@ def run_builtin(spec: Mapping[str, Any], data: Any) -> dict[str, Any]:
     if spec["tool"] == ROUTE:
         return {CASE_FIELD: route_case(spec, data)}
     if spec["tool"] == RETRIEVE:
-        return retrieved(spec, data)
+        return retrieved(spec, data, source_guid)
     return picked(spec, data)
 
 
@@ -140,6 +147,15 @@ def retrieve_steps_of(action_configs: Mapping[str, Any], action: str) -> list[st
         and spec["tool"] == RETRIEVE
         and spec.get("action") in (action, base)
     ]
+
+
+def searches_base(spec: Mapping[str, Any]) -> bool:
+    """Whether a retrieve step searches a knowledge base, not the records of an action."""
+    return spec.get("base") is not None
+
+
+def retrieve_step_name(spec: Mapping[str, Any]) -> str:
+    return f"{spec['action']}__{spec['entry']}"
 
 
 def step_label(spec: Mapping[str, Any], name: str) -> str:
@@ -165,6 +181,8 @@ class KnowledgeRun:
     sandbox: bool
     digests: dict[tuple[str, frozenset[str]], str] = field(default_factory=dict)
     hashes: dict[tuple[str, frozenset[str]], str | None] = field(default_factory=dict)
+    # The index each step that searches an earlier action's records built in this run.
+    corpora: dict[str, CorpusIndex] = field(default_factory=dict)
     warned: set[str] = field(default_factory=set)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -192,18 +210,17 @@ def resolve_knowledge(
     Each base and set of index kinds is resolved once per run; a later pass keeps the
     digest of the first.
     """
-    global _knowledge_run
     wanted = {
         searched_indexes(spec)
         for config in action_configs.values()
-        if (spec := builtin_tool(config)) is not None and spec["tool"] == RETRIEVE
+        if (spec := builtin_tool(config)) is not None
+        and spec["tool"] == RETRIEVE
+        and searches_base(spec)
     }
     if not wanted:
         return
-    run = _knowledge_run
-    if run is None or run.project_root != project_root or run.sandbox != sandbox:
-        # A load outside a run command: its digests serve this load only.
-        run = _knowledge_run = KnowledgeRun(project_root=project_root, sandbox=sandbox)
+    # A load outside a run command gets a run of its own: its digests serve this load only.
+    run = current_run(project_root, sandbox)
     from agent_actions.knowledge.api import ensure_indexes
 
     for key in sorted(wanted, key=lambda pair: (pair[0], sorted(pair[1]))):
@@ -234,8 +251,30 @@ def knowledge_hash(spec: Mapping[str, Any]) -> str | None:
         return run.hashes[key]
 
 
+def current_run(project_root: Path, sandbox: bool) -> KnowledgeRun:
+    """The run's knowledge state; a new one for a load outside a run command."""
+    global _knowledge_run
+    run = _knowledge_run
+    if run is None or run.project_root != project_root or run.sandbox != sandbox:
+        run = _knowledge_run = KnowledgeRun(project_root=project_root, sandbox=sandbox)
+    return run
+
+
+def register_corpus(step: str, corpus: CorpusIndex) -> None:
+    """Hold the index *step* built of an earlier action's records for its records to search."""
+    global _knowledge_run
+    run = _knowledge_run
+    if run is None:
+        from agent_actions.config import sandbox
+
+        # A workflow run outside a run command: the index serves this process only.
+        run = _knowledge_run = KnowledgeRun(project_root=Path.cwd(), sandbox=sandbox.is_active())
+    with run.lock:
+        run.corpora[step] = corpus
+
+
 def first_knowledge_warning(step: str) -> bool:
-    """Whether this run has not yet warned that the knowledge base of *step* changed."""
+    """Whether this run has not yet said that what *step* searches changed."""
     run = _knowledge_run
     if run is None:
         return True
@@ -266,15 +305,20 @@ def _value_or_none(data: Mapping[str, Any], path: str) -> Any:
         return None
 
 
-def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any]:
-    """The matches the knowledge base of *spec* holds for the record's query."""
+def retrieved(
+    spec: Mapping[str, Any], data: Mapping[str, Any], source_guid: str | None = None
+) -> dict[str, Any]:
+    """The matches the knowledge base or the action corpus of *spec* holds for the query.
+
+    In an action corpus the record *source_guid* names is never one of its own matches.
+    """
     hint = "; the retrieve step reads it from the record"
     words = [w for ref in spec["query"] for w in query_words(field_value(data, ref, hint), ref)]
     where = {
         name: value["value"] if isinstance(value, Mapping) else _value_or_none(data, value)
         for name, value in spec["where"].items()
     }
-    label = step_label(spec, f"{spec['action']}__{spec['entry']}")
+    label = step_label(spec, retrieve_step_name(spec))
     for name, value in where.items():
         if isinstance(value, Mapping | list):
             kind = "a list" if isinstance(value, list) else "an object"
@@ -282,6 +326,8 @@ def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any
                 f"{label}: 'where: {{{name}: {spec['where'][name]}}}' holds {kind}; a where "
                 "value is one text, number or boolean"
             )
+    if not searches_base(spec):
+        return _retrieved_from_corpus(spec, " ".join(words), where, source_guid, label)
     run = _knowledge_run
     digest = run.digests.get(searched_indexes(spec)) if run is not None else None
     if run is None or digest is None:
@@ -303,5 +349,35 @@ def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any
         candidates=spec["candidates"],
         max_context_tokens=spec["max_context_tokens"],
         max_per_origin=spec["max_per_origin"],
+        label=label,
+    )
+
+
+def _retrieved_from_corpus(
+    spec: Mapping[str, Any],
+    query_text: str,
+    where: Mapping[str, Any],
+    source_guid: str | None,
+    label: str,
+) -> dict[str, Any]:
+    run = _knowledge_run
+    corpus = run.corpora.get(retrieve_step_name(spec)) if run is not None else None
+    if corpus is None:
+        raise ConfigurationError(
+            f"{label} searches the records of action '{spec['corpus']['action']}', and this "
+            "run built no index of them. Run the workflow with agac run.",
+            context={"tool": RETRIEVE, "from": spec["corpus"]["action"]},
+        )
+    from agent_actions.knowledge.api import retrieve_from_corpus
+
+    return retrieve_from_corpus(
+        corpus,
+        methods=dict(spec["methods"]),
+        query_text=query_text,
+        where=where,
+        top_k=spec["top_k"],
+        candidates=spec["candidates"],
+        max_context_tokens=spec["max_context_tokens"],
+        exclude=corpus.chunk_ids.get(source_guid) if source_guid else None,
         label=label,
     )

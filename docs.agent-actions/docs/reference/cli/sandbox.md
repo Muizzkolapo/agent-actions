@@ -28,9 +28,9 @@ Sandbox check of support_desk against sandbox_expected.yml:
   ✓ exit code              0
   ✓ scenario errors        8
   ✓ classify status        completed
-  ✗ classify filtered      expected 2, got 1
+  ✗ classify__similar filtered  expected 2, got 1
 FAIL: 1 of 4 expectations do not hold:
-  classify filtered: expected 2, got 1
+  classify__similar filtered: expected 2, got 1
 ```
 
 The output of the run comes before the table.
@@ -79,10 +79,10 @@ exit_code: 0                 # the exit code of agac run
 scenario:                    # the counts of the SANDBOX scenario line
   errors: 8
   rules_broken: 4
-  batch_results_dropped: 2
+  batch_results_dropped: 4
 
 actions:                     # per action: its status and its record counts
-  classify: {status: completed, success: 4, filtered: 1}
+  classify__similar: {status: completed, success: 4, filtered: 2}
   billing_team: {success: 2, sent_elsewhere: 2}
   tag_reply: {status: completed, records: 4}
 ```

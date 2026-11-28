@@ -1,5 +1,7 @@
 """The starter template grounds its reply in help articles: draft_reply retrieves for each ticket.
 
+It also finds similar tickets: classify searches the records of read_ticket (`classify__similar`).
+
 The retrieve entry ``help`` of ``draft_reply`` (in the ``reply_round`` loop) searches the
 ``help_center`` knowledge base with ``source.text``, so the search reads real ticket text in a
 sandbox run. Its step in the first round is ``reply_round_iter1__draft_reply__help``. It takes
@@ -53,6 +55,24 @@ def test_each_ticket_retrieves_the_article_that_answers_it(project):
     assert top["T-1004"]["title"] == "Account access > Change your email address"
     assert top["T-1005"]["origin"] == "knowledge/help_center/refunds.md"
     assert len({output["index"] for output in outputs.values()}) == 1
+
+
+def test_each_ticket_finds_the_ticket_that_says_the_same_in_other_words(project):
+    """classify's entry `similar` searches the records of read_ticket, never the ticket itself.
+
+    T-1001 (charged twice for an invoice) and T-1005 (a refund that has not arrived) share no
+    word, but read_ticket gives both the canonical keyword `billing`.
+    """
+    _run(project)
+
+    similar = {
+        ticket: [m["id"] for m in output["matches"]]
+        for ticket, output in _outputs(project, "classify__similar").items()
+    }
+
+    assert similar == {"T-1001": ["T-1005"], "T-1002": [], "T-1004": [], "T-1005": ["T-1001"]}
+    folder = project / "agent_workflow" / WORKFLOW / "agent_io" / "sandbox" / "retrieve"
+    assert [p.name for p in folder.iterdir()] == ["classify__similar"]
 
 
 def test_a_ticket_filtered_upstream_never_reaches_the_step(project):
