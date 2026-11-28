@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: '`agac mcp` runs tool calls beside other requests (at most 4 at a time), so a ping or a read is answered while a long run continues. A client that cancels a call (`notifications/cancelled`) stops the `agac` command behind it, and a stopped run resumes on the next call; when the client leaves, the calls that still run are stopped.'
+time: 2026-11-28T10:00:00.000000000+00:00

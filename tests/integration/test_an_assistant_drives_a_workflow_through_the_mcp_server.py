@@ -8,6 +8,7 @@ sandbox template, so nothing calls a model.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -237,3 +238,38 @@ def test_one_action_is_shown_as_the_run_sees_it(session):
 
     assert not is_error, text
     assert "Guard        read_ticket.is_spam == false" in text
+
+
+def test_a_cancelled_run_is_stopped_and_the_next_run_resumes(project, tmp_path):
+    import shutil
+
+    copy = tmp_path / "starter"
+    shutil.copytree(project, copy)
+    client = Client(copy)
+    try:
+        client.ask("initialize", {"protocolVersion": "2025-06-18"})
+        start = {
+            "jsonrpc": "2.0",
+            "id": "long-run",
+            "method": "tools/call",
+            "params": {"name": "run_workflow", "arguments": {"workflow": WORKFLOW, "fresh": True}},
+        }
+        cancel = {
+            "jsonrpc": "2.0",
+            "method": "notifications/cancelled",
+            "params": {"requestId": "long-run"},
+        }
+        client.process.stdin.write(json.dumps(start) + "\n")
+        client.process.stdin.flush()
+        time.sleep(1.5)
+        client.process.stdin.write(json.dumps(cancel) + "\n")
+        client.process.stdin.flush()
+
+        # The next reply is the ping's: the cancelled call gets none.
+        assert client.ask("ping")["result"] == {}
+        is_error, text = client.call("run_workflow", workflow=WORKFLOW)
+    finally:
+        client.close()
+
+    assert not is_error, text[-3000:]
+    assert "exit code 0" in text

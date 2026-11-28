@@ -33,6 +33,11 @@ def get_parse_error_marker(response: Any) -> str | None:
     return None
 
 
+def _parse_failure(response: Any) -> bool:
+    items = response if isinstance(response, list) else [response]
+    return any(isinstance(item, dict) and item.get("_parse_error") for item in items)
+
+
 def with_dispatch_results(content: Any, results: dict[str, Any]) -> Any:
     """*content* with an ``add_dispatch`` action's *results* on each object it holds.
 
@@ -279,6 +284,17 @@ def warn_on_schema_mismatch(response: Any, agent_config: dict[str, Any], agent_n
     """Log a warning when *response* does not match the schema *agent_config* holds."""
     schema = agent_config.get(SCHEMA_KEY)
     if not schema or not isinstance(schema, dict):
+        return
+
+    # The fields of an answer that did not parse are the error's, not output: checking
+    # them would name `_parse_error` and `raw_response` as the mismatch.
+    if _parse_failure(response):
+        logger.warning(
+            "Schema validation warning for '%s': the answer did not parse, so it holds "
+            "none of the schema's fields. The record is marked failed, and agac retry "
+            "can answer it again.",
+            agent_name,
+        )
         return
 
     # Empty output is the on_empty handler's domain, not schema validation's:

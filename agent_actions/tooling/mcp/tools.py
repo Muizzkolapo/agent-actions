@@ -11,6 +11,7 @@ import os
 import subprocess  # nosec B404
 import sys
 import tempfile
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -651,8 +652,13 @@ class Outcome:
     argv: list[str] = field(default_factory=list)
 
 
-def call_tool(tool: Tool, args: dict[str, Any], context: Context) -> Outcome:
-    """Run *tool* with *args* and return what `agac` printed."""
+def call_tool(
+    tool: Tool, args: dict[str, Any], context: Context, request_id: Any = None
+) -> Outcome:
+    """Run *tool* with *args* and return what `agac` printed.
+
+    *request_id* names the call to ``stop_call``, which stops the command it runs.
+    """
     # Some clients send null for an argument they leave out.
     args = {name: value for name, value in args.items() if value is not None}
     check_arguments(tool, args)
@@ -665,10 +671,70 @@ def call_tool(tool: Tool, args: dict[str, Any], context: Context) -> Outcome:
             listed.write_text("\n".join(call["records"]) + "\n", encoding="utf-8")
             call["_records_file"] = str(listed)
         argv = tool.command(call)
-        return _run_agac(tool, argv, args, context)
+        return _run_agac(tool, argv, args, context, request_id)
 
 
-def _run_agac(tool: Tool, argv: list[str], args: dict[str, Any], context: Context) -> Outcome:
+# The command each running call started, by the id of its request.
+_running: dict[Any, subprocess.Popen[str]] = {}
+_stopped: set[Any] = set()
+_running_lock = threading.Lock()
+# How long a stopped command has to end on its own before it is killed.
+STOP_GRACE_SECONDS = 10
+
+
+def stop_call(request_id: Any) -> bool:
+    """Stop the command the call *request_id* runs; False when it runs none."""
+    with _running_lock:
+        process = _running.get(request_id)
+        if process is None:
+            return False
+        _stopped.add(request_id)
+    _stop(process)
+    return True
+
+
+def _stop(process: subprocess.Popen[str]) -> None:
+    """Ask the command to stop, as Ctrl-C would, then kill it if it does not."""
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=STOP_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
+def _execute(
+    command: list[str], *, timeout: float, request_id: Any = None, **options: Any
+) -> subprocess.CompletedProcess[str]:
+    """Run *command* to its end, as ``subprocess.run`` does, where ``stop_call`` reaches it."""
+    process = subprocess.Popen(  # nosec B603
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **options,
+    )
+    if request_id is not None:
+        with _running_lock:
+            _running[request_id] = process
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _stop(process)
+        process.communicate()
+        raise
+    finally:
+        if request_id is not None:
+            with _running_lock:
+                _running.pop(request_id, None)
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _run_agac(
+    tool: Tool, argv: list[str], args: dict[str, Any], context: Context, request_id: Any = None
+) -> Outcome:
     shown = "agac " + " ".join(argv)
     env = {
         **os.environ,
@@ -680,22 +746,31 @@ def _run_agac(tool: Tool, argv: list[str], args: dict[str, Any], context: Contex
     }
     command = [sys.executable, "-m", "agent_actions.cli.main", *argv]
     try:
-        done = subprocess.run(  # nosec B603
+        done = _execute(
             command,
             cwd=context.project_root,
             env=env,
-            capture_output=True,
-            text=True,
             encoding="utf-8",
             errors="replace",
-            stdin=subprocess.DEVNULL,
             timeout=context.timeout_seconds,
+            request_id=request_id,
         )
     except subprocess.TimeoutExpired:
         return Outcome(
             f"$ {shown}\nStopped: no result after {context.timeout_seconds} seconds. A run "
             "keeps what it stored: call the tool again to resume it.",
             is_error=True,
+            argv=argv,
+        )
+    with _running_lock:
+        stopped = request_id is not None and request_id in _stopped
+        _stopped.discard(request_id)
+    if stopped:
+        return Outcome(
+            f"$ {shown}\nStopped: the client cancelled the call. A run keeps what it "
+            "stored: call the tool again to resume it.",
+            is_error=True,
+            exit_code=done.returncode,
             argv=argv,
         )
     output = (done.stdout + done.stderr).strip()
