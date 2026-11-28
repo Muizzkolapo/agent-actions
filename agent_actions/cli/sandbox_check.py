@@ -254,6 +254,8 @@ def run_in_sandbox(
         record_limit=None,
         file_limit=None,
         fresh=True,
+        # A check starts from nothing: a mock batch an earlier sandbox run left open goes.
+        abandon_in_flight=True,
         refresh_input=False,
         rerun=(),
         where=None,

@@ -336,6 +336,12 @@ def _owed(status, collected):
     return not collected and status not in {"failed", "cancelled"}
 
 
+def _marked_as_taking_no_input(metadata):
+    """*metadata* with gone.json marked as taking no input, which a batch still owed gets."""
+    keys, jobs = metadata
+    return sorted([*keys, f"batch_no_input:{ACTION}:gone.json"]), jobs
+
+
 class TestTheBatchStateOfAFileWhoseInputIsGone:
     def test_it_goes_with_the_file_and_the_other_file_keeps_its_own(self, backend, tmp_path):
         _store(backend, "gone.json", "pages.json")
@@ -360,6 +366,44 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
         assert "batch batch-gone.json sent for it is not collected" in caplog.text
         assert _held(backend) == ["pages.json"]
 
+    def test_a_batch_still_owed_is_collected_as_taking_no_input(self, backend, tmp_path):
+        """The collect pass stores the file empty, not the answers of records that are gone."""
+        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+
+        _store(backend, "gone.json", "pages.json")
+        _sent(backend, "gone.json", status="submitted", collected=False)
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert BatchContextManager.takes_no_input(backend, ACTION, "gone.json")
+        assert not BatchContextManager.takes_no_input(backend, ACTION, "pages.json")
+
+    def test_a_file_whose_batch_is_out_and_not_stored_yet_counts(self, backend, tmp_path):
+        """A file sent in a batch is stored only when the batch is collected."""
+        from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+
+        _store(backend, "pages.json")
+        _sent(backend, "gone.json", status="submitted", collected=False)
+        _sent(backend, "pages.json", status="submitted", collected=False)
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert BatchContextManager.takes_no_input(backend, ACTION, "gone.json")
+        assert not BatchContextManager.takes_no_input(backend, ACTION, "pages.json")
+        assert _batch_state(backend) == (
+            ["gone.json", "pages.json"],
+            ["gone.json", "pages.json"],
+        )
+
+    def test_a_collected_batch_of_a_file_not_stored_goes(self, backend, tmp_path):
+        _store(backend, "pages.json")
+        _sent(backend, "gone.json")
+        _sent(backend, "pages.json")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert _batch_state(backend) == (["pages.json"], ["pages.json"])
+
     @pytest.mark.parametrize("collected", [False, True], ids=["uncollected", "collected"])
     @pytest.mark.parametrize("status", STATUSES)
     def test_a_main_batch_keeps_it_only_while_owed(
@@ -373,7 +417,7 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
         process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
 
         if _owed(status, collected):
-            assert _metadata(backend) == before
+            assert _metadata(backend) == _marked_as_taking_no_input(before)
             assert released == []
         else:
             assert _metadata(backend) == ([], [])
@@ -401,7 +445,7 @@ class TestTheBatchStateOfAFileWhoseInputIsGone:
         process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
 
         if _owed(status, collected):
-            assert _metadata(backend) == before
+            assert _metadata(backend) == _marked_as_taking_no_input(before)
             assert released == []
         else:
             assert _metadata(backend) == ([], [])

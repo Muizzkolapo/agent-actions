@@ -232,6 +232,8 @@ class RunCommand:
                 knowledge_run(resolve_project_root(project_root), sandbox.is_active()),
             ):
                 started = time.monotonic()
+                if self.args.fresh:
+                    self._refuse_fresh_over_an_open_batch(paths)
                 if self.args.refresh_input:
                     self._refresh_input(paths)
                 outcome = self._run_holding_the_lock(paths, project_root)
@@ -379,6 +381,22 @@ class RunCommand:
     def _write_outputs(self, workflow: AgentWorkflow, project_root: Path | None) -> None:
         write_declared_outputs(workflow, project_root, self.args.agent)
 
+    def _refuse_fresh_over_an_open_batch(self, paths: ProjectPaths) -> None:
+        """``--fresh`` drops a batch not yet collected only with ``--abandon-in-flight``.
+
+        Decided before the workflow loads, since loading with ``--fresh`` clears the store.
+        """
+        if self.args.abandon_in_flight:
+            return
+        open_batches = batches_still_open(paths.io_dir, self.agent_name)
+        if open_batches:
+            raise click.UsageError(
+                f"--fresh would drop the batch still open for {', '.join(open_batches)}, "
+                "whose answers are paid for. Collect it first: "
+                f"agac run -w {self.args.agent}{sandbox.run_flags()} --wait. "
+                "To drop it, run with --fresh --abandon-in-flight."
+            )
+
     def _refresh_input(self, paths: ProjectPaths) -> None:
         """Have the database snapshots read again this run; refused under an open batch.
 
@@ -504,6 +522,15 @@ class RunCommand:
     help="Clear stored results and status before execution (useful after failed runs)",
 )
 @click.option(
+    "--abandon-in-flight",
+    is_flag=True,
+    default=False,
+    help=(
+        "With --fresh: drop a batch that is not collected yet, giving up its results. "
+        "Without it, --fresh refuses while a batch is open."
+    ),
+)
+@click.option(
     "--refresh-input",
     is_flag=True,
     default=False,
@@ -596,6 +623,7 @@ def run(
     record_limit: int | None = None,
     file_limit: int | None = None,
     fresh: bool = False,
+    abandon_in_flight: bool = False,
     refresh_input: bool = False,
     rerun: tuple[str, ...] = (),
     where: str | None = None,
@@ -619,6 +647,7 @@ def run(
         agac run -a my_agent
         agac run -a my_agent --execution-mode parallel
         agac run -a my_agent --fresh
+        agac run -a my_agent --fresh --abandon-in-flight
         agac run -a my_agent --refresh-input
         agac run -a my_agent --rerun classify
         agac run -a my_agent --rerun classify --rerun summarize
@@ -628,6 +657,10 @@ def run(
         agac run -a my_agent --wait --poll 60 --wait-timeout 86400
         agac run -a my_agent --sandbox
     """
+    if abandon_in_flight and not fresh:
+        raise click.UsageError(
+            "--abandon-in-flight goes with --fresh: it lets --fresh drop a batch still open."
+        )
     if not wait:
         for given, flag in ((poll, "--poll"), (wait_timeout, "--wait-timeout")):
             if given is not None:
@@ -641,6 +674,7 @@ def run(
         record_limit=record_limit,
         file_limit=file_limit,
         fresh=fresh,
+        abandon_in_flight=abandon_in_flight,
         refresh_input=refresh_input,
         rerun=rerun,
         where=where,

@@ -115,6 +115,9 @@ class RunCommandArgs(BaseModel):
         ge=1,
     )
     fresh: bool = Field(False, description="Clear stored results and status before execution")
+    abandon_in_flight: bool = Field(
+        False, description="With fresh: drop a batch not yet collected, giving up its results"
+    )
     refresh_input: bool = Field(
         False, description="Read a database data source again instead of its stored snapshot"
     )

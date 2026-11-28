@@ -1336,7 +1336,8 @@ def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: li
     left behind would feed the actions below. Raises what the store raises when it deletes
     the rows.
     """
-    _forget_batch_state_of_files_gone(storage_backend, action_name, set(gone))
+    gone_set = set(gone)
+    _forget_batch_state_of_files_gone(storage_backend, action_name, gone_set.__contains__)
     storage_backend.delete_target_files(action_name, gone)
     more = len(gone) - _ERROR_SAMPLE_SIZE
     logger.warning(
@@ -1357,9 +1358,9 @@ _BATCH_STATE_PREFIXES = ("batch_context", "batch_inputs", "batch_no_input", "rec
 
 
 def _forget_batch_state_of_files_gone(
-    storage_backend: Any, action_name: str, gone: set[str]
+    storage_backend: Any, action_name: str, is_gone: Callable[[str], bool]
 ) -> None:
-    """Delete the batch state of each batch input file whose stored file is in *gone*.
+    """Delete the batch state of each batch input file whose stored file *is_gone*.
 
     A batch input file is named by its registry entries and by its metadata keys, each read
     alone. A failure for one file only warns and leaves that file's batch state.
@@ -1387,7 +1388,7 @@ def _forget_batch_state_of_files_gone(
         )
         return
     for name in sorted(name for name in names if name):
-        if storage_backend.stored_path(batch_output_name(name)) not in gone:
+        if not is_gone(storage_backend.stored_path(batch_output_name(name))):
             continue
         try:
             _forget_batch_state(storage_backend, registry, jobs, action_name, name)
@@ -1412,8 +1413,10 @@ def _forget_batch_state(
     """Delete one batch input file's batch state, or warn and leave it.
 
     A batch still owed (sent, not collected and not ended by the provider) keeps all of it:
-    its results are paid for, and a collect pass reads that state. Each registry entry
-    stays until the provider's local record of its batch is released.
+    its results are paid for, and a collect pass reads that state. The file is marked as
+    taking no input, so that pass stores it empty rather than write back records that
+    are gone. Each registry entry stays until the provider's local record of its batch
+    is released.
     """
     from agent_actions.llm.batch.core.batch_constants import BatchStatus
     from agent_actions.llm.batch.infrastructure.context import (
@@ -1433,9 +1436,10 @@ def _forget_batch_state(
         if entry.collected_at is None and entry.status not in ended
     ]
     if owed:
+        BatchContextManager.record_no_input(storage_backend, action_name, name)
         logger.warning(
             "'%s' has no input for %s any more, but batch %s sent for it is not collected: "
-            "its batch state stays for a collect pass to read",
+            "a collect pass reads it and stores the file empty",
             action_name,
             name,
             ", ".join(owed),
@@ -1486,9 +1490,13 @@ def _forget_files_no_input_maps_to(
     try:
         names = reached.paths | {batch_output_name(path) for path in reached.paths}
         kept = {backend.stored_path(name) for name in names}
-        gone = [name for name in backend.list_target_files(action_name) if name not in kept]
+        stored = backend.list_target_files(action_name)
+        gone = [name for name in stored if name not in kept]
         if gone:
             forget_files_of_inputs_gone(backend, action_name, gone)
+        # A file sent in a batch is stored only once the batch is collected.
+        unstored = set(stored) | kept
+        _forget_batch_state_of_files_gone(backend, action_name, lambda path: path not in unstored)
     except Exception as e:
         logger.warning(
             "Could not delete what '%s' stores for input that is gone: %s", action_name, e

@@ -94,6 +94,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# A reader in one of these only checks its batch on the next run, and reads no input.
+_WAITING_ON_A_BATCH = frozenset({ActionStatus.BATCH_SUBMITTED, ActionStatus.CHECKING_BATCH})
+
 # Prefix used in skip_reason for cascade failures.  The renderer checks
 # this prefix to distinguish "blocked by upstream" from "guard-filtered".
 UPSTREAM_SKIP_PREFIX = "Upstream dependency"
@@ -995,15 +998,22 @@ class ActionExecutor:
     def _reopen_keeping_answers(self, action_name: str) -> None:
         """Put *action_name* and what reads it back to pending, keeping every answer held.
 
-        Only the completed ones: any other runs anyway. One edited since it completed answers
-        beside answers given before the edit, so its stamps stay held to that config and each
-        later run names the edit, until ``--rerun``.
+        The completed ones, and a reader waiting on a batch: one that only checks its batch
+        collects the records the batch was sent, so a record added since would never reach
+        it, and one removed would be written back. Back on the run path, it records the
+        inputs of each file whose batch is out and sends the new ones. Any other runs anyway.
+        One edited since it completed answers beside answers given before the edit, so its
+        stamps stay held to that config and each later run names the edit, until ``--rerun``.
         """
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        readers = self._stale_readers(action_name)
         names = [
             name
-            for name in [*self._stale_readers(action_name), action_name]
+            for name in [*readers, action_name]
             if self.deps.state_manager.get_status(name) in COMPLETED_STATUSES
+            or (
+                name in readers and self.deps.state_manager.get_status(name) in _WAITING_ON_A_BATCH
+            )
         ]
         held: dict[str, dict[str, Any]] = {}
         mixed = []

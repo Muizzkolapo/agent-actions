@@ -250,12 +250,12 @@ class TestTheRecordHasAnEndOfLife:
         return sorted(p.name for p in state.glob("*")) if state.is_dir() else []
 
     def test_an_abandoned_batch_is_reclaimed_by_a_fresh_run(self, project):
-        """A batch nobody ever collects is what --fresh means by a clean slate."""
+        """A batch nobody ever collects is what --fresh --abandon-in-flight clears."""
         assert _run(project, "--fresh")[0] == EXIT_PAUSED
         abandoned = set(self._on_disk(project))
         assert abandoned, "the submit recorded nothing to reclaim"
 
-        assert _run(project, "--fresh")[0] == EXIT_PAUSED
+        assert _run(project, "--fresh", "--abandon-in-flight")[0] == EXIT_PAUSED
 
         assert not abandoned & set(self._on_disk(project))
 
@@ -329,6 +329,6 @@ class TestTheRecordHasAnEndOfLife:
         orphan.write_text('{"tasks": [{"user_content": "secret"}]}')
         os.utime(orphan, (1700000000, 1700000000))
 
-        assert _run(project, "--fresh")[0] == EXIT_PAUSED
+        assert _run(project, "--fresh", "--abandon-in-flight")[0] == EXIT_PAUSED
 
         assert not orphan.exists()
