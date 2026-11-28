@@ -281,13 +281,16 @@ task test:integration
 task test:fast
 
 # Run one of six shards, as CI does
-uv run pytest -n auto --shard 2/6
+uv run pytest -n auto --dist worksteal --shard 2/6
 ```
 
-CI runs the suite as six shards at once (`Tests (shard N of 6)`), each with `-n auto`,
-and one `Tests` check passes when every shard passed. A shard holds whole test files,
+CI runs the suite as six shards at once (`Tests (shard N of 6)`), each with
+`-n auto --dist worksteal`, and one `Tests` check passes when every shard passed. A shard holds whole test files,
 balanced by the seconds `tests/shard_durations.json` records for each file; a new file
 counts as the median until the file is recorded again.
+`--dist worksteal` lets an idle worker take tests queued for a busy one; with the
+default `--dist load`, the worker that starts on the integration tests runs them alone
+while the others wait.
 
 The file holds the times CI's runners take. Each shard's log ends with a
 `shard durations: {...}` line (`--report-shard-durations`): the seconds each of its files

@@ -58,7 +58,7 @@ tasks:
   test:fast:
     desc: Run tests in parallel
     cmds:
-      - uv run pytest -n auto
+      - uv run pytest -n auto --dist worksteal
 
   # Build
   build:
