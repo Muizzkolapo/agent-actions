@@ -104,6 +104,51 @@ def test_an_unknown_base_is_named_with_a_suggestion(project):
     assert "Did you mean 'help_center'" in result.stdout + result.stderr
 
 
+KEY_WORKFLOW = """name: wf
+description: d
+defaults: {model_vendor: openai, model_name: gpt-4o-mini}
+actions:
+  - name: answer
+    intent: x
+    prompt: "{{ source.text }} {{ retrieve.one.count }}"
+    schema: {a: string}
+    context_scope:
+      observe: [source.text, source.faq_id]
+      retrieve:
+        one: {from: faq, method: key, query: source.faq_id}
+"""
+
+
+@pytest.fixture
+def key_project(project: Path) -> Path:
+    (project / "knowledge" / "faq.json").write_text(
+        json.dumps([{"id": "f1", "q": "How do refunds work?"}]), encoding="utf-8"
+    )
+    config = yaml.safe_load((project / "agent_actions.yml").read_text())
+    config["knowledge"]["faq"] = {
+        "sources": [{"path": "knowledge/faq.json", "text": "q", "id": "id"}]
+    }
+    (project / "agent_actions.yml").write_text(yaml.safe_dump(config), encoding="utf-8")
+    workflow = project / "agent_workflow" / "wf" / "agent_config" / "wf.yml"
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text(KEY_WORKFLOW, encoding="utf-8")
+    return project
+
+
+def test_list_and_build_report_the_key_index_an_entry_uses_and_prune_keeps_it(key_project):
+    listed = _ok(run_agac(key_project, "knowledge", "list"))
+    built = _ok(run_agac(key_project, "knowledge", "build", "faq"))
+    pruned = _ok(run_agac(key_project, "knowledge", "build", "faq", "--prune"))
+
+    assert "  key: " in listed.split("faq:")[1]
+    assert "faq key: " in built and "(built)" in built
+    assert "Removed 0 old index file(s)." in pruned
+    folder = key_project / ".agac" / "knowledge" / "faq"
+    assert sorted(p.name.split("-")[0] for p in folder.iterdir()) == ["key", "keyword"]
+    found = _ok(run_agac(key_project, "knowledge", "search", "faq", "f1", "--method", "key"))
+    assert "1. f1" in found
+
+
 def test_prune_removes_old_digests_but_not_during_a_run(project):
     _ok(run_agac(project, "knowledge", "build"))
     before = _index_files(project)

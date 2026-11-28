@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.knowledge import index as index_module
 from agent_actions.knowledge.api import ensure_indexes, knowledge_hash, retrieve
 from agent_actions.knowledge.chunks import scan
@@ -162,3 +163,26 @@ def test_prune_removes_the_files_no_current_digest_names(root):
 
     assert [p.name for p in removed] == [f"keyword-{old}.db"]
     assert new_path.exists()
+
+
+def test_a_set_not_built_yet_is_found_once_it_is_built(root):
+    digest = knowledge_hash(root, "help", {"keyword", "fuzzy"}, sandbox=False)
+    assert digest is not None
+    with pytest.raises(ConfigurationError, match="is built"):
+        index_module.locate(root, "help", digest, ["keyword", "fuzzy"])
+
+    ensure_indexes(root, "help", {"keyword", "fuzzy"}, sandbox=False)
+
+    assert set(index_module.locate(root, "help", digest, ["keyword", "fuzzy"])) == {
+        "keyword",
+        "fuzzy",
+    }
+
+
+def test_a_connection_opens_a_relative_path(root, monkeypatch):
+    digest = ensure_indexes(root, "help", {"keyword"}, sandbox=False)
+    monkeypatch.chdir(root)
+
+    conn = index_module.connection(Path(".agac/knowledge/help") / f"keyword-{digest}.db")
+
+    assert conn.execute("SELECT count(*) FROM chunks").fetchone()[0] == 2

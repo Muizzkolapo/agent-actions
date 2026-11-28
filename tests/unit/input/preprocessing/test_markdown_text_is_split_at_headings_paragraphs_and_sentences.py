@@ -86,6 +86,24 @@ def test_the_offline_count_needs_no_tokenizer_download():
     assert count_tokens("internationalization") == 4
 
 
+@pytest.mark.parametrize(
+    "word", ["!" * 200, "https://example.com/a/b/c?x=1&y=2#frag/" * 8, "a.b-c_d" * 40]
+)
+def test_a_long_punctuation_run_or_url_is_cut_under_the_size(word):
+    chunks = split_markdown(f"# T\n\n{word}\n", chunk_size=20, overlap=0)
+
+    assert all(count_tokens(c.text) <= 20 for c in chunks)
+    assert "".join(c.body for c in chunks).replace(" ", "") == word
+
+
+@pytest.mark.parametrize(
+    ("heading", "title"),
+    [("## Using C#", "Using C#"), ("## Using C# ##", "Using C#"), ("## Notes ###", "Notes")],
+)
+def test_a_heading_keeps_a_hash_that_ends_a_word(heading, title):
+    assert split_markdown(f"{heading}\n\nText.", chunk_size=50, overlap=0)[0].title == title
+
+
 @pytest.mark.parametrize("size", [1, 3])
 def test_a_word_longer_than_the_size_still_makes_progress(size):
     chunks = split_markdown("supercalifragilistic word", chunk_size=size, overlap=0)

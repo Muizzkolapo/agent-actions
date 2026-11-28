@@ -31,7 +31,7 @@ help_center: 3 source(s), index: keyword, fuzzy
   fuzzy: 41d8a6e0c2b7f913 (not built)
 ```
 
-The command reads the source files to compute the digest of each index. It builds nothing and connects to no database. It counts the rows of a database source from its snapshot. A base that cannot be read prints `not built:` and the reason, and the command continues with the next base.
+The command reads the source files to compute the digest of each index. It also reads the workflows: when a `retrieve` entry of a workflow uses the method `key`, the command shows the `key` index of that base too. It builds nothing and connects to no database. It counts the rows of a database source from its snapshot. A base that cannot be read prints `not built:` and the reason, and the command continues with the next base.
 
 The command takes no options.
 
@@ -60,9 +60,9 @@ The first build of a database source reads its rows and keeps them as a snapshot
 |--------|-------------|
 | `NAME` | The knowledge base to build. Default: each base |
 | `--refresh` | Read the query of each database source again, and replace its snapshot. This is the only command that reads the query of an existing snapshot again: `agac run --refresh-input` does not |
-| `--prune` | After the build, remove the index files of earlier digests. Refused while a run of the project is in progress |
+| `--prune` | After the build, remove the index files of earlier digests. It keeps the current file of each index kind that the base declares or that a `retrieve` entry uses, `key` included. Refused while a run of the project is in progress |
 
-The index files are in `.agac/knowledge/<base>/`. Old files stay until `--prune` removes them, so the stored matches of earlier runs can still be compared with their index.
+The index files are in `.agac/knowledge/<base>/`. Old files stay until `--prune` removes them, so the stored matches of earlier runs can still be compared with their index. The command builds each index that the base declares, and the `key` index when a `retrieve` entry of a workflow uses the method `key`. A workflow that does not load is not read.
 
 ## `knowledge search`
 

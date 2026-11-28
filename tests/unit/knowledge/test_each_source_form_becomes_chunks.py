@@ -98,6 +98,39 @@ def test_records_of_json_jsonl_and_csv_are_one_chunk_each(tmp_path):
     ]
 
 
+def test_a_file_two_globs_match_is_read_once(tmp_path):
+    root = make_project(
+        tmp_path / "p",
+        {"kb/a.md": "# A\n\nText.", "kb/b.md": "# B\n\nMore."},
+        {"kb": {"sources": ["kb/*.md", "kb/a.md"]}},
+    )
+
+    assert [c.id for c in _chunks(root)] == ["kb/a.md#1", "kb/b.md#1"]
+
+
+def test_a_file_two_sources_read_differently_is_refused_naming_both(tmp_path):
+    root = make_project(
+        tmp_path / "p",
+        {"seed/faq.json": json.dumps([{"n": "1", "q": "How?"}])},
+        {"kb": {"sources": ["seed/*.json", {"path": "seed/faq.json", "text": "q", "id": "n"}]}},
+    )
+
+    with pytest.raises(ConfigurationError) as caught:
+        _chunks(root)
+
+    assert "seed/faq.json is matched by source 1 and source 2" in str(caught.value)
+
+
+def test_a_csv_row_with_more_values_than_columns_adds_no_unnamed_line(tmp_path):
+    root = make_project(
+        tmp_path / "p",
+        {"seed/r.csv": "name,role\nAnn,admin,extra\n"},
+        {"kb": {"sources": ["seed/r.csv"]}},
+    )
+
+    assert [c.text for c in _chunks(root)] == ["name: Ann\nrole: admin"]
+
+
 def test_a_jsonl_record_is_one_line_whatever_line_separators_its_strings_hold(tmp_path):
     line = json.dumps({"n": "1", "q": "How now\x85then?"}, ensure_ascii=False)
     root = make_project(
@@ -233,5 +266,5 @@ def test_a_database_source_with_no_snapshot_refuses_when_it_may_not_connect(tmp_
     with pytest.raises(ConfigurationError) as caught:
         scan(root, "kb", load_knowledge(root)["kb"], connect=False)
 
-    assert "A sandbox run does not connect to a database" in str(caught.value)
+    assert "this command does not connect to a database" in str(caught.value)
     assert "agac knowledge build kb" in str(caught.value)

@@ -205,7 +205,7 @@ The knowledge base declares its indexes. The action selects a method that one of
 | `all_words` | `keyword` | Chunks that hold each word of the query. Stopwords are removed. Use it for short queries |
 | `phrase` | `keyword` | Chunks that hold the query as an exact phrase. Stopwords are kept |
 | `fuzzy` | `fuzzy` | Chunks that hold parts of the words of the query (groups of three letters). It finds many typing errors, for example "pasword" and "refnd", but not all of them: it does not find "Smith" for "Smyth" |
-| `key` | none | The one chunk whose `id` is the query text. It needs `id:` on each source of the base, and you cannot merge it with another method |
+| `key` | `key` | The one chunk whose `id` is the query text. It needs `id:` on each source of the base, and you cannot merge it with another method. You do not declare the `key` index: a search with `key` writes it, and `agac knowledge build` builds it when an entry uses `key` |
 | `vector` | | Chunks with the same meaning. This comes in a later version |
 
 These rules apply to the query:

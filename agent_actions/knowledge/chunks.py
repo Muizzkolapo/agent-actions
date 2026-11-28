@@ -27,7 +27,7 @@ from agent_actions.knowledge.config import (
 logger = logging.getLogger(__name__)
 
 # Changes when a chunk of the same bytes would come out different.
-CHUNKER_VERSION = 1
+CHUNKER_VERSION = 2
 KNOWLEDGE_DIR = Path(".agac") / "knowledge"
 
 
@@ -113,14 +113,6 @@ def matched_files(project_root: Path, name: str, pattern: str) -> list[Path]:
     return files
 
 
-def check_sources(project_root: Path, name: str, base: KnowledgeBase) -> None:
-    """Refuse a file source that matches no file or leaves the project; reads no file."""
-    for source in base.sources:
-        pattern = source if isinstance(source, str) else getattr(source, "path", None)
-        if pattern is not None:
-            matched_files(project_root, name, pattern)
-
-
 def scan(
     project_root: Path,
     name: str,
@@ -137,6 +129,7 @@ def scan(
     """
     found = Scan(name=name, base=base)
     root = project_root.resolve()
+    first: dict[str, tuple[int, str | StructuredSource]] = {}
     for number, source in enumerate(base.sources, 1):
         if isinstance(source, DatabaseSource):
             found.tables.append(
@@ -146,6 +139,16 @@ def scan(
         pattern = source if isinstance(source, str) else source.path
         for path in matched_files(project_root, name, pattern):
             relpath = path.resolve().relative_to(root).as_posix()
+            if relpath in first:
+                earlier, read_as = first[relpath]
+                if isinstance(read_as, str) and isinstance(source, str):
+                    continue  # Two globs read the file the same way: it is read once.
+                raise ConfigurationError(
+                    f"knowledge base '{name}': {relpath} is matched by source {earlier} and "
+                    f"source {number}, which read it differently. Name the file in one source",
+                    context={"knowledge_base": name, "file": relpath},
+                )
+            first[relpath] = (number, source)
             data = _read(path, name, relpath)
             digest = hashlib.sha256(data).hexdigest()
             found.files.append(ScannedFile(relpath, data, source, digest))
@@ -193,8 +196,9 @@ def _scan_rows(
         if not connect:
             raise ConfigurationError(
                 f"knowledge base '{name}': source {number} reads connection "
-                f"'{source.connection}', and no snapshot of it exists. A sandbox run does not "
-                f"connect to a database: run 'agac knowledge build {name}' first",
+                f"'{source.connection}', and no snapshot of it exists, and this command does "
+                "not connect to a database (a sandbox run and 'agac knowledge list' never do). "
+                f"Run 'agac knowledge build {name}' first",
                 context={"knowledge_base": name, "connection": source.connection},
             )
         with open_connection(source.connection, project_root, read_only=True) as connector:
@@ -308,7 +312,9 @@ def _records(data: bytes, suffix: str, name: str, relpath: str) -> list[dict[str
     try:
         text = data.decode("utf-8-sig")
         if suffix == ".csv":
-            records: list[Any] = list(csv.DictReader(io.StringIO(text, newline="")))
+            rows = csv.DictReader(io.StringIO(text, newline=""))
+            # A value past the last column has no name: it is left out.
+            records: list[Any] = [{k: v for k, v in row.items() if k is not None} for row in rows]
         elif suffix == ".jsonl":
             # JSON lines end at \n only; a string may hold U+2028 or U+0085.
             records = [json.loads(line) for line in text.split("\n") if line.strip()]

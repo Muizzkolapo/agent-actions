@@ -13,7 +13,8 @@ from dataclasses import dataclass
 
 _TOKEN = re.compile(r"\w+|[^\w\s]")
 _CHARS_PER_TOKEN = 6
-_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
+# A closing run of `#` follows a space, so "## Using C#" keeps its last `#`.
+_HEADING = re.compile(r"^(#{1,6})\s+(.+?)(?:\s+#+)?\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _PARAGRAPH_BREAK = re.compile(r"\n\s*\n")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -108,8 +109,7 @@ def _fitted(sentence: str, budget: int) -> list[str]:
             if current:
                 pieces.append(" ".join(current))
                 current = []
-            width = budget * _CHARS_PER_TOKEN
-            pieces.extend(word[i : i + width] for i in range(0, len(word), width))
+            pieces.extend(_cut(word, budget))
             continue
         if current and count_tokens(" ".join([*current, word])) > budget:
             pieces.append(" ".join(current))
@@ -117,6 +117,29 @@ def _fitted(sentence: str, budget: int) -> list[str]:
         current.append(word)
     if current:
         pieces.append(" ".join(current))
+    return pieces
+
+
+def _cut(word: str, budget: int) -> list[str]:
+    """*word* (no whitespace) cut into pieces of at most *budget* tokens each.
+
+    Cut by tokens, not characters: each punctuation mark is a token, so a URL or a run of
+    punctuation holds far more tokens than its length over six.
+    """
+    width = budget * _CHARS_PER_TOKEN
+    pieces: list[str] = []
+    current, size = "", 0
+    for token in _TOKEN.findall(word):
+        parts = [token[i : i + width] for i in range(0, len(token), width)]
+        for part in parts:
+            cost = count_tokens(part)
+            if current and size + cost > budget:
+                pieces.append(current)
+                current, size = "", 0
+            current += part
+            size += cost
+    if current:
+        pieces.append(current)
     return pieces
 
 

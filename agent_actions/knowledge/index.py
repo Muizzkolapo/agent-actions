@@ -143,8 +143,10 @@ def locate(project_root: Path, name: str, digest: str, kinds: Iterable[str]) -> 
             except (OSError, ValueError):
                 digests = {}
             known = {k: index_path(project_root, name, k, d) for k, d in digests.items()}
-        with _located_lock:
-            _located[key] = known
+        # A set file not written yet is read again next time: a build may write it.
+        if known:
+            with _located_lock:
+                _located[key] = known
     paths = {kind: known.get(kind) for kind in wanted}
     if not all(path is not None and path.exists() for path in paths.values()):
         raise ConfigurationError(
@@ -162,6 +164,7 @@ def connection(path: Path) -> sqlite3.Connection:
     """A read-only connection to *path* for the calling thread."""
     opened: dict[Path, sqlite3.Connection] = getattr(_local, "connections", None) or {}
     _local.connections = opened
+    path = path if path.is_absolute() else path.resolve()
     conn = opened.get(path)
     if conn is None:
         conn = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)

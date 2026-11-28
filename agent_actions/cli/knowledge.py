@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ from typing import Any
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+
+logger = logging.getLogger(__name__)
 
 
 def _bases(project_root: Path, name: str | None) -> dict[str, Any]:
@@ -26,6 +29,48 @@ def _bases(project_root: Path, name: str | None) -> dict[str, Any]:
     return {name: bases[name]}
 
 
+def _kinds_entries_use(project_root: Path) -> dict[str, set[frozenset[str]]]:
+    """Each base, and the sets of index kinds the retrieve entries of the workflows read.
+
+    A workflow that does not load is left out: its own commands report why.
+    """
+    import jinja2
+    import yaml
+
+    from agent_actions.errors import AgentActionsError
+    from agent_actions.llm.providers.tools.builtin import (
+        RETRIEVE,
+        builtin_tool,
+        searched_indexes,
+    )
+    from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+
+    used: dict[str, set[frozenset[str]]] = {}
+    for config in sorted(project_root.glob("agent_workflow/*/agent_config/*.y*ml")):
+        try:
+            rendered = render_pipeline_with_templates(
+                config,
+                project_root / "templates",
+                compile_schemas=False,
+                project_root=project_root,
+            )
+        except (AgentActionsError, OSError, ValueError, jinja2.TemplateError) as error:
+            logger.debug("knowledge: %s does not load: %s", config, error)
+            continue
+        for action in (yaml.safe_load(rendered) or {}).get("actions") or []:
+            spec = builtin_tool(action) if isinstance(action, dict) else None
+            if spec is not None and spec["tool"] == RETRIEVE:
+                base, kinds = searched_indexes(spec)
+                used.setdefault(base, set()).add(kinds)
+    return used
+
+
+def _kinds(base: Any, used: set[frozenset[str]]) -> list[str]:
+    """The index kinds a base declares, then ``key`` when an entry searches by key."""
+    extra = sorted({kind for kinds in used for kind in kinds} - set(base.index))
+    return [*base.index, *extra]
+
+
 @click.group()
 def knowledge() -> None:
     """List, build and search the knowledge bases."""
@@ -37,7 +82,8 @@ def knowledge() -> None:
 def list_bases(project_root: Path) -> None:
     """List each knowledge base, its indexes and whether they are built.
 
-    Reads the sources to compute each digest. Builds nothing and connects to no database.
+    Reads the sources to compute each digest, and the workflows to find a `key` index an
+    entry uses. Builds nothing and connects to no database.
     """
     from agent_actions.errors import ConfigurationError
     from agent_actions.knowledge.chunks import scan
@@ -47,6 +93,7 @@ def list_bases(project_root: Path) -> None:
     if not bases:
         click.echo("No knowledge base in agent_actions.yml.")
         return
+    used = _kinds_entries_use(project_root)
     for name, base in bases.items():
         click.echo(f"{name}: {len(base.sources)} source(s), index: {', '.join(base.index)}")
         try:
@@ -56,7 +103,7 @@ def list_bases(project_root: Path) -> None:
             continue
         rows = sum(len(table.rows) for table in found.tables)
         click.echo(f"  {len(found.files)} file(s), {rows} database row(s)")
-        for kind in base.index:
+        for kind in _kinds(base, used.get(name, set())):
             digest = index_digest(found.content_digest, kind)
             built = index_path(project_root, name, kind, digest).exists()
             click.echo(f"  {kind}: {digest} ({'built' if built else 'not built'})")
@@ -89,6 +136,7 @@ def build(project_root: Path, name: str | None, refresh: bool, prune: bool) -> N
     from agent_actions.knowledge.index import prune as prune_files
 
     bases = _bases(project_root, name)
+    used = _kinds_entries_use(project_root)
     if refresh:
         request_refresh()
     current: dict[str, set[Path]] = {}
@@ -96,13 +144,15 @@ def build(project_root: Path, name: str | None, refresh: bool, prune: bool) -> N
         for base_name, base in bases.items():
             found = scan(project_root, base_name, base, refresh=refresh)
             current[base_name] = set()
-            for kind in base.index:
+            for kind in _kinds(base, used.get(base_name, set())):
                 digest, built = build_indexes(project_root, found, [kind])
                 current[base_name].add(index_path(project_root, base_name, kind, digest))
                 click.echo(f"{base_name} {kind}: {digest} ({'built' if built else 'up to date'})")
-            if len(base.index) > 1:
-                digest, _ = build_indexes(project_root, found, base.index)
-                current[base_name].add(set_path(project_root, base_name, digest))
+            # The set file of each group of kinds an entry reads; prune keeps it.
+            for kinds in [frozenset(base.index), *used.get(base_name, set())]:
+                if len(kinds) > 1:
+                    digest, _ = build_indexes(project_root, found, kinds)
+                    current[base_name].add(set_path(project_root, base_name, digest))
     finally:
         if refresh:
             forget_refresh_request()

@@ -116,7 +116,7 @@ def test_a_database_source_is_searched_from_its_snapshot(tmp_path, connection, c
     root = _database_project(tmp_path, connection, create)
 
     assert knowledge_hash(root, "kb", {"keyword"}, sandbox=True) is None
-    with pytest.raises(KnowledgeConfigError, match="A sandbox run does not connect"):
+    with pytest.raises(KnowledgeConfigError, match="does not connect to a database"):
         ensure_indexes(root, "kb", {"keyword"}, sandbox=True)
 
     digest = ensure_indexes(root, "kb", {"keyword"}, sandbox=False)
