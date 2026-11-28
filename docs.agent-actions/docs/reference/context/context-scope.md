@@ -256,7 +256,7 @@ context_scope:
 | `max_context_tokens` | none | | The total number of tokens of the matches. Chunks are added in rank order until the next chunk passes the limit. A chunk is never cut |
 | `max_per_origin` | none | | The number of matches from one file, or from one connection |
 
-The load turns each entry into an internal step named `<action>__<entry>`, for example `write_reply__help`. It adds the step to the dependencies of the action and the step's output to the `observe` of the action. `retrieve.help` in a prompt or a guard is the output of that step. `agac records`, `agac inspect`, `--rerun` and the messages name the step.
+The load turns each entry into an internal step named `<action>__<entry>`, for example `write_reply__help`. The step has the dependencies of the action, so it searches only for the records that reach the action. The load adds the step to the dependencies of the action and the step's output to the `observe` of the action. `retrieve.help` in a prompt or a guard is the output of that step. `agac records`, `agac inspect`, `--rerun` and the messages name the step.
 
 The output of each entry is `{matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`.
 

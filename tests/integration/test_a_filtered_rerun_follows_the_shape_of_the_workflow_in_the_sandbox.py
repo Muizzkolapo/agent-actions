@@ -31,7 +31,14 @@ LOOP = {
 }
 AFTER_THE_LOOP = {"reply_round": 2, "approve_reply": 2, "tag_reply": 2}
 TEAMS = {"billing_team": 1, "support_team": 1, "assigned": 2}
-BELOW_THE_MERGE = {"merge_scores": 2, **LOOP, **TEAMS, **AFTER_THE_LOOP}
+# The retrieve step of the first round has draft_reply's dependencies, so it reads the merge.
+BELOW_THE_MERGE = {
+    "merge_scores": 2,
+    "reply_round_iter1__draft_reply__help": 2,
+    **LOOP,
+    **TEAMS,
+    **AFTER_THE_LOOP,
+}
 
 
 @pytest.fixture(scope="module")

@@ -172,7 +172,7 @@ An entry of a knowledge base does not take `text`, `title` or `id`. Set them on 
 
 ### The Generated Step
 
-The load turns each entry into an internal step of the workflow, named `<action>__<entry>`. The entry `help` of `write_reply` is the step `write_reply__help`. The load adds the step to the dependencies of the action, and its output to the `observe` of the action. The step depends on the actions that its `query` and `where` references name.
+The load turns each entry into an internal step of the workflow, named `<action>__<entry>`. The entry `help` of `write_reply` is the step `write_reply__help`. The load adds the step to the dependencies of the action, and its output to the `observe` of the action. The step has all the dependencies of the action, and also depends on the actions that its `query` and `where` references name. Thus a record that an upstream guard filters, or that a router sends to another branch, does not reach the step. It does not reach the action either.
 
 The step is a step like the others. Its matches are stored, and the commands name the step:
 

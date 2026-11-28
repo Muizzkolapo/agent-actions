@@ -108,8 +108,58 @@ class TestTheStep:
         }
         assert step["_builtin"]["where"] == {"product": "classify.product"}
 
-    def test_a_step_that_reads_only_source_depends_on_nothing(self, tmp_path):
-        assert "dependencies" not in _expanded(_workflow(), tmp_path)["write_reply__help"]
+    def test_a_step_that_reads_only_source_takes_all_of_its_actions_dependencies(self, tmp_path):
+        assert _expanded(_workflow(), tmp_path)["write_reply__help"]["dependencies"] == [
+            "classify"
+        ]
+
+    def test_the_step_takes_its_actions_dependencies_and_then_what_its_refs_read(self, tmp_path):
+        data = _workflow(_retrieve(query=["source.text", "first.keywords"]))
+        data["actions"][1]["dependencies"] = ["classify", "second"]
+        data["actions"][1:1] = [_action("first"), _action("second", dependencies=["first"])]
+
+        step = _expanded(data, tmp_path)["write_reply__help"]
+
+        assert step["dependencies"] == ["classify", "second", "first"]
+
+    def test_the_step_observes_each_dependency_its_refs_do_not_read_whole(self, tmp_path):
+        step = _expanded(_workflow(), tmp_path)["write_reply__help"]
+
+        assert step["context_scope"] == {"observe": ["source.text", "classify.*"]}
+
+    def test_the_step_of_a_version_merge_takes_its_version_consumption(self, tmp_path):
+        merge = {"source": "classify", "pattern": "merge"}
+        step = _expanded(_workflow(reply={"version_consumption": merge}), tmp_path)[
+            "write_reply__help"
+        ]
+
+        assert step["version_consumption"] == merge
+
+    def test_a_later_action_in_a_route_branch_has_its_step_after_the_earlier_one(self, tmp_path):
+        later = _action(
+            "follow_up",
+            dependencies=["write_reply"],
+            context_scope={"observe": ["write_reply.*"], "retrieve": _retrieve()},
+        )
+        data = _workflow(actions=[later])
+        data["actions"][1]["context_scope"].pop("retrieve")
+        data["actions"].insert(
+            1,
+            {
+                "route": "router",
+                True: "classify.kind",
+                "cases": {"a": ["write_reply"]},
+                "default": "filter",
+            },
+        )
+        data = expand_routes(expand_retrieves(data, WF, tmp_path), WF)
+        finish_retrieve_routes(data)
+        actions = _by_name(data)
+
+        step = actions["follow_up__help"]
+        assert step["dependencies"] == ["write_reply"]
+        assert "guard" not in step
+        assert actions["write_reply"]["guard"]["condition"] == 'router.case == "a"'
 
     def test_the_step_has_the_fixed_output_schema(self, tmp_path):
         schema = _expanded(_workflow(), tmp_path)["write_reply__help"]["schema"]

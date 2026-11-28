@@ -19,7 +19,7 @@ actions:
   score_1: {status: completed, success: 4}
   score_2: {status: completed, success: 4}
   merge_scores: {status: completed, success: 4}
-  reply_round_iter1__draft_reply__help: {status: completed, success: 6}  # the retrieve step of draft_reply: it reads only source.text, so it searches for each ticket, spam too
+  reply_round_iter1__draft_reply__help: {status: completed, success: 4}  # the retrieve step of draft_reply: it has draft_reply's dependencies, so the 2 spam tickets that classify filters are not searched
   reply_round_iter1__draft_reply: {status: completed, success: 4}
   reply_round_iter2__draft_reply__help: {status: completed, success: 2, sent_elsewhere: 2}  # the step takes the round's guard: success: the 2 high-priority tickets, searched again; sent_elsewhere: the 2 that passed in round 1
   reply_round_iter2__draft_reply: {status: completed, success: 2}  # the 2 high-priority tickets, written again

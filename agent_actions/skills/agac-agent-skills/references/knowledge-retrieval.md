@@ -72,7 +72,8 @@ context_scope:
 | `key` | none | the one chunk whose `id` is the query; every source needs `id:`; not mergeable |
 
 Each entry becomes an internal step `<action>__<entry>` (`write_reply__help`), added to the
-action's dependencies and observe. `agac records`, `agac inspect`, `--rerun`,
+action's dependencies and observe. The step has the action's dependencies, so a record
+filtered upstream or sent to another branch is not searched. `agac records`, `agac inspect`, `--rerun`,
 `sandbox_expected.yml` and messages use that name.
 
 Output: `retrieve.help = {matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`.

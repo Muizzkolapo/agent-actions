@@ -387,7 +387,7 @@ The workflow `support_desk` triages six support tickets. It has these actions:
 | `by_queue`, `assigned` | A router that sends each ticket to `billing_team` or `support_team`, and the join of the two branches |
 | `approve_reply` | A HITL action. A sandbox run approves each record |
 | `tag_reply` | A batch action (`run_mode: batch`), with a guard on the HITL status |
-| `draft_reply` (in `reply_round`) | Help-article retrieval: the `retrieve` entry `help` of `draft_reply` searches the knowledge base `help_center` (the files in `knowledge/help_center/`) with the text of the ticket. The prompt puts the matches between `<doc>` tags and asks for their ids in `citations`. Its step in round 1 is `reply_round_iter1__draft_reply__help`, and in round 2 `reply_round_iter2__draft_reply__help`. The search runs for real in a sandbox run. T-1006 matches no article. See [Knowledge Bases and Retrieval](./knowledge.md) |
+| `draft_reply` (in `reply_round`) | Help-article retrieval: the `retrieve` entry `help` of `draft_reply` searches the knowledge base `help_center` (the files in `knowledge/help_center/`) with the text of the ticket. The prompt puts the matches between `<doc>` tags and asks for their ids in `citations`. Its step in round 1 is `reply_round_iter1__draft_reply__help`, and in round 2 `reply_round_iter2__draft_reply__help`. The search runs for real in a sandbox run. The step has the dependencies of `draft_reply`, so the spam tickets are not searched. See [Knowledge Bases and Retrieval](./knowledge.md) |
 
 Its `sandbox.yml` makes faults that heal, so the run completes:
 

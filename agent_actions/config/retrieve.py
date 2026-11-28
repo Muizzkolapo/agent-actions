@@ -292,9 +292,16 @@ def _step(
         "context_scope": {"observe": list(dict.fromkeys(refs))},
         BUILTIN_KEY: spec,
     }
-    dependencies = [reader for reader in readers if reader != "source"]
+    # The action's own dependencies first: upstream filters, cascades and route branches
+    # reach the step exactly as they reach the action.
+    dependencies = list(_dependencies_of(action))
+    dependencies += [r for r in readers if r != "source" and r not in dependencies]
     if dependencies:
         built["dependencies"] = dependencies
+        # Each dependency must be named in the scope; a wildcard never fails a record.
+        _add_observe(built, [f"{d}.*" for d in dependencies if d not in readers])
+    if "version_consumption" in action:
+        built["version_consumption"] = copy.deepcopy(action["version_consumption"])
     if "_include" in action:
         built["_include"] = copy.deepcopy(action["_include"])
     return built
@@ -555,10 +562,15 @@ def _guard_paths(guard: Any) -> list[str] | None:
     return [path for path in referenced_field_paths(parsed.ast.root) if "." in path]
 
 
-def _add_dependencies(action: dict[str, Any], names: Sequence[str]) -> None:
+def _dependencies_of(action: Mapping[str, Any]) -> list[str]:
     dependencies = action.get("dependencies") or []
     if isinstance(dependencies, str):
-        dependencies = [dependencies]
+        return [dependencies]
+    return [d for d in dependencies if isinstance(d, str)]
+
+
+def _add_dependencies(action: dict[str, Any], names: Sequence[str]) -> None:
+    dependencies = _dependencies_of(action)
     added = [name for name in names if name not in dependencies]
     if added:
         action["dependencies"] = [*dependencies, *added]
