@@ -1,0 +1,3 @@
+kind: Under the Hood
+body: CI's test shards run with `--dist worksteal`, so an idle worker takes tests queued for a busy one, and `tests/shard_durations.json` holds the times CI measured for each file.
+time: 2026-11-28T11:00:00.000000+00:00

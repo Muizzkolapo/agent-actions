@@ -85,7 +85,7 @@ jobs:
       - name: Run tests
         # The last line of each log holds the seconds each file took on CI's runners:
         # the times tests/shard_durations.json balances the shards by.
-        run: uv run pytest -n auto --shard ${{ matrix.shard }}/6 --report-shard-durations
+        run: uv run pytest -n auto --dist worksteal --shard ${{ matrix.shard }}/6 --report-shard-durations
 
   test:
     # One check named "Tests", as before the suite was sharded: it passes only when
@@ -129,7 +129,7 @@ jobs:
         run: uv pip list | grep -Ei '^(anthropic|openai|groq|google-genai|cohere|ollama|httpx2?) '
 
       - name: Run provider tests
-        run: uv run pytest -n auto tests/unit/llm tests/unit/llm_invocation tests/unit/validation
+        run: uv run pytest -n auto --dist worksteal tests/unit/llm tests/unit/llm_invocation tests/unit/validation
 
   build:
     name: Build Package
