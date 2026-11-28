@@ -225,9 +225,9 @@ def _refuse_local_retrieve(prompt: str, where: str) -> None:
 
     from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
 
+    env = jinja2.Environment(extensions=PROMPT_EXTENSIONS)  # nosec B701  # parsed, never rendered
     try:
-        # Parsed only, never rendered.
-        ast = jinja2.Environment(extensions=PROMPT_EXTENSIONS).parse(prompt)  # nosec B701
+        ast = env.parse(prompt)
     except jinja2.TemplateError:
         return  # The load reports a prompt that does not parse.
     names = [n.name for n in ast.find_all(nodes.Name) if n.ctx in ("store", "param")]
