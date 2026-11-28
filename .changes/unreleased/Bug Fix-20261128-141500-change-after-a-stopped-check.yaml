@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A change to the staged input made after a batch check stopped (Ctrl-C, a crash, or an error from the provider) is now answered at every action. The next run reset the action to pending, so it was not seen as waiting on its batch: the batch was collected as it was sent, and a record changed or added in its file was lost (#1921).'
+time: 2026-11-28T14:15:00Z

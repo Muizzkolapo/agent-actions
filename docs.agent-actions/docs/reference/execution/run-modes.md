@@ -271,7 +271,8 @@ collects the batch then runs the batch action again in the same run, and keeps i
 That pass sends the records that you added or changed in a new batch, and forgets the records
 that are no longer staged. The actions after the batch action run when that batch is collected.
 Thus every action gets the same records as the first action. This is also true when the batch
-action is the first action of the workflow.
+action is the first action of the workflow, and when a check on the batch stopped before the
+change (Ctrl-C, a crash, or an error from the provider).
 
 In each case, the provider has already answered the records that it got. After a batch is at
 the provider, you pay for its answers, whether the run keeps them or not.

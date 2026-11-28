@@ -96,6 +96,9 @@ logger = logging.getLogger(__name__)
 
 # A reader in one of these only checks its batch on the next run, and reads no input.
 _WAITING_ON_A_BATCH = frozenset({ActionStatus.BATCH_SUBMITTED, ActionStatus.CHECKING_BATCH})
+_RESET_FROM_A_STOPPED_CHECK = frozenset(
+    {ActionStatus.PENDING, ActionStatus.INTERRUPTED, ActionStatus.FAILED}
+)
 
 # Prefix used in skip_reason for cascade failures.  The renderer checks
 # this prefix to distinguish "blocked by upstream" from "guard-filtered".
@@ -816,7 +819,7 @@ class ActionExecutor:
         answer the records added or changed.
         """
         repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
-        if current_status in _WAITING_ON_A_BATCH and not repairing:
+        if not repairing and self._waits_on_a_batch(action_name, current_status):
             self._note_a_staged_change_while_it_waits(action_name, action_config)
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
@@ -997,6 +1000,25 @@ class ActionExecutor:
             why,
         )
 
+    def _waits_on_a_batch(self, action_name: str, status: ActionStatus) -> bool:
+        """Whether *action_name* has a batch out, also once a stopped check left it pending.
+
+        A check that stops with its batch out (an interrupt, a crash, a provider error)
+        leaves the action to be reset to pending at the next run's start.
+        """
+        if status in _WAITING_ON_A_BATCH:
+            return True
+        if status not in _RESET_FROM_A_STOPPED_CHECK:
+            return False
+        backend = getattr(self.deps.action_runner, "storage_backend", None)
+        if backend is None:
+            return False
+        try:
+            return bool(BatchRegistryManager.uncollected_batch_ids(backend, action_name))
+        except Exception as e:
+            logger.debug("Could not read the batches of %s: %s", action_name, e)
+            return False
+
     def _note_a_staged_change_while_it_waits(
         self, action_name: str, action_config: ActionConfigDict
     ) -> None:
@@ -1045,10 +1067,9 @@ class ActionExecutor:
         """
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
         readers = self._stale_readers(action_name)
+        state = self.deps.state_manager
         waiting = [
-            name
-            for name in readers
-            if self.deps.state_manager.get_status(name) in _WAITING_ON_A_BATCH
+            name for name in readers if self._waits_on_a_batch(name, state.get_status(name))
         ]
         if waiting:
             self.deps.state_manager.mark_input_changed_while_it_waited(waiting)
