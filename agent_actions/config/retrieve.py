@@ -694,9 +694,13 @@ def _ref(
         )
     root = names.get(parts[0], parts[0])
     if root != "source" and root not in upstream:
-        known = "an action of the workflow" if root in graph else "no action of the workflow"
+        known = (
+            "an action of the workflow that is not upstream of the action"
+            if root in graph
+            else "no action of the workflow"
+        )
         raise ConfigurationError(
-            f"{where}: '{parts[0]}' is {known} upstream of the action. A query or 'where:' "
+            f"{where}: '{parts[0]}' is {known}. A query or 'where:' "
             "reads source or an action the action depends on.",
             context={"reference": ref},
         )
