@@ -223,12 +223,13 @@ def test_a_record_a_guard_dropped_is_followed_to_the_guard(session):
 
     assert not is_error, text
     trail = json.loads(text[text.index("{") :])
-    classify = next(step for step in trail["actions"] if step["name"] == "classify")
-    assert (classify["disposition"], classify["guard"]) == (
+    stopped = next(step for step in trail["actions"] if step["disposition"] != "success")
+    assert (stopped["disposition"], stopped["guard"]) == (
         "filtered",
         "read_ticket.is_spam == false",
     )
-    assert trail["last"] != "tag_reply"
+    reply = next(step for step in trail["actions"] if step["name"] == "tag_reply")
+    assert reply["disposition"] is None
 
 
 def test_one_action_is_shown_as_the_run_sees_it(session):
