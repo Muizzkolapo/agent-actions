@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'A staged file deleted while its batch was out no longer leaves dispositions behind at a batch action below the first stage. The batch, collected after the records were forgotten, wrote a disposition for each, and the pass that deleted the file kept them, so the action counted them and `agac retry` could name a record no staged file holds (#1939).'
+time: 2026-11-28T14:45:00Z

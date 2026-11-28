@@ -1338,7 +1338,9 @@ def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: li
     """
     gone_set = set(gone)
     _forget_batch_state_of_files_gone(storage_backend, action_name, gone_set.__contains__)
+    held_there = _identities_held(storage_backend, action_name, gone)
     storage_backend.delete_target_files(action_name, gone)
+    _forget_records_only_they_held(storage_backend, action_name, held_there)
     more = len(gone) - _ERROR_SAMPLE_SIZE
     logger.warning(
         "'%s' has no input for %s%s any more, so what it stored for them is deleted. "
@@ -1350,6 +1352,42 @@ def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: li
     )
     if more > 0:
         logger.debug("'%s' deleted what it stored for %s", action_name, ", ".join(gone))
+
+
+def _identities_held(storage_backend: Any, action_name: str, files: list[str]) -> set[str]:
+    try:
+        return {guid for guid, _ in storage_backend.target_row_identities(action_name, files)}
+    except Exception as e:
+        logger.warning(
+            "Could not read the records '%s' stores for input that is gone, so their "
+            "dispositions stay: %s",
+            action_name,
+            e,
+        )
+        return set()
+
+
+def _forget_records_only_they_held(
+    storage_backend: Any, action_name: str, held_there: set[str]
+) -> None:
+    """Forget the dispositions and checkpoints of records no file the action keeps holds.
+
+    A batch collected after its file's input left wrote them; the action's rows are the
+    only record of which these are. A record that moved to a kept file keeps its own.
+    """
+    if not held_there:
+        return
+    try:
+        forgotten = held_there - set(storage_backend.target_rows_per_source_guid(action_name))
+        if forgotten:
+            storage_backend.clear_dispositions_batch(action_name, forgotten)
+            storage_backend.clear_checkpoint_records(action_name, source_guids=forgotten)
+    except Exception as e:
+        logger.warning(
+            "Could not forget the dispositions of the records of '%s' whose input is gone: %s",
+            action_name,
+            e,
+        )
 
 
 _LEFT_BATCH_STATE = "agac clean --all, or a run with --fresh, removes it"

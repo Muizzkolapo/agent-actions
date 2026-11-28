@@ -358,14 +358,18 @@ class StorageBackend(ABC):
             counts[guid] = counts.get(guid, 0) + 1
         return counts
 
-    def target_row_identities(self, action_name: str) -> list[tuple[str, str | None]]:
+    def target_row_identities(
+        self, action_name: str, relative_paths: Iterable[str] | None = None
+    ) -> list[tuple[str, str | None]]:
         """``(source_guid, parent_source_guid)`` of every stored row that has an identity.
 
-        Read as stored, for the reasons :meth:`target_rows_per_source_guid` gives: the
-        envelope is kept whole in a delta row, so nothing here needs reconstructing.
+        Only of the files at *relative_paths*, when given. Read as stored, for the reasons
+        :meth:`target_rows_per_source_guid` gives: the envelope is kept whole in a delta
+        row, so nothing here needs reconstructing.
         """
         identities: list[tuple[str, str | None]] = []
-        for relative_path in self.list_target_files(action_name):
+        paths = self.list_target_files(action_name) if relative_paths is None else relative_paths
+        for relative_path in paths:
             try:
                 rows = self._read_target_raw(action_name, relative_path)
             except FileNotFoundError:
