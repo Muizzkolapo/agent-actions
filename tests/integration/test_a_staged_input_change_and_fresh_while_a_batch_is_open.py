@@ -10,6 +10,7 @@ refuses until the batch is collected, unless `--abandon-in-flight` drops it on p
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -132,7 +133,15 @@ def _stage(root: Path, name: str, records) -> None:
 
 def _run(root: Path, *extra: str):
     result = run_agac(root, "run", "-a", WORKFLOW, "-u", "tools", "--sandbox", *extra)
-    return result.returncode, " ".join((result.stdout + result.stderr).split())
+    output = " ".join((result.stdout + result.stderr).split())
+    _SENT.setdefault(root, []).extend(
+        int(n) for n in re.findall(r"submitted: (\d+) requests", output)
+    )
+    return result.returncode, output
+
+
+# The requests each batch sent, per project, since the batch the fixture leaves open.
+_SENT: dict[Path, list[int]] = {}
 
 
 _SHAPES: dict[Path, str] = {}
@@ -184,6 +193,7 @@ def paused(tmp_path, request):
     root = _project(tmp_path, request.param)
     code, output = _run(root)
     assert code == 4, output
+    assert _SENT.pop(root) == [2, 1], output
     return root
 
 
@@ -194,6 +204,7 @@ class TestAStagedInputChangeWhileABatchIsOpen:
         codes = _collect(paused)
 
         assert codes[-1] == 0
+        assert _SENT[paused] == [1], "the open batch is collected, and only c1 is sent"
         every = ["a1", "a2", "b1", "c1"]
         assert _held(paused) == {action: every for action in _actions(paused)}
 
@@ -203,6 +214,7 @@ class TestAStagedInputChangeWhileABatchIsOpen:
         codes = _collect(paused)
 
         assert codes[-1] == 0
+        assert _SENT.get(paused, []) == []
         assert _held(paused) == {action: ["a1", "a2"] for action in _actions(paused)}
 
     def test_a_record_changed_or_added_in_a_file_is_answered(self, paused):
@@ -211,12 +223,14 @@ class TestAStagedInputChangeWhileABatchIsOpen:
         codes = _collect(paused)
 
         assert codes[-1] == 0
+        assert _SENT[paused] == [2], "the open batch is collected, and only b.json is sent"
         assert _held(paused, "n") == {action: [1, 2, 5, 9] for action in _actions(paused)}
 
     def test_no_change_collects_the_batch_as_before(self, paused):
         codes = _collect(paused)
 
         assert codes[-1] == 0
+        assert _SENT.get(paused, []) == []
         assert _ids(paused, "step3") == ["a1", "a2", "b1"]
 
 
