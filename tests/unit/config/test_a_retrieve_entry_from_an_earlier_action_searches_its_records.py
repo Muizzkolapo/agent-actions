@@ -201,6 +201,16 @@ class TestTheRefusals:
 
         assert "names a tool of granularity File" in _refusal(data, tmp_path)
 
+    def test_a_hitl_action_is_accepted(self, tmp_path):
+        review = _action("review", kind="hitl")
+        data = _workflow(
+            _similar(**{"from": "review"}), extra=[review], depends=("summarize", "review")
+        )
+
+        expanded = expand_retrieves(data, WF, tmp_path)
+
+        assert "link__similar" in {a.get("name") for a in expanded["actions"]}
+
     def test_a_version_group_is_refused(self, tmp_path):
         score = _action("score", versions={"param": "rater", "range": [1, 2]})
         data = _workflow(_similar(**{"from": "score"}), extra=[score], depends=("score",))

@@ -499,7 +499,8 @@ def _refuse_corpus_kind(
     granularity = workflow.granularities.get(source)
     if granularity is None:
         granularity, _ = resolved_granularity(kind, found, defaults)
-    if is_file_granularity(granularity):
+    # A HITL action resolves to File too, yet writes one record per input record.
+    if kind == "tool" and is_file_granularity(granularity):
         raise ConfigurationError(
             f"{where}: 'from: {source}' names a tool of granularity File, which may write "
             "several records for one input record, or none. Name an action with one record "

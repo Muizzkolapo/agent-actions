@@ -299,13 +299,13 @@ A run that adds records adds them to the corpus. The new records search all the 
 link_duplicates: retrieve 'similar' (link_duplicates__similar): 40 records were added since 1,200 earlier answers searched; --rerun link_duplicates__similar to search again
 ```
 
-A record that changed or that left the store is a different matter. A stored match can then show old text, or name a record that is gone. Each run warns once, with the counts, until you search again:
+A record that changed or that left the store is a different matter. A stored match can then show old text, or name a record that is gone. Each run in which the step runs warns once, with the counts, until you search again:
 
 ```
 link_duplicates: retrieve 'similar' (link_duplicates__similar): since 1,200 earlier answers searched the records, 0 changed, 3 left and 3 were added, so those answers may show old text or cite a record that is gone. Run again with --rerun link_duplicates__similar to search again
 ```
 
-The step finds the changes when it compares the index of each stored answer with the current records. An edited input record gets a new `source_guid`, so it counts as one record that left and one that was added. If the index file of a stored answer is gone, the step cannot tell what changed, and each run warns that those answers searched an index that is gone.
+The step finds the changes when it compares the index of each stored answer with the current records. An edited input record gets a new `source_guid`, so it counts as one record that left and one that was added. If the index file of a stored answer is gone, the step cannot tell what changed, and each run of the step warns that those answers searched an index that is gone.
 
 To search again for each record:
 

@@ -103,7 +103,8 @@ class CorpusChange:
         """The log level and line to report, or None when nothing is to be said.
 
         Records only added are reported once, by the run that adds them; changed or
-        removed records, and answers whose index is gone, warn on each run until a rerun.
+        removed records, and answers whose index is gone, warn on each run of the step until
+        a rerun.
         """
         answers = _many(self.stale_answers, "earlier answer", "earlier answers")
         if self.changed or self.removed:
@@ -218,19 +219,15 @@ def corpus_records(
 def _warn_of_missing_fields(
     outputs: Sequence[tuple[str, dict[str, Any]]], settings: CorpusSettings, label: str
 ) -> None:
-    """Warn of a `text` or `title` field no record holds; the load checks only a schema."""
-    if not outputs:
-        return
-    named = [*settings.text, *([settings.title] if settings.title else [])]
-    for name in named:
-        if not any(name in output for _, output in outputs):
-            logger.warning(
-                "%s: no record of action '%s' holds the field '%s', so it adds no text. "
-                "Check the field name",
-                label,
-                settings.action,
-                name,
-            )
+    """Warn when no record holds any `text` field: no record can match (a misspelt name)."""
+    if outputs and not any(output.get(f) for _, output in outputs for f in settings.text):
+        logger.warning(
+            "%s: no record of action '%s' holds text in %s, so no record can match. "
+            "Check the field names",
+            label,
+            settings.action,
+            ", ".join(settings.text),
+        )
 
 
 def corpus_digest(

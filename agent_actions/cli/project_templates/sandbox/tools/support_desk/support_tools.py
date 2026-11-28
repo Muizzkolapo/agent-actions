@@ -17,8 +17,8 @@ KEYWORDS = {
 
 
 def _mentions(text: str, words: tuple[str, ...]) -> bool:
-    # Whole words only: "app" does not match "happy".
-    return any(re.search(rf"\b{re.escape(word)}\b", text) for word in words)
+    # Whole words, with or without a plural "s": "app" matches "apps", not "happy".
+    return any(re.search(rf"\b{re.escape(word)}s?\b", text) for word in words)
 
 
 @udf_tool

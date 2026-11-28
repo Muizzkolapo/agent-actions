@@ -132,13 +132,13 @@ class TestAFieldNoRecordHolds:
         with caplog.at_level(logging.WARNING):
             corpus_records([("g1", _output("T-1"))], settings, LABEL)
 
-        assert "no record of action 'summarize' holds the field 'sumary'" in caplog.text
+        assert "no record of action 'summarize' holds text in sumary" in caplog.text
 
-    def test_a_field_one_record_holds_does_not_warn(self, caplog):
+    def test_a_text_field_one_record_holds_does_not_warn(self, caplog):
         settings = CorpusSettings("summarize", ("summary", "note"))
         outputs = [("g1", _output("T-1")), ("g2", _output("T-2", note="see T-1"))]
 
         with caplog.at_level(logging.WARNING):
             corpus_records(outputs, settings, LABEL)
 
-        assert "holds the field" not in caplog.text
+        assert "holds text in" not in caplog.text
