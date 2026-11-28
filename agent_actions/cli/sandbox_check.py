@@ -1,8 +1,8 @@
 """`agac sandbox check`: run a workflow in the sandbox and compare the result with a file.
 
 The expected outcomes are in ``sandbox_expected.<workflow>.yml`` or ``sandbox_expected.yml``
-at the project root. The run is ``agac run --sandbox --fresh --wait``, so it clears and
-writes the sandbox output only, never the output of a real run.
+at the project root. The run is ``agac run --sandbox --fresh --abandon-in-flight --wait``,
+so it clears and writes the sandbox output only, never the output of a real run.
 """
 
 from __future__ import annotations
@@ -238,7 +238,7 @@ def run_in_sandbox(
     execution_mode: str,
     holding_the_lock: Callable[[], AbstractContextManager[object]] | None = None,
 ) -> int:
-    """`agac run --sandbox --fresh --wait` in this process; its exit code."""
+    """`agac run --sandbox --fresh --abandon-in-flight --wait` in this process; its exit code."""
     from agent_actions.cli.args import RunCommandArgs
     from agent_actions.cli.exit_codes import EXIT_FAILED, EXIT_SUCCESS
     from agent_actions.cli.run import RunCommand
@@ -254,6 +254,8 @@ def run_in_sandbox(
         record_limit=None,
         file_limit=None,
         fresh=True,
+        # A check starts from nothing: a mock batch an earlier sandbox run left open goes.
+        abandon_in_flight=True,
         refresh_input=False,
         rerun=(),
         where=None,
@@ -453,8 +455,8 @@ def check(
 ) -> None:
     """Run a workflow in the sandbox and check the result against the expected outcomes.
 
-    The run is agac run --sandbox --fresh --wait: it clears and writes the sandbox
-    output only. Read that output after the check with --sandbox.
+    The run is agac run --sandbox --fresh --abandon-in-flight --wait: it clears and writes
+    the sandbox output only. Read that output after the check with --sandbox.
 
     \b
     Exit codes: 0 every expectation holds, 1 one or more do not hold or the

@@ -11,7 +11,7 @@ Use this page when an action produced bad output in a large run, and the actions
 | Some records failed for a transient reason (rate limit, timeout) | `agac retry -w <workflow> --all` |
 | One record can never succeed (input too large, input empty) | `agac retry -w <workflow> --filter <action>:<record_id> --reason "<why>"` |
 | The output of an action is good, but the next action read the wrong field of it | Add a recovery tool action (section 2), then `--rerun` the recovery action |
-| The staging input itself was wrong | `agac run -w <workflow> -u tools --fresh` (all output is lost) |
+| The staging input itself was wrong | `agac run -w <workflow> -u tools --fresh` (all output is lost; while a batch is open, add `--abandon-in-flight`, which drops the paid batch) |
 
 A config edit alone runs nothing again. The edited action keeps its output until you give `--rerun`. See run (docs: `reference/cli/run#when-you-edit-the-workflow`).
 

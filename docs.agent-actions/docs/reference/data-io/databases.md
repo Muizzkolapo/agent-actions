@@ -134,7 +134,7 @@ that fails leaves the snapshot there was. `--refresh-input` is refused, before
 anything else happens, while a batch is still open, since the batch answers the
 rows it was sent. So is a change to the query, the file count or the connection's
 settings while the start action's batch is open: put it back until the batch is
-collected, or run with `--fresh`.
+collected, or run with `--fresh --abandon-in-flight`.
 
 A record's identity is its content, so after a refresh:
 

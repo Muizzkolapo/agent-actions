@@ -50,7 +50,11 @@ def emptied(tmp_path_factory):
     resumed = _agac(project)
     _held_out(project, batch, held=False)
     return SimpleNamespace(
-        project=project, held_before=held_before, resumed=resumed, collected=_collect(project)
+        project=project,
+        batch=batch,
+        held_before=held_before,
+        resumed=resumed,
+        collected=_collect(project),
     )
 
 
@@ -67,4 +71,7 @@ def test_the_emptied_file_is_stored_empty_and_the_other_is_answered(emptied):
 
 
 def test_its_batch_is_collected_rather_than_dropped(emptied):
-    assert _registry(emptied.project)["a_pages.json"]["collected_at"] is not None
+    """Collected; a later pass that finds the file empty may then forget its entry."""
+    assert f"Batch {emptied.batch} OK" in "".join(run.output for run in emptied.collected)
+    entry = _registry(emptied.project).get("a_pages.json")
+    assert entry is None or entry["collected_at"] is not None

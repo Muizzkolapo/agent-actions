@@ -151,6 +151,7 @@ def _run(args: dict[str, Any]) -> list[str]:
     argv += _flag("records", args.get("_records_file"))
     argv += _switch("dry-run", args.get("dry_run"))
     argv += _switch("fresh", args.get("fresh"))
+    argv += _switch("abandon-in-flight", args.get("abandon_in_flight"))
     argv += _flag("record-limit", args.get("record_limit"))
     argv += _flag("file-limit", args.get("file_limit"))
     argv += _flag("user-code", args.get("user_code"))
@@ -262,7 +263,16 @@ TOOLS: tuple[Tool, ...] = (
             },
             "fresh": {
                 **BOOLEAN,
-                "description": "Clear this workflow's stored results and status first",
+                "description": (
+                    "Clear this workflow's stored results and status first. Refused while "
+                    "a batch is open, unless abandon_in_flight is also true"
+                ),
+            },
+            "abandon_in_flight": {
+                **BOOLEAN,
+                "description": (
+                    "With fresh: drop a batch that is not collected yet, giving up its results"
+                ),
             },
             "wait": {
                 **BOOLEAN,

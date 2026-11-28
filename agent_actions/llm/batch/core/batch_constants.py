@@ -86,8 +86,9 @@ def _refuse_unknown(kind: str, value: str, known: type[Enum]) -> None:
         raise mark_action_fatal(
             UnknownRecoveryState(
                 f"The stored recovery {kind} '{value}' is not one this version knows, "
-                f"so its batch cannot be resumed. Run the workflow with `agac run --fresh` "
-                f"to start it over; that removes the workflow's stored results."
+                f"so its batch cannot be resumed. Run the workflow with "
+                f"`agac run --fresh --abandon-in-flight` to start it over; that removes the "
+                f"workflow's stored results."
             )
         )
 

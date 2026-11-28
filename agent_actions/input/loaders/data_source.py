@@ -351,7 +351,7 @@ def _resolve_database(
             f"The database source of '{agent_name}' changed (its sql, files or connection "
             "settings), but a batch is still open for it, and reading the query again "
             "would forget the rows the batch is answering. Put the source back until the "
-            "batch is collected, or run with --fresh to discard the batch",
+            "batch is collected, or run with --fresh --abandon-in-flight to discard the batch",
             context={"action": agent_name, "connection": config.connection},
         )
 

@@ -36,7 +36,8 @@ def emptied(tmp_path_factory):
     assert _agac(project, "--fresh").status == "batch_submitted"
     _staging(project, "a_pages.json").write_text(json.dumps([]))
     assert _agac(project, STOP_AT="a_pages.json").code != 0
-    return SimpleNamespace(project=project, collected=_collect(project))
+    batch = _registry(project)["a_pages.json"]["batch_id"]
+    return SimpleNamespace(project=project, batch=batch, collected=_collect(project))
 
 
 def test_the_action_completes(emptied):
@@ -52,4 +53,7 @@ def test_the_emptied_file_is_stored_empty_and_the_other_keeps_its_answers(emptie
 
 
 def test_its_batch_is_collected_rather_than_dropped(emptied):
-    assert _registry(emptied.project)["a_pages.json"]["collected_at"] is not None
+    """Collected; the pass that then answers the staged change forgets the empty file's entry."""
+    assert f"Batch {emptied.batch} OK" in "".join(run.output for run in emptied.collected)
+    entry = _registry(emptied.project).get("a_pages.json")
+    assert entry is None or entry["collected_at"] is not None

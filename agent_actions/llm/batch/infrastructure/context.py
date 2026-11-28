@@ -197,7 +197,8 @@ class BatchContextManager:
             if context_map is None:
                 raise ProcessingError(
                     f"Context map not found for {action_name}/{batch_name}. "
-                    "Re-run the action with --fresh to rebuild its batch state.",
+                    "Re-run the action with --fresh --abandon-in-flight to rebuild its batch "
+                    "state.",
                     context={"action_name": action_name, "batch_name": batch_name},
                 )
             logger.debug(

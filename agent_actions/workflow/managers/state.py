@@ -77,6 +77,11 @@ KEPT_ANSWERS_UNDER = "kept_answers_under"
 # Removed when a reset answers everything again.
 ANSWERS_UNDER_MORE_THAN_ONE_CONFIG = "answers_under_more_than_one_config"
 
+# Status detail: the staged input changed while the action waited on a batch. Once the
+# batch is collected, the action runs again, keeping its answers, to answer the change.
+# Removed when the action is reopened (`reopen`).
+INPUT_CHANGED_WHILE_IT_WAITED = "input_changed_while_it_waited"
+
 
 _CORRUPTED_STATUS_FILE_HINT = (
     "Edit the status file so that each action maps to an object such as "
@@ -189,7 +194,17 @@ class ActionStateManager:
                 details.pop(REPAIRED_BY, None)
                 details.pop(KEPT_ANSWERS_UNDER, None)
                 details.pop(ANSWERS_UNDER_MORE_THAN_ONE_CONFIG, None)
+                details.pop(INPUT_CHANGED_WHILE_IT_WAITED, None)
             self._save_status()
+
+    def mark_input_changed_while_it_waited(self, action_names: Iterable[str]) -> None:
+        with self._lock:
+            for name in action_names:
+                self.action_status.setdefault(name, {})[INPUT_CHANGED_WHILE_IT_WAITED] = True
+            self._save_status()
+
+    def input_changed_while_it_waited(self, action_name: str) -> bool:
+        return bool(self.action_status.get(action_name, {}).get(INPUT_CHANGED_WHILE_IT_WAITED))
 
     def forget_mixed_answers(self, action_names: Iterable[str]) -> None:
         """Drop the markers of answers kept from another config: none of them remains."""

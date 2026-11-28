@@ -175,7 +175,7 @@ not read again the files that a run already read.
 
 A run that cannot reach the provider while it checks whether its batches have finished pauses
 in the same way. The run continues to pause for as long as the provider cannot be
-asked. To abandon those batches, use `agac run --fresh`. This command sends each record of the
+asked. To abandon those batches, use `agac run --fresh --abandon-in-flight`. This command sends each record of the
 workflow again.
 
 ### When the run cannot read the results of one file
@@ -264,8 +264,14 @@ stopped partway. The second case is after a run that checked on the batch was in
 departed record into the file, as online mode does.
 
 A file that all its records left waits for its batch like any other file. Then the system stores
-the file empty. A run that only collects does not read the input again. Thus that run still
-writes the answer of a departed record into the file.
+the file empty. This is also true for a file whose input is gone completely.
+
+A change to the staged input while a batch is out is answered after the batch. The run that
+collects the batch then runs the batch action again in the same run, and keeps its answers.
+That pass sends the records that you added or changed in a new batch, and forgets the records
+that are no longer staged. The actions after the batch action run when that batch is collected.
+Thus every action gets the same records as the first action. This is also true when the batch
+action is the first action of the workflow.
 
 In each case, the provider has already answered the records that it got. After a batch is at
 the provider, you pay for its answers, whether the run keeps them or not.
