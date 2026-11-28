@@ -12,9 +12,11 @@ Agent Actions makes artifacts for debugging, for audits and to resume interrupte
 ```
 project/
 ├── .agac/
-│   └── batch_state/                    # What an offline-provider batch was submitted with,
-│                                       # so the run that collects it can find it. Reclaimed
-│                                       # when the batch registry stops naming the batch.
+│   ├── batch_state/                    # What an offline-provider batch was submitted with,
+│   │                                   # so the run that collects it can find it. Reclaimed
+│   │                                   # when the batch registry stops naming the batch.
+│   └── knowledge/<base>/               # The indexes of each knowledge base, and the snapshots
+│                                       # of its database sources
 ├── artefact/
 │   ├── catalog.json                    # Project catalog (agac docs)
 │   ├── runs.json                       # Workflow execution history (agac run + agac docs)
@@ -24,6 +26,8 @@ project/
         └── agent_io/
             ├── .agent_status.json      # Per-action execution state
             ├── staging/                # Input data
+            ├── retrieve/<step>/        # The index of the records that a retrieve step searches;
+            │                           # agent_io/sandbox/retrieve/ in a sandbox run
             ├── store/
             │   └── {workflow_name}.db  # SQLite storage backend
             ├── logs/
@@ -37,6 +41,8 @@ project/
                 └── {action_name}/      # Output location named in run_results.json. Records live in
                                         # the store; `agac batch retrieve` writes results here
 ```
+
+`.agac/knowledge/` holds the indexes of the knowledge bases and the snapshots of their database sources. `agent_io/retrieve/` holds the indexes of the action records that a `retrieve` entry searches. A run builds a missing index again. A run with no snapshot of a database source connects to the database, and a sandbox run stops. See [When indexes are built](../../guides/knowledge.md#when-indexes-are-built) and [The index](../../guides/knowledge.md#the-index).
 
 ## Runtime Artifacts
 

@@ -537,6 +537,7 @@ project/
         ├── agent_io/
         │   ├── staging/        # Input data (starting point)
         │   ├── store/          # SQLite database holding every action's output
+        │   ├── retrieve/       # Indexes of the action records that a retrieve entry searches (generated)
         │   └── logs/           # events.json, run_results.json
         ├── schema/             # Workflow-level schemas (optional)
         ├── seed_data/          # This workflow's own reference data
@@ -551,7 +552,7 @@ project/
 | **Tools** | `tools/` and the other folders in `tool_path` | — | Found through `tool_path`. The `tool_path` of a workflow has priority |
 | **Prompts** | `prompt_store/` | `workflow/prompt_store/` | Either or both. Searched recursively |
 | **Seed Data** | `seed_data/` and the folders of `seed_data_paths` | `workflow/seed_data/` | Searched in that order, workflow first. A shared file exists one time. See [Seed Data](../context/seed-data#shared-folders) |
-| **Input/Output** | — | `workflow/agent_io/` | Always workflow-level |
+| **Input/Output** | — | `workflow/agent_io/` | Always workflow-level. `agent_io/retrieve/` holds the indexes of the [records of an earlier action](../../guides/knowledge.md#retrieve-from-an-earlier-action) that a `retrieve` entry searches |
 | **Knowledge bases** | `knowledge/<base>/` by convention, and the paths that `knowledge:` names | — | Declared in `agent_actions.yml`. Indexes are built in `.agac/knowledge/<base>/`. See [Knowledge Bases and Retrieval](../../guides/knowledge.md) |
 
 This structure keeps your workflows organized and permits reuse. Shared schemas make sure that data contracts are consistent. The seed folder of a workflow customizes that workflow. A shared seed folder holds what each workflow reads.

@@ -261,6 +261,7 @@ Context scope controls what data flows between actions. It keeps prompts focused
 | `observe` | Fields sent to the LLM prompt/context |
 | `drop` | Fields excluded from context entirely |
 | `passthrough` | Fields attached to the output. The LLM does not receive these fields |
+| `retrieve` | A search that gives each record the matching passages of a knowledge base, or of the records of an earlier action. See [Knowledge Bases and Retrieval](../guides/knowledge.md) |
 
 ```yaml
 context_scope:

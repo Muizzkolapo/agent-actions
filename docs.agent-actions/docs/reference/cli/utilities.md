@@ -40,8 +40,11 @@ my-project/
 ├── prompt_store/          # Prompt templates
 ├── templates/             # Jinja2 templates for config rendering
 ├── tools/                 # Custom tools
-└── seed_data/             # Static reference data
+├── seed_data/             # Static reference data
+└── .gitignore             # Holds .agac/, the derived state such as the knowledge indexes
 ```
+
+`agac init` and `agac init example` add the line `.agac/` to the `.gitignore` of the project. If the file does not exist, the command writes it. The `.agac/` folder holds derived state, for example the [knowledge indexes](../../guides/knowledge.md#when-indexes-are-built). Agent Actions builds that state again from your files, so do not commit it.
 
 The command gives you a working start point with sensible defaults. It is similar to `npm init` or `git init`.
 
@@ -185,6 +188,8 @@ The command removes these items:
 - `agent_io/retrieve/`: the indexes of the records that a [`retrieve` entry](../../guides/knowledge.md#retrieve-from-an-earlier-action) searches (only with `--all`).
 - The output of [sandbox runs](../../guides/sandbox.md): `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db` (only with `--all`). `--target` does not remove `agent_io/sandbox/target/`.
 - The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data. The real store and the sandbox store each name the batches of their own runs, and the command reclaims the data of each.
+
+The command does not remove the indexes of the [knowledge bases](../../guides/knowledge.md) in `.agac/knowledge/`. All workflows of the project share them. To remove the old index files, run `agac knowledge build --prune`.
 
 **Options:**
 | Option | Description |

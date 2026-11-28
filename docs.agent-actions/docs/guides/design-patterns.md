@@ -998,6 +998,7 @@ To build tools, see [Custom Tools](./custom-tools).
 | Automatic error recovery | Iterative Refinement |
 | Flexible request handling | Coordinator |
 | AI together with deterministic logic | Tool + LLM Hybrid |
+| Answers from a large reference, or from what other records produced | Retrieval: `context_scope.retrieve` (see [Knowledge Bases and Retrieval](./knowledge.md)) |
 
 Most real workflows use two or more patterns together. For example, a product review analyzer might use these patterns:
 
@@ -1093,3 +1094,4 @@ These features make the patterns possible:
 - **[Granularity](../reference/execution/granularity)**: Record and file modes
 - **[Context Scope](../reference/context/context-scope)**: Control of the data flow
 - **[Expectations](../reference/validation/expectations.md)**: Automatic refinement on failures
+- **[Knowledge Bases and Retrieval](./knowledge.md)**: A local search that gives each record the matching passages of a large reference

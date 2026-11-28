@@ -261,7 +261,7 @@ context_scope:
 
 The load turns each entry into an internal step named `<action>__<entry>`, for example `write_reply__help`. The step has the dependencies of the action, so it searches only for the records that reach the action. The load adds the step to the dependencies of the action and the step's output to the `observe` of the action. `retrieve.help` in a prompt or a guard is the output of that step. `agac records`, `agac inspect`, `--rerun` and the messages name the step.
 
-The output of each entry is `{matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`. With `from: <action>`, a record is never one of its own matches.
+The output of each entry is `{matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`. With `from: <action>`, a record is never one of its own matches. The step knows the record by its `source_guid`, so below a step that splits records, a record can match the record that it came from. See [Limits](../../guides/knowledge.md#limits-of-an-action-corpus).
 
 The load refuses these entries:
 
