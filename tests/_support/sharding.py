@@ -5,8 +5,10 @@ each to the shard with the least time so far, from the seconds `SHARD_DURATIONS`
 per file; a file it does not list counts as the median. A file stays whole, so a
 module-scoped fixture is built once. Every file lands in exactly one shard.
 
-``pytest --store-shard-durations`` rewrites `SHARD_DURATIONS` from the run: the time of
-each test's setup, call and teardown, summed per file.
+``pytest --store-shard-durations`` updates `SHARD_DURATIONS` from the run: the time of
+each test's setup, call and teardown, summed per file; a file the run did not reach keeps
+its entry. ``--report-shard-durations`` prints the same seconds as one line,
+``shard durations: {...}``, so a CI log carries the times CI's runners take.
 """
 
 from __future__ import annotations
@@ -33,7 +35,13 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--store-shard-durations",
         action="store_true",
         default=False,
-        help="Write the seconds each test file took to tests/shard_durations.json",
+        help="Update tests/shard_durations.json with the seconds each test file took",
+    )
+    group.addoption(
+        "--report-shard-durations",
+        action="store_true",
+        default=False,
+        help="Print the seconds each test file took as one 'shard durations:' JSON line",
     )
 
 
@@ -91,10 +99,23 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     _seconds[report.nodeid.split("::", 1)[0]] += report.duration
 
 
+def _measured() -> dict[str, float]:
+    return {name: round(seconds, 2) for name, seconds in sorted(_seconds.items())}
+
+
 def pytest_sessionfinish(session: pytest.Session) -> None:
     config = session.config
     # Under xdist the controller sees every report; a worker writes nothing.
     if not config.getoption("--store-shard-durations") or hasattr(config, "workerinput"):
         return
-    rounded = {name: round(seconds, 2) for name, seconds in sorted(_seconds.items())}
-    SHARD_DURATIONS.write_text(json.dumps(rounded, indent=0) + "\n")
+    SHARD_DURATIONS.write_text(json.dumps(updated(_durations(), _measured()), indent=0) + "\n")
+
+
+def updated(recorded: dict[str, float], measured: dict[str, float]) -> dict[str, float]:
+    """*recorded* with the files of *measured* timed anew; every other file keeps its time."""
+    return dict(sorted({**recorded, **measured}.items()))
+
+
+def pytest_terminal_summary(terminalreporter, config: pytest.Config) -> None:
+    if config.getoption("--report-shard-durations") and not hasattr(config, "workerinput"):
+        terminalreporter.write_line("shard durations: " + json.dumps(_measured()))

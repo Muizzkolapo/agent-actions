@@ -63,10 +63,10 @@ jobs:
           done
 
   test-shard:
-    # The suite runs as SHARDS jobs at once, each on all the runner's cores. A shard
+    # The suite runs as 6 jobs at once, each on all the runner's cores. A shard
     # holds whole test files, balanced by tests/shard_durations.json
     # (tests/_support/sharding.py); every file runs in exactly one shard.
-    name: Tests (shard ${{ matrix.shard }} of 4)
+    name: Tests (shard ${{ matrix.shard }} of 6)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -83,7 +83,9 @@ jobs:
         uses: ./.github/actions/setup-python
 
       - name: Run tests
-        run: uv run pytest -n auto --shard ${{ matrix.shard }}/4
+        # The last line of each log holds the seconds each file took on CI's runners:
+        # the times tests/shard_durations.json balances the shards by.
+        run: uv run pytest -n auto --shard ${{ matrix.shard }}/6 --report-shard-durations
 
   test:
     # One check named "Tests", as before the suite was sharded: it passes only when
