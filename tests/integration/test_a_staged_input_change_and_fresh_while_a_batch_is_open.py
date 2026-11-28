@@ -115,16 +115,9 @@ def _run(root: Path, *extra: str):
 
 
 def _ids(root: Path, action: str) -> list[str]:
+    """The record ids an action stored: every row carries step1's namespace."""
     result = run_agac(
-        root,
-        "records",
-        "-w",
-        WORKFLOW,
-        "--sandbox",
-        "-A",
-        action,
-        "--field",
-        f"content.{action}.id",
+        root, "records", "-w", WORKFLOW, "--sandbox", "-A", action, "--field", "content.step1.id"
     )
     assert result.returncode == 0, result.stdout + result.stderr
     return sorted(json.loads(result.stdout))
