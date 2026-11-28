@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.knowledge.methods import INDEX_FOR_METHOD, METHODS
 
 API_MODULE = "agent_actions.knowledge.api"
 
@@ -44,14 +45,9 @@ def install_fake_knowledge(monkeypatch: Any, *bases: FakeBase) -> FakeKnowledge:
     """Put a fake ``agent_actions.knowledge.api`` in place for the test."""
     fake = FakeKnowledge(bases={base.name: base for base in bases})
     module = types.ModuleType(API_MODULE)
-    module.KNOWN_METHODS = frozenset({"keyword", "all_words", "phrase", "fuzzy", "key"})  # type: ignore[attr-defined]
-    module.INDEX_FOR_METHOD = {  # type: ignore[attr-defined]
-        "keyword": "keyword",
-        "all_words": "keyword",
-        "phrase": "keyword",
-        "fuzzy": "fuzzy",
-        "key": "key",
-    }
+    # The real names, so the fake cannot drift from the methods the load checks against.
+    module.KNOWN_METHODS = frozenset(METHODS)  # type: ignore[attr-defined]
+    module.INDEX_FOR_METHOD = dict(INDEX_FOR_METHOD)  # type: ignore[attr-defined]
     module.KnowledgeConfigError = KnowledgeConfigError  # type: ignore[attr-defined]
 
     def load_knowledge_config(project_root: Path) -> dict[str, FakeBase]:

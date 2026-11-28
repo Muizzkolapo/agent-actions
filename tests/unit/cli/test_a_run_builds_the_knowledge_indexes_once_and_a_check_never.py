@@ -93,7 +93,7 @@ def test_a_command_that_loads_the_workflow_without_running_it_builds_no_index(
 
     result = _agac(*command, "-w", "support_desk")
 
-    assert "Usage" not in result.output, result.output
+    assert result.exit_code == 0, result.output
     assert len(knowledge.ensured) == built
 
 
@@ -126,5 +126,6 @@ def test_a_scenario_cannot_stub_a_retrieve_step(project, knowledge):
 
     result = _agac("inspect", "-w", "support_desk", "--sandbox")
 
+    assert result.exit_code != 0, result.output
     assert "is a retrieve step" in " ".join(result.output.split())
     assert knowledge.ensured == []

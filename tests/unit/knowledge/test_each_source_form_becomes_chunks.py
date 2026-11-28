@@ -13,7 +13,6 @@ import pytest
 import yaml
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.knowledge import config as config_module
 from agent_actions.knowledge.chunks import chunk, scan
 from agent_actions.knowledge.config import load_knowledge
 from tests.unit.knowledge.conftest import make_project
@@ -188,7 +187,20 @@ def test_a_file_over_the_size_limit_is_refused(tmp_path, monkeypatch):
 
     with pytest.raises(ConfigurationError, match="a source file may hold at most"):
         _chunks(root)
-    assert config_module.MAX_FILE_BYTES > 10
+    (root / "kb" / "a.md").write_text("x" * 10, encoding="utf-8")
+    assert [c.text for c in _chunks(root)] == ["x" * 10]
+
+
+def test_a_symlink_that_leaves_the_project_is_refused(tmp_path):
+    outside = tmp_path / "outside.md"
+    outside.write_text("# Secret\n\nText.", encoding="utf-8")
+    root = make_project(
+        tmp_path / "p", {"kb/a.md": "# A\n\nText."}, {"kb": {"sources": ["kb/*.md"]}}
+    )
+    (root / "kb" / "link.md").symlink_to(outside)
+
+    with pytest.raises(ConfigurationError, match="which is outside the project"):
+        _chunks(root)
 
 
 def _sqlite_project(tmp_path):

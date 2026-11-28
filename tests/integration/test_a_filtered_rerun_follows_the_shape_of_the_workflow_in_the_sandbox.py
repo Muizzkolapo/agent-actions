@@ -107,6 +107,17 @@ def test_only_the_named_action_and_what_reads_it_run_on_the_matching_tickets(pro
     assert {name: int(count) for name, count in RAN.findall(output)} == ran, output[-3000:]
 
 
+def test_a_filtered_rerun_of_an_action_does_not_search_again(project):
+    result = _rerun(project, "reply_round_iter1__draft_reply", "--wait")
+
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output[-3000:]
+    ran = dict(RAN.findall(output))
+    assert ran["reply_round_iter1__draft_reply"] == "2"
+    # Its retrieve step keeps its matches: name the step to search again.
+    assert "reply_round_iter1__draft_reply__help" not in ran
+
+
 def test_a_batch_action_pauses_the_rerun_and_a_plain_run_collects_it(project):
     paused = _rerun(project, "tag_reply")
 
