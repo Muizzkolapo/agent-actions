@@ -15,7 +15,8 @@ scenario:
 # Per action: its status, and the record counts of `agac dispositions --sandbox`.
 actions:
   read_ticket: {status: completed, records: 6}
-  classify: {status: completed, records: 4, total: 6, success: 4, filtered: 2}  # 6 reach it (total); the guard filters the 2 spam tickets, so 4 are stored (records)
+  classify__similar: {status: completed, success: 4, filtered: 2}  # the retrieve step of classify (similar tickets from read_ticket): it takes classify's guard, so it filters the 2 spam tickets
+  classify: {status: completed, records: 4, total: 4, success: 4}  # its retrieve step filtered the 2 spam tickets already, so 4 reach it
   score_1: {status: completed, success: 4}
   score_2: {status: completed, success: 4}
   merge_scores: {status: completed, success: 4}

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.knowledge import api as real_api
 from agent_actions.knowledge.methods import INDEX_FOR_METHOD, METHODS
 
 API_MODULE = "agent_actions.knowledge.api"
@@ -69,5 +70,8 @@ def install_fake_knowledge(monkeypatch: Any, *bases: FakeBase) -> FakeKnowledge:
     module.knowledge_hash = knowledge_hash  # type: ignore[attr-defined]
     module.ensure_indexes = ensure_indexes  # type: ignore[attr-defined]
     module.retrieve = retrieve  # type: ignore[attr-defined]
+    # A search of an earlier action's records reads no knowledge base: the real functions.
+    for name in ("index_action_corpus", "action_corpus_change", "retrieve_from_corpus"):
+        setattr(module, name, getattr(real_api, name))
     monkeypatch.setitem(sys.modules, API_MODULE, module)
     return fake

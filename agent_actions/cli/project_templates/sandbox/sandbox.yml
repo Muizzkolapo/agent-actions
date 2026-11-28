@@ -4,7 +4,7 @@
 # Each fault heals on the second attempt of its record, so the run completes and
 # you see the recovery paths work: retry, repair and the batch retry.
 
-seed: 3
+seed: 2
 
 actions:
   # The first answer of each record breaks the reference_format rule.

@@ -6,6 +6,8 @@ Give it a reference in the form REF-0000, and summarise it in one sentence.
 
 Ticket {{ read_ticket.ticket_id }}:
 {{ read_ticket.text }}
+
+Similar tickets: {% for m in retrieve.similar.matches %}{{ m.id }} {% else %}none{% endfor %}
 {end_prompt}
 
 {prompt Score}

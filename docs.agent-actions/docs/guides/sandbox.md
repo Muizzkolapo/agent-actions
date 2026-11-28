@@ -380,8 +380,8 @@ The workflow `support_desk` triages six support tickets. It has these actions:
 
 | Action | Feature |
 |--------|---------|
-| `read_ticket` | A tool action. Plain Python in `tools/support_desk/`, with no network. It marks spam and picks a queue |
-| `classify` | A guard that filters the two spam tickets. An `expect:` block with `repair: auto` and an `llm_judge` rule with `severity: warn` |
+| `read_ticket` | A tool action. Plain Python in `tools/support_desk/`, with no network. It marks spam, picks a queue and gives each ticket canonical `keywords` |
+| `classify` | A guard that filters the two spam tickets. An `expect:` block with `repair: auto` and an `llm_judge` rule with `severity: warn`. Retrieval from an earlier action: the `retrieve` entry `similar` searches the records of `read_ticket` for tickets like this one, and the prompt lists their ids. Its step is `classify__similar`. It takes the guard of `classify`, so the step filters the spam tickets before `classify`. T-1001 and T-1005 find each other through the keyword `billing`. See [Retrieve from an earlier action](./knowledge.md#retrieve-from-an-earlier-action) |
 | `score`, `merge_scores` | Versions: two raters, `score_1` and `score_2`, and the merge of the two (`version_consumption`) |
 | `reply_round` | A loop: write a reply, then check it. A high-priority reply passes its check in round 2 |
 | `by_queue`, `assigned` | A router that sends each ticket to `billing_team` or `support_team`, and the join of the two branches |

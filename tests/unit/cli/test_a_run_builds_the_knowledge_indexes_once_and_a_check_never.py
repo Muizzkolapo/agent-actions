@@ -33,13 +33,12 @@ def project(tmp_path, monkeypatch):
     workflow = root / WORKFLOW
     data = yaml.safe_load(workflow.read_text())
     actions = {a.get("name"): a for a in data["actions"]}
-    actions["classify"]["context_scope"]["retrieve"] = {
-        "help": {
-            "from": "help_center",
-            "query": ["read_ticket.text"],
-            "where": {"product": "read_ticket.queue"},
-            "top_k": 3,
-        }
+    # Beside the template's own entry `similar`, which searches the records of read_ticket.
+    actions["classify"]["context_scope"]["retrieve"]["help"] = {
+        "from": "help_center",
+        "query": ["read_ticket.text"],
+        "where": {"product": "read_ticket.queue"},
+        "top_k": 3,
     }
     actions["billing_team"]["context_scope"]["retrieve"] = {
         "policy": {"from": "help_center", "method": ["keyword", "fuzzy"], "query": "source.text"}
@@ -48,9 +47,8 @@ def project(tmp_path, monkeypatch):
     prompts = root / "prompt_store/support_desk.md"
     prompts.write_text(
         prompts.read_text().replace(
-            "{{ read_ticket.text }}\n{end_prompt}",
-            "{{ read_ticket.text }}\n"
-            "{% for m in retrieve.help.matches %}{{ m.text }}{% endfor %}\n{end_prompt}",
+            "\nSimilar tickets:",
+            "{% for m in retrieve.help.matches %}{{ m.text }}{% endfor %}\nSimilar tickets:",
             1,
         )
     )
