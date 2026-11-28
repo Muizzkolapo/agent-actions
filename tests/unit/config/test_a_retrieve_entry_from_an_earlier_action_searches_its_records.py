@@ -194,6 +194,13 @@ class TestTheRefusals:
 
         assert "names a tool of granularity File" in _refusal(data, tmp_path)
 
+    def test_a_tool_that_inherits_file_granularity_from_the_project_is_refused(self, tmp_path):
+        (tmp_path / "agent_actions.yml").write_text("default_agent_config:\n  granularity: file\n")
+        tool = {"name": "files", "kind": "tool", "impl": "f"}
+        data = _workflow(_similar(**{"from": "files"}), extra=[tool], depends=("files",))
+
+        assert "names a tool of granularity File" in _refusal(data, tmp_path)
+
     def test_a_version_group_is_refused(self, tmp_path):
         score = _action("score", versions={"param": "rater", "range": [1, 2]})
         data = _workflow(_similar(**{"from": "score"}), extra=[score], depends=("score",))
@@ -208,6 +215,21 @@ class TestTheRefusals:
         data = _workflow(_similar(**{"from": "score_1"}), extra=[score], depends=("score",))
 
         assert "'from: score_1' names a version of 'score'" in _refusal(data, tmp_path)
+
+    def test_an_action_a_router_reads_is_upstream_of_its_branches(self, tmp_path):
+        scope = {"observe": ["summarize.*"], "retrieve": _similar()}
+        data = {
+            "name": "wf",
+            "actions": [
+                _action("summarize"),
+                {"route": "by_queue", "on": "summarize.queue", "cases": {"a": ["link"]}},
+                _action("link", context_scope=scope),
+            ],
+        }
+
+        expanded = expand_retrieves(data, WF, tmp_path)
+
+        assert "link__similar" in {a.get("name") for a in expanded["actions"]}
 
     def test_a_router_is_refused(self, tmp_path):
         router = {"route": "by_queue", "on": "summarize.queue", "cases": {"a": ["x"]}}

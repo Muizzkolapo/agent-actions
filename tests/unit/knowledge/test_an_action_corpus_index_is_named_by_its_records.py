@@ -133,7 +133,8 @@ class TestWhatChangedSinceAnAnswer:
 
     def test_a_removed_record_gives_a_warning(self, tmp_path):
         first = self._first(tmp_path, a="one", b="two")
-        answers = [("g-a", first.digest), ("g-b", first.digest)]
+        # The run forgets the step's answer of a record that left, before it compares.
+        answers = [("g-a", first.digest)]
 
         _, change = prepare(tmp_path, CORPUS, ["keyword"], _rows(a="one"), answers, label=LABEL)
 
@@ -172,6 +173,16 @@ class TestWhatChangedSinceAnAnswer:
         level, line = change.message("link__similar", LABEL)
         assert level == logging.INFO
         assert line.startswith(f"{LABEL}: 2 records were added since 3 earlier answers searched")
+
+    def test_answers_of_records_outside_the_corpus_count(self, tmp_path):
+        first = self._first(tmp_path, a="one", b="two")
+        answers = [("g-a", first.digest), ("g-other-branch", first.digest)]
+
+        _, change = prepare(
+            tmp_path, CORPUS, ["keyword"], _rows(a="one", b="two", c="three"), answers, label=LABEL
+        )
+
+        assert change.stale_answers == 2
 
     def test_answers_whose_index_is_gone_give_a_warning(self, tmp_path):
         first = self._first(tmp_path, a="one", b="two")

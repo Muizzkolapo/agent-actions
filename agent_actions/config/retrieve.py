@@ -125,7 +125,11 @@ def expand_retrieves(data: Any, workflow_file: str, project_root: Path | None = 
     actions = data["actions"]
     graph = _read_graph(actions)
     defaults = data.get("defaults") if isinstance(data.get("defaults"), dict) else {}
-    workflow = _Workflow(graph, _entries_by_name(actions), defaults)
+    from agent_actions.config.includes import inherited_granularities
+
+    workflow = _Workflow(
+        graph, _entries_by_name(actions), defaults, inherited_granularities(data, project_root)
+    )
     taken = set(graph)
     bases: dict[str, Any] | None = None
     expanded: list[Any] = []
@@ -259,10 +263,13 @@ class _Workflow:
         graph: Mapping[str, list[str]],
         entries: Mapping[str, dict[str, Any]],
         defaults: Mapping[str, Any],
+        granularities: Mapping[str, Any] | None = None,
     ):
         self.graph = graph
         self.entries = entries
         self.defaults = dict(defaults)
+        # Each action's granularity with the workflow and project defaults applied.
+        self.granularities = dict(granularities or {})
 
 
 def _step(
@@ -489,8 +496,10 @@ def _refuse_corpus_kind(
 
     defaults = action_defaults(found, workflow.defaults)
     kind = inherited_routing_kind(found, defaults)
-    granularity, _ = resolved_granularity(kind, found, defaults)
-    if kind == "tool" and is_file_granularity(granularity):
+    granularity = workflow.granularities.get(source)
+    if granularity is None:
+        granularity, _ = resolved_granularity(kind, found, defaults)
+    if is_file_granularity(granularity):
         raise ConfigurationError(
             f"{where}: 'from: {source}' names a tool of granularity File, which may write "
             "several records for one input record, or none. Name an action with one record "
@@ -941,6 +950,18 @@ def _read_graph(entries: list[Any]) -> dict[str, list[str]]:
             graph[entry["join"]] = (
                 [n for n in of if isinstance(n, str)] if isinstance(of, list) else []
             )
+    # Each action of a route's branch runs below the router, as the route desugar makes it.
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("route"), str):
+            continue
+        cases = entry.get("cases")
+        targets = [*(cases.values() if isinstance(cases, dict) else ()), entry.get("default")]
+        for target in targets:
+            for member in (
+                [target] if isinstance(target, str) else target if isinstance(target, list) else []
+            ):
+                if isinstance(member, str) and member in graph and member != entry["route"]:
+                    graph[member] = [*graph[member], entry["route"]]
     return graph
 
 

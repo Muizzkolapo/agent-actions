@@ -94,7 +94,7 @@ class CorpusChange:
     added: int = 0
     changed: int = 0
     removed: int = 0
-    # Stored answers of records still in the corpus that searched an older index.
+    # Stored answers that searched an older index.
     stale_answers: int = 0
     # Of those, the answers whose index file is gone, so what they saw is not known.
     unknown_answers: int = 0
@@ -211,7 +211,26 @@ def corpus_records(
                 hash=hashlib.sha256(stored.encode("utf-8")).hexdigest()[:16],
             )
         )
+    _warn_of_missing_fields(outputs, settings, label)
     return records
+
+
+def _warn_of_missing_fields(
+    outputs: Sequence[tuple[str, dict[str, Any]]], settings: CorpusSettings, label: str
+) -> None:
+    """Warn of a `text` or `title` field no record holds; the load checks only a schema."""
+    if not outputs:
+        return
+    named = [*settings.text, *([settings.title] if settings.title else [])]
+    for name in named:
+        if not any(name in output for _, output in outputs):
+            logger.warning(
+                "%s: no record of action '%s' holds the field '%s', so it adds no text. "
+                "Check the field name",
+                label,
+                settings.action,
+                name,
+            )
 
 
 def corpus_digest(
@@ -267,7 +286,8 @@ def corpus_change(
     Each older index is compared on its own, so a record counts once however many of the
     older indexes lack it.
     """
-    stale = [index for guid, index in answers if index != digest and guid in current]
+    # A record that reaches the step need not be in the corpus (a join, a guard skip).
+    stale = [index for _, index in answers if index != digest]
     change = CorpusChange(records=len(current), new_index=new_index, stale_answers=len(stale))
     added: set[str] = set()
     changed: set[str] = set()

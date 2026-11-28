@@ -152,16 +152,16 @@ takes `--scenario`, `-u` and `-e` as `agac run` does. It prints one row per stat
 | Exit | Meaning |
 |------|---------|
 | 0 | Each stated value holds |
-| 1 | One or more values do not hold; the `FAIL` rows name each: `classify filtered: expected 2, got 1`. Also when the run wrote no result: `run: wrote no result (the run stopped with exit code 1)` |
+| 1 | One or more values do not hold; the `FAIL` rows name each: `classify__similar filtered: expected 2, got 1`. Also when the run wrote no result: `run: wrote no result (the run stopped with exit code 1)` |
 | 2 | The file is missing, is not YAML, has an unknown key or an action entry with no value (`classify: {}`). These are checked before the run. Also when the file names an action the workflow does not have: this is found after the run, and only when the run wrote a result. Also when the check could not run (outside a project, or an unexpected error; one `Error:` line) |
 | 130 | Interrupted (Ctrl-C) |
 
 ```yaml
 # sandbox_expected.yml: only what you state is checked
 exit_code: 0                              # the exit code of the run
-scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 2}   # the SANDBOX scenario line
+scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 4}   # the SANDBOX scenario line
 actions:                                  # names as agac dispositions shows them
-  classify: {status: completed, success: 4, filtered: 1}
+  classify__similar: {status: completed, success: 4, filtered: 2}
   score_1: {success: 4}                   # each version by its own name
   reply_round_iter2__draft_reply: {success: 2, sent_elsewhere: 2}  # each loop iteration
   tag_reply: {records: 4}

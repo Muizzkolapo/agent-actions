@@ -393,7 +393,7 @@ Its `sandbox.yml` makes faults that heal, so the run completes:
 
 - `break_rules` breaks the `matches_regex` rule of `classify` in the first answer of each record. The repair round passes.
 - `errors` gives a rate limit to the first call of each rater. `retry:` sends the call again.
-- `batch` reports the batch of `tag_reply` in progress once and leaves out half of its results. The retry batch gets them.
+- `batch` reports the batch of `tag_reply` in progress once and leaves out all of its results. The retry batch gets them.
 
 The workflow names `model_vendor: openai`. A sandbox run sends each LLM action to the mock, so the project needs no key. To run it with a real model, set `OPENAI_API_KEY` and run it without `--sandbox`. With no key, a real run stops at preflight, before the first action.
 
@@ -410,9 +410,9 @@ The file is `sandbox_expected.<workflow>.yml` at the project root, else `sandbox
 ```yaml
 # sandbox_expected.yml
 exit_code: 0
-scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 2}
+scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 4}
 actions:
-  classify: {status: completed, success: 4, filtered: 2}   # the guard filters two records
+  classify__similar: {status: completed, success: 4, filtered: 2}   # the guard of classify filters two records here
   billing_team: {success: 2, sent_elsewhere: 2}            # the router sends two records here
 ```
 

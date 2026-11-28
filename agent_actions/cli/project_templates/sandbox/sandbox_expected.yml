@@ -10,7 +10,7 @@ exit_code: 0
 scenario:
   errors: 8                  # each first call of score_1 and score_2: 4 records x 2 raters
   rules_broken: 4            # each first answer of classify
-  batch_results_dropped: 2   # tag_reply results the first batch left out
+  batch_results_dropped: 4   # tag_reply results the first batch left out: all 4
 
 # Per action: its status, and the record counts of `agac dispositions --sandbox`.
 actions:

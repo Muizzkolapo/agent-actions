@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from agent_actions.errors import ConfigurationError
@@ -121,3 +123,22 @@ class TestTheChunks:
 
         assert [r.chunk.id for r in records] == ["T-1", "T-2"]
         assert records[0].chunk.hash == records[1].chunk.hash
+
+
+class TestAFieldNoRecordHolds:
+    def test_a_text_field_no_record_holds_warns_naming_it(self, caplog):
+        settings = CorpusSettings("summarize", ("sumary",))
+
+        with caplog.at_level(logging.WARNING):
+            corpus_records([("g1", _output("T-1"))], settings, LABEL)
+
+        assert "no record of action 'summarize' holds the field 'sumary'" in caplog.text
+
+    def test_a_field_one_record_holds_does_not_warn(self, caplog):
+        settings = CorpusSettings("summarize", ("summary", "note"))
+        outputs = [("g1", _output("T-1")), ("g2", _output("T-2", note="see T-1"))]
+
+        with caplog.at_level(logging.WARNING):
+            corpus_records(outputs, settings, LABEL)
+
+        assert "holds the field" not in caplog.text
