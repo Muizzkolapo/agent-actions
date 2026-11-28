@@ -134,7 +134,13 @@ def _project(root: Path, block: list[dict[str, Any]], earlier: dict[str, dict[st
     workflow = root / "agent_workflow" / "snippet"
     (workflow / "agent_config").mkdir(parents=True)
     (workflow / "agent_io" / "staging").mkdir(parents=True)
-    (root / "agent_actions.yml").write_text("default_agent_config: {model_name: gpt-4o-mini}\n")
+    (root / "agent_actions.yml").write_text(
+        "default_agent_config: {model_name: gpt-4o-mini}\n"
+        "knowledge: {help_center: {sources: [knowledge/help_center/*.md]}}\n"
+    )
+    articles = root / "knowledge" / "help_center"
+    articles.mkdir(parents=True)
+    (articles / "billing.md").write_text("# Billing\n\nWe refund a duplicate charge.\n")
     config = {
         "name": "snippet",
         "description": "A block of the skill",

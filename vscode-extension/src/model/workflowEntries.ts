@@ -36,6 +36,7 @@ export function parseEntries(entries: unknown[], branches: BranchLookup): Parsed
     const actions: ParsedAction[] = [];
     const instances = new Map<string, Instance>();
     const routes: Array<{ router: string; targets: unknown[] }> = [];
+    const searched = new Map<string, string>();
     for (const entry of entries) {
         const record = asRecord(entry);
         if (!record) {
@@ -61,7 +62,20 @@ export function parseEntries(entries: unknown[], branches: BranchLookup): Parsed
                 outputFields: [],
             });
         } else {
-            actions.push(...(parseActionEntry(record) ?? []));
+            const steps = retrieveSteps(record, searched);
+            const parsed = parseActionEntry(record) ?? [];
+            for (const action of parsed) {
+                const added = steps.map((step) => step.name).filter((n) => !action.dependencies.includes(n));
+                action.dependencies = [...action.dependencies, ...added];
+            }
+            actions.push(...steps, ...parsed);
+        }
+    }
+    // A `from:` that names an action (not a knowledge base) makes the step depend on it.
+    for (const [step, source] of searched) {
+        const node = actions.find((candidate) => candidate.name === step);
+        if (node && actions.some((candidate) => candidate.name === source) && !node.dependencies.includes(source)) {
+            node.dependencies = [...node.dependencies, source];
         }
     }
     for (const { router, targets } of routes) {
@@ -189,6 +203,35 @@ function includeInstance(record: Record<string, unknown>, branches: BranchLookup
     }
     const outputs = normalizeDependencies(branch.outputs).map((name) => names.get(name) ?? name);
     return { label: prefix ?? branchName, actions, names, outputs };
+}
+
+/**
+ * The step each `context_scope.retrieve` entry of an action becomes: `<action>__<entry>`.
+ * Each step's `from:` is put in `searched`: a knowledge base, or an earlier action.
+ */
+function retrieveSteps(record: Record<string, unknown>, searched: Map<string, string>): ParsedAction[] {
+    const entries = asRecord(asRecord(record.context_scope)?.retrieve);
+    if (typeof record.name !== 'string' || !entries) {
+        return [];
+    }
+    return Object.entries(entries).map(([entry, raw]) => {
+        const search = asRecord(raw) ?? {};
+        const query = normalizeDependencies(search.query);
+        const where = Object.values(asRecord(search.where) ?? {}).filter((v): v is string => typeof v === 'string');
+        const reads = [...query, ...where]
+            .filter((ref) => ref.includes('.'))
+            .map((ref) => ref.split('.', 1)[0])
+            .filter((name) => name !== 'source');
+        if (typeof search.from === 'string') {
+            searched.set(`${record.name}__${entry}`, search.from);
+        }
+        return {
+            name: `${record.name}__${entry}`,
+            dependencies: [...new Set(reads)],
+            type: 'retrieve',
+            outputFields: ['matches', 'count', 'query', 'index'],
+        };
+    });
 }
 
 function routeNode(name: string, on: unknown): ParsedAction {

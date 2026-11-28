@@ -5,3 +5,9 @@ default_agent_config:
 schema_path: schema
 tool_path: ["tools"]
 seed_data_path: seed_data
+
+# Knowledge bases: files that a retrieve entry searches for each record.
+# `agac knowledge build` indexes them; a run builds a missing or stale index itself.
+knowledge:
+  help_center:
+    sources: [knowledge/help_center/*.md]

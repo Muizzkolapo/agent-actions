@@ -53,7 +53,7 @@ The log line before the warning names the `agac dispositions` command that shows
 | `--concurrency-limit` | The maximum number of concurrent actions (default: 5, range: 1-50) |
 | `--record-limit N` | Limit each action to N records **per input file**, whatever the workflow configuration sets. This is the same unit that `record_limit` uses. The flag applies to actions that set no limit of their own. It takes precedence over `AGAC_RECORD_LIMIT`. An action that actually drops records says so, and names this flag and the counts. The reason is that a truncated run otherwise looks complete |
 | `--file-limit N` | Stop each action after N input files, whatever the workflow configuration sets. This is the same unit that `file_limit` uses. The flag counts the files that the action processed successfully. Thus a file that fails does not use the budget, and the action attempts each file in a directory of unreadable files. The flag applies to actions that set no limit of their own. It takes precedence over `AGAC_FILE_LIMIT`. An action whose walk through its input files actually stops says so, and names this flag. The reason is that a shortened run otherwise looks complete. This flag never limits `agac retry` |
-| `--fresh` | Before execution, clear the stored results, the dispositions, the prompt traces, the status, the stored token usage and the event logs (`events.json`, `errors.json` and their rotations from earlier runs). Also discard the data that the provider recorded locally about each batch that this workflow submitted, collected or not. This flag gives a clean start for debugging. |
+| `--fresh` | Before execution, clear the stored results, the dispositions, the prompt traces, the status, the stored token usage, the indexes of the [records that a `retrieve` entry searches](../../guides/knowledge.md#retrieve-from-an-earlier-action) (`agent_io/retrieve/`) and the event logs (`events.json`, `errors.json` and their rotations from earlier runs). Also discard the data that the provider recorded locally about each batch that this workflow submitted, collected or not. This flag gives a clean start for debugging. |
 | `--refresh-input` | Read the query of each `database` data source again. Rows that did not change keep their answers. New and changed rows are answered. Rows that the query no longer returns are forgotten. If a batch is still open, the run stops before it starts, because the batch answers the rows that it was sent. With `--fresh`, an open batch does not stop it, because `--fresh` discards the batches. `--fresh` alone does not read the query again: it keeps the snapshot. See [Databases](../data-io/databases.md#the-snapshot) |
 | `--rerun ACTION` | Answer each record of `ACTION` again, under the configuration as it is now. Do the same for each action that reads the output of `ACTION`. You can give the name of a versioned action as the configuration writes it. The flag then runs each version of the action again. Give the flag more than one time to run more than one action again in the same run (`--rerun classify --rerun summarize`). Each other action keeps its answers. Use this flag after a configuration edit. An edit alone runs nothing again (see [When you edit the workflow](#when-you-edit-the-workflow)). If the workflow does not have a name, the run stops before it starts, and names each name that it does not have |
 | `--where EXPRESSION` | With one `--rerun ACTION`: answer again only the records of `ACTION` that the expression matches, at `ACTION` and at each action that reads it. Each other record keeps its answers. The expression is a [guard](../execution/guards.md) condition. See [Rerun selected records](#rerun-selected-records) |
@@ -444,6 +444,16 @@ use `--fresh`.
 `--fresh` starts the whole workflow again. Each [prompt trace](../data-io/prompt-traces) row
 records the configuration under which its record was answered. Thus you can read a workflow that holds answers from more
 than one configuration, one record at a time.
+
+A change to the files of a [knowledge base](../../guides/knowledge.md) is reported in the same way. The stored matches stand, and the run names the step and the rerun:
+
+```
+write_reply: retrieve 'help' (write_reply__help): knowledge base 'help_center' changed since it answered; run again with --rerun write_reply__help
+```
+
+`--rerun write_reply` also searches again for each `retrieve` entry of `write_reply`. A filtered rerun (`--where` or `--records`) does not: name the step, as `--rerun write_reply__help`. See [When a knowledge base changes](../../guides/knowledge.md#when-a-knowledge-base-changes).
+
+A `retrieve` entry that searches the records of an earlier action reports the records added since its stored answers once in a run, and warns of records that changed or left. The stored answers stand until `--rerun <step>`. See [When the records change](../../guides/knowledge.md#when-the-records-change).
 
 
 ## Parallel Execution

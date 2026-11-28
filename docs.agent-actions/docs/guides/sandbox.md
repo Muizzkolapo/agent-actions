@@ -376,23 +376,24 @@ cd my_sandbox
 agac sandbox check -w support_desk
 ```
 
-The workflow `support_desk` triages five support tickets. It has these actions:
+The workflow `support_desk` triages six support tickets. It has these actions:
 
 | Action | Feature |
 |--------|---------|
-| `read_ticket` | A tool action. Plain Python in `tools/support_desk/`, with no network. It marks spam and picks a queue |
-| `classify` | A guard that filters the spam ticket. An `expect:` block with `repair: auto` and an `llm_judge` rule with `severity: warn` |
+| `read_ticket` | A tool action. Plain Python in `tools/support_desk/`, with no network. It marks spam, picks a queue and gives each ticket canonical `keywords` |
+| `classify` | A guard that filters the two spam tickets. An `expect:` block with `repair: auto` and an `llm_judge` rule with `severity: warn`. Retrieval from an earlier action: the `retrieve` entry `similar` searches the records of `read_ticket` for tickets like this one, and the prompt lists their ids. Its step is `classify__similar`. It takes the guard of `classify`, so the step filters the spam tickets before `classify`. T-1001 and T-1005 find each other through the keyword `billing`. See [Retrieve from an earlier action](./knowledge.md#retrieve-from-an-earlier-action) |
 | `score`, `merge_scores` | Versions: two raters, `score_1` and `score_2`, and the merge of the two (`version_consumption`) |
 | `reply_round` | A loop: write a reply, then check it. A high-priority reply passes its check in round 2 |
 | `by_queue`, `assigned` | A router that sends each ticket to `billing_team` or `support_team`, and the join of the two branches |
 | `approve_reply` | A HITL action. A sandbox run approves each record |
 | `tag_reply` | A batch action (`run_mode: batch`), with a guard on the HITL status |
+| `draft_reply` (in `reply_round`) | Help-article retrieval: the `retrieve` entry `help` of `draft_reply` searches the knowledge base `help_center` (the files in `knowledge/help_center/`) with the text of the ticket. The prompt puts the matches between `<doc>` tags and asks for their ids in `citations`. Its step in round 1 is `reply_round_iter1__draft_reply__help`, and in round 2 `reply_round_iter2__draft_reply__help`. The search runs for real in a sandbox run. The step has the dependencies of `draft_reply`, so the spam tickets are not searched. See [Knowledge Bases and Retrieval](./knowledge.md) |
 
 Its `sandbox.yml` makes faults that heal, so the run completes:
 
 - `break_rules` breaks the `matches_regex` rule of `classify` in the first answer of each record. The repair round passes.
 - `errors` gives a rate limit to the first call of each rater. `retry:` sends the call again.
-- `batch` reports the batch of `tag_reply` in progress once and leaves out half of its results. The retry batch gets them.
+- `batch` reports the batch of `tag_reply` in progress once and leaves out all of its results. The retry batch gets them.
 
 The workflow names `model_vendor: openai`. A sandbox run sends each LLM action to the mock, so the project needs no key. To run it with a real model, set `OPENAI_API_KEY` and run it without `--sandbox`. With no key, a real run stops at preflight, before the first action.
 
@@ -409,9 +410,9 @@ The file is `sandbox_expected.<workflow>.yml` at the project root, else `sandbox
 ```yaml
 # sandbox_expected.yml
 exit_code: 0
-scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 2}
+scenario: {errors: 8, rules_broken: 4, batch_results_dropped: 4}
 actions:
-  classify: {status: completed, success: 4, filtered: 1}   # the guard filters one record
+  classify__similar: {status: completed, success: 4, filtered: 2}   # the guard of classify filters two records here
   billing_team: {success: 2, sent_elsewhere: 2}            # the router sends two records here
 ```
 

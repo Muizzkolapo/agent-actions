@@ -126,7 +126,9 @@ class Cleaner:
         if (self.remove_target or self.remove_all) and target_path.exists():
             directories.append(target_path)
         if self.remove_all:
-            for path in (io_dir / "staging", io_dir / SANDBOX_DIR):
+            from agent_actions.knowledge.action_corpus import RETRIEVE_DIR
+
+            for path in (io_dir / "staging", io_dir / SANDBOX_DIR, io_dir / RETRIEVE_DIR):
                 if path.exists():
                     directories.append(path)
             from agent_actions.storage import BACKENDS

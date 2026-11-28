@@ -4,7 +4,7 @@
 # Each fault heals on the second attempt of its record, so the run completes and
 # you see the recovery paths work: retry, repair and the batch retry.
 
-seed: 7
+seed: 2
 
 actions:
   # The first answer of each record breaks the reference_format rule.
@@ -18,4 +18,4 @@ actions:
 
 batch:
   polls_until_complete: 1   # the first status check reports the batch in progress
-  drop_rate: 0.5            # results the first batch leaves out; the retry batch gets them
+  drop_rate: 1.0            # the first batch leaves out every result; the retry batch gets them

@@ -3,5 +3,6 @@
   {"ticket_id": "T-1002", "priority": "high", "text": "The app closes when I upload a photo."},
   {"ticket_id": "T-1003", "priority": "normal", "text": "WIN A FREE CRUISE! Click this link now."},
   {"ticket_id": "T-1004", "priority": "normal", "text": "Please change the email address of my account."},
-  {"ticket_id": "T-1005", "priority": "high", "text": "The refund for my cancelled order has not arrived."}
+  {"ticket_id": "T-1005", "priority": "high", "text": "The refund for my cancelled order has not arrived."},
+  {"ticket_id": "T-1006", "priority": "normal", "text": "Win a free phone today, just reply YES."}
 ]

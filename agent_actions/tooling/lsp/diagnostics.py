@@ -82,6 +82,8 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
             # These are built-in data sources, not user-defined actions
             if action_name in SPECIAL_NAMESPACES:
                 continue
+            if action_name == "retrieve" and _reads_own_entry(reference, actions, file_path):
+                continue
 
             action_location = index.get_action(action_name, file_path)
             if not action_location and _resolve_upstream(index, file_path, action_name):
@@ -235,6 +237,21 @@ def _named_upstreams(action) -> set[str]:
     return named
 
 
+def _reads_own_entry(reference, actions: dict, file_path: Path) -> bool:
+    """Whether a `retrieve.<entry>` reference names an entry of the action it is written in."""
+    entry = reference.value.split(".")[1] if reference.value.count(".") else ""
+    steps = {f"{a.name}__{e}" for a in actions.values() for e in a.retrieve_entries}
+    above = [
+        a
+        for a in actions.values()
+        if a.name not in steps
+        and a.location.file_path == file_path
+        and a.location.line <= reference.location.line
+    ]
+    owner = max(above, key=lambda a: a.location.line, default=None)
+    return owner is not None and entry in owner.retrieve_entries
+
+
 def _guard_is_unresolvable(action, index: ProjectIndex, file_path: Path, variable: str) -> bool:
     """Whether *variable* provably resolves against nothing a guard can read.
 
@@ -243,6 +260,9 @@ def _guard_is_unresolvable(action, index: ProjectIndex, file_path: Path, variabl
     because the alternative is warning about clauses the runtime answers.
     """
     namespace, dot, _field = variable.partition(".")
+    if namespace == "retrieve" and _field.split(".", 1)[0] in action.retrieve_entries:
+        # The action's own retrieve step, which the load names `<action>__<entry>`.
+        return False
 
     if not dot:
         # A bare name resolves through three promotions, so it is only wrong when none of

@@ -109,11 +109,12 @@ The project has these files, together with the standard folders:
 
 ```
 my_sandbox/
-├── agent_actions.yml
+├── agent_actions.yml                   # with the knowledge base help_center
 ├── agent_workflow/support_desk/
 │   ├── agent_config/support_desk.yml   # the workflow, with a comment on each part
-│   └── agent_io/staging/tickets.json   # five tickets, one of them spam
-├── branches/reply_round.yml            # one round of the loop
+│   └── agent_io/staging/tickets.json   # six tickets, two of them spam
+├── branches/reply_round.yml            # one round of the loop; draft_reply retrieves help articles
+├── knowledge/help_center/              # three help articles: billing, refunds, account access
 ├── prompt_store/support_desk.md
 ├── schema/support_desk/                # the output schemas
 ├── seed_data/teams.json
@@ -181,6 +182,7 @@ Error: Give --target or --all to say what to clean:
 The command removes these items:
 - `agent_io/target/`: Your generated output (with `--target` or `--all`).
 - `agent_io/staging/` and the durable store: Your input data and run history (only with `--all`).
+- `agent_io/retrieve/`: the indexes of the records that a [`retrieve` entry](../../guides/knowledge.md#retrieve-from-an-earlier-action) searches (only with `--all`).
 - The output of [sandbox runs](../../guides/sandbox.md): `agent_io/sandbox/` and `agent_io/store/<workflow>.sandbox.db` (only with `--all`). `--target` does not remove `agent_io/sandbox/target/`.
 - The data that a provider recorded locally about the batches of this workflow, under `.agac/` at the project root (only with `--all`). Only the store that the command removes names this data. Thus this is the last time that anything can get to the data. The real store and the sandbox store each name the batches of their own runs, and the command reclaims the data of each.
 

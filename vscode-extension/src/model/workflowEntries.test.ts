@@ -46,6 +46,44 @@ describe('parseEntries', () => {
         assert.equal(router?.type, 'route');
     });
 
+    it('gives each retrieve entry a step node that the action depends on', () => {
+        const parsed = nodes([
+            { name: 'classify' },
+            {
+                name: 'write_reply',
+                dependencies: ['classify'],
+                context_scope: {
+                    retrieve: {
+                        help: { from: 'kb', query: ['source.text'], where: { product: 'classify.product' } },
+                    },
+                },
+            },
+        ]);
+
+        assert.deepEqual(parsed.get('write_reply__help')?.dependencies, ['classify']);
+        assert.equal(parsed.get('write_reply__help')?.type, 'retrieve');
+        assert.deepEqual(parsed.get('write_reply')?.dependencies, ['classify', 'write_reply__help']);
+    });
+
+    it('makes a retrieve step depend on the earlier action its from: names', () => {
+        const parsed = nodes([
+            { name: 'summarize' },
+            {
+                name: 'link',
+                dependencies: ['summarize'],
+                context_scope: {
+                    retrieve: {
+                        similar: { from: 'summarize', text: ['summary'], query: ['source.text'] },
+                        help: { from: 'kb', query: ['source.text'] },
+                    },
+                },
+            },
+        ]);
+
+        assert.deepEqual(parsed.get('link__similar')?.dependencies, ['summarize']);
+        assert.deepEqual(parsed.get('link__help')?.dependencies, []);
+    });
+
     it('makes the entry actions of each case depend on the router', () => {
         const parsed = nodes(ENTRIES);
 

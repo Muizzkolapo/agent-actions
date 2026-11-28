@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from agent_actions.llm.providers.tools.builtin import DEFAULT_CASE, PICK, ROUTE
+from agent_actions.llm.providers.tools.builtin import DEFAULT_CASE, PICK, RETRIEVE, ROUTE
 
 
 class RouteSpec(BaseModel):
@@ -40,7 +40,49 @@ class PickSpec(BaseModel):
     loop: dict[str, Any] | None = None
 
 
-_SPECS: dict[str, type[BaseModel]] = {ROUTE: RouteSpec, PICK: PickSpec}
+class CorpusSpec(BaseModel):
+    """The records of action ``action`` a retrieve step searches, and what it reads of each."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    action: str = Field(min_length=1)
+    text: list[str] = Field(min_length=1)
+    title: str | None = None
+    id: str | None = None
+
+
+class RetrieveSpec(BaseModel):
+    """``retrieve``: the matches a search of knowledge base ``base``, or of the records of
+    an earlier action (``corpus``), finds for the record."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    tool: Literal["retrieve"]
+    base: str | None = Field(default=None, min_length=1)
+    corpus: CorpusSpec | None = None
+    # Each search method to its weight in the merge of their results.
+    methods: dict[str, float] = Field(min_length=1)
+    query: list[str] = Field(min_length=1)
+    # Each metadata field to a field reference, or to {"value": <constant>}.
+    where: dict[str, str | dict[str, Any]]
+    top_k: int = Field(ge=1, le=50)
+    candidates: int = Field(ge=1)
+    max_context_tokens: int | None = Field(ge=1)
+    max_per_origin: int | None = Field(ge=1)
+    # The context_scope.retrieve entry and the action the load generated the step for.
+    entry: str = Field(min_length=1)
+    action: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _one_corpus(self) -> RetrieveSpec:
+        if (self.base is None) == (self.corpus is None):
+            raise ValueError("a retrieve step searches either a 'base' or a 'corpus'")
+        if self.corpus is not None and self.max_per_origin is not None:
+            raise ValueError("'max_per_origin' does not apply to the records of one action")
+        return self
+
+
+_SPECS: dict[str, type[BaseModel]] = {ROUTE: RouteSpec, PICK: PickSpec, RETRIEVE: RetrieveSpec}
 
 
 def checked_builtin(spec: Any) -> dict[str, Any]:
@@ -53,4 +95,4 @@ def checked_builtin(spec: Any) -> dict[str, Any]:
             f"'_builtin' names tool {spec.get('tool')!r}; the built-in tools are "
             f"{', '.join(sorted(_SPECS))}"
         )
-    return model.model_validate(spec).model_dump()
+    return model.model_validate(spec).model_dump(exclude_unset=True)

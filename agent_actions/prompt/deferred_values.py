@@ -74,6 +74,8 @@ _HOLD_LOADED = "_agac_hold_loaded"
 
 # Names only a record supplies, whatever the workflow declares.
 _RECORD_NAMES = FRAMEWORK_NAMESPACES | {"source", "i", "idx", "base_name", "param_name"}
+# The alias of an action's retrieve steps; a record supplies it only where an action has them.
+_RETRIEVE_ALIAS = "retrieve"
 _VERSION_NAMES = frozenset({"version", "i", "idx", "base_name", "param_name"})
 
 _OPENER = re.compile(r"\{[{%#]")
@@ -460,6 +462,9 @@ class LoadRender:
                 version = action.get("_version_context")
                 base = version.get("base_name") if isinstance(version, dict) else None
                 named.update({action.get("name"), base})
+                builtin = action.get("_builtin")
+                if isinstance(builtin, dict) and builtin.get("tool") == _RETRIEVE_ALIAS:
+                    named.add(_RETRIEVE_ALIAS)
         for name, error in self._assumed.items():
             if name not in named:
                 raise error

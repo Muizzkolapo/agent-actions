@@ -47,15 +47,19 @@ These are the **stable paths** that exist in every user's project:
 | Path | What it is |
 |------|-----------|
 | `agent_actions.yml` | Project config |
+| `agent_actions.yml` `knowledge:` | Knowledge bases that `context_scope.retrieve` searches: sources, `index`, `chunk_config` |
 | `agent_config/{workflow}.yml` | Workflow definition |
 | `prompt_store/{workflow}.md` | Prompt templates |
 | `schema/{workflow}/{action}.yml` | Output schemas; a field may carry an `expectations:` block of rules about it, and the file may carry one for rules about no single field (named suites) |
 | `tools/{workflow}/*.py` | UDF tool scripts |
 | `seed_data/*.json` | Reference data |
+| `knowledge/{base}/` | Source files of a knowledge base (a convention; `knowledge:` may name other paths) |
 | `agent_io/staging/` | Input data |
 | `agent_io/target/{action}/` | Output data per action |
 | `agent_io/store/` | Durable database (SQLite) |
 | `agent_io/sandbox/` | Output of sandbox runs (status, logs, target); the store is `agent_io/store/{workflow}.sandbox.db` |
+| `agent_io/retrieve/{step}/` | Index files of the records a `context_scope.retrieve` entry with `from: <action>` searches (generated; `agent_io/sandbox/retrieve/` in a sandbox run) |
+| `.agac/knowledge/{base}/` | Built knowledge indexes, one file per index and digest (generated; `.agac/` is in `.gitignore`) |
 | `.env` | Environment variables |
 | `sandbox.yml` | Sandbox scenario (optional): the faults the mock follows and the tool actions it stubs in `agac run --sandbox`, `agac retry --sandbox`, `agac inspect --sandbox` and `agac sandbox check` |
 | `sandbox.{workflow}.yml` | Sandbox scenario of one workflow (optional): read instead of `sandbox.yml` by a sandbox run of `{workflow}` |

@@ -4,12 +4,13 @@ import asyncio
 import hashlib
 import json
 import logging
+import sqlite3
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from rich.console import Console
 
@@ -29,7 +30,17 @@ from agent_actions.llm.config.endpoints import project_endpoint
 from agent_actions.llm.config.vendor import effective_run_mode, runs_in_batch
 from agent_actions.llm.providers.generation_params import GENERATION_PARAMS
 from agent_actions.llm.providers.local_batch_records import release_local_batch_record
-from agent_actions.llm.providers.tools.builtin import runs_udf
+from agent_actions.llm.providers.tools.builtin import (
+    RETRIEVE,
+    builtin_tool,
+    first_knowledge_warning,
+    knowledge_hash,
+    register_corpus,
+    retrieve_steps_of,
+    runs_udf,
+    searches_base,
+    step_label,
+)
 from agent_actions.llm.providers.usage_tracker import (
     UsageLedger,
     accounting,
@@ -77,6 +88,9 @@ from agent_actions.workflow.managers.state import (
     ActionStatus,
 )
 from agent_actions.workflow.runner_file_processing import NoInputFilesError
+
+if TYPE_CHECKING:
+    from agent_actions.knowledge.action_corpus import CorpusIndex
 
 logger = logging.getLogger(__name__)
 
@@ -232,6 +246,21 @@ def _compute_endpoint_hash(action_config: ActionConfigDict) -> str:
     )
 
 
+def _compute_knowledge_hash(action_config: ActionConfigDict) -> str | None:
+    """The digest of the knowledge base a retrieve step searches; empty for any other action.
+
+    None outside a run, which alone resolves knowledge bases, so a read-only load does not
+    compare it. A step that searches an earlier action's records reports a change of them
+    once it runs (``_note_action_corpus_change``), so it stamps nothing here.
+    """
+    spec = builtin_tool(action_config)  # type: ignore[arg-type]
+    if spec is None or spec["tool"] != RETRIEVE or not searches_base(spec):
+        return ""
+    return knowledge_hash(spec)
+
+
+KNOWLEDGE_EDIT = "knowledge base"
+
 # What an action reads and how it is asked, each stamped under its own key and named
 # by its label when an edit is logged.
 _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], ...] = (
@@ -242,6 +271,7 @@ _READS_STAMPS: tuple[tuple[str, str, Callable[[ActionConfigDict], str | None]], 
     ("schema_options_hash", "schema options", _compute_schema_options_hash),
     ("output_settings_hash", "output settings", _compute_output_settings_hash),
     ("endpoint_hash", "provider endpoint", _compute_endpoint_hash),
+    ("knowledge_hash", KNOWLEDGE_EDIT, _compute_knowledge_hash),
 )
 
 
@@ -310,7 +340,9 @@ def _edits_since(stamp: dict[str, Any], action_config: ActionConfigDict) -> list
         edits.append(CONFIG_EDIT)
     for key, label, compute in _READS_STAMPS:
         if key not in stamp:
-            edits.append(label)
+            # A stamp written before knowledge bases read none.
+            if label != KNOWLEDGE_EDIT or compute(action_config) != "":
+                edits.append(label)
             continue
         stored, current = stamp[key], compute(action_config)
         if stored is not None and current is not None and stored != current:
@@ -545,6 +577,17 @@ def completed_output_stands(storage_backend: Any, action_name: str) -> bool:
             logger.info("Action %s has no output but node-level %s — made none", action_name, disp)
             return True
     return False
+
+
+def _stored_rows(storage_backend: Any, action_name: str) -> list[dict[str, Any]]:
+    """Every stored row of *action_name*, as stored: before the downstream reset."""
+    rows: list[dict[str, Any]] = []
+    for relative_path in storage_backend.list_target_files(action_name):
+        try:
+            rows.extend(storage_backend.read_target_for_rewrite(action_name, relative_path))
+        except FileNotFoundError:
+            logger.debug("Listed target file is gone: %s/%s", action_name, relative_path)
+    return rows
 
 
 def _raised_by_on_empty_error(error: Exception) -> bool:
@@ -860,6 +903,20 @@ class ActionExecutor:
 
     def _warn_of_an_edit(self, action_name: str, edits: list[str]) -> None:
         """Name the edit, and every action whose input is the output the edit left standing."""
+        configs = getattr(self.deps.action_runner, "action_configs", None) or {}
+        spec = builtin_tool(configs.get(action_name))
+        if KNOWLEDGE_EDIT in edits and spec is not None and spec["tool"] == RETRIEVE:
+            # A run with --wait makes several passes; it warns on the first.
+            if first_knowledge_warning(action_name):
+                logger.warning(
+                    "%s: knowledge base '%s' changed since it answered; run again with --rerun %s",
+                    step_label(spec, action_name),
+                    spec["base"],
+                    action_name,
+                )
+            edits = [edit for edit in edits if edit != KNOWLEDGE_EDIT]
+            if not edits:
+                return
         readers = self.readers_of(action_name)
         logger.warning(
             "%s was edited since it completed (%s): its answers stand, and only records "
@@ -881,6 +938,10 @@ class ActionExecutor:
         """
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
         names = list(action_names)
+        # An action's retrieve steps answer again with it: their matches feed its answers.
+        names = list(
+            dict.fromkeys(step for n in names for step in [*retrieve_steps_of(configs, n), n])
+        )
         mixed_before = set()
         for name in [*names, *(r for n in names for r in self._stale_readers(n))]:
             details = self.deps.state_manager.get_status_details(name)
@@ -2679,6 +2740,7 @@ class ActionExecutor:
         pre_run_count = self._begin(params)
 
         try:
+            corpus = self._index_action_corpus(params)
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
             with self._counted(params.action_name) as counts:
                 output_folder = self.deps.action_runner.run_action(
@@ -2696,6 +2758,7 @@ class ActionExecutor:
             return self._handle_run_failure(params, e)
 
         self._forget_records_no_longer_staged(params.action_name, params.action_config)
+        self._note_action_corpus_change(params, corpus)
         duration = (datetime.now() - params.start_time).total_seconds()
         batch_status = self._check_batch_submission(
             params.action_name,
@@ -2712,6 +2775,7 @@ class ActionExecutor:
         pre_run_count = self._begin(params)
 
         try:
+            corpus = await asyncio.to_thread(self._index_action_corpus, params)
             correlated_input = self.deps.output_manager.resolve_correlated_input(params.action_idx)
             with self._counted(params.action_name) as counts:
                 output_folder = await asyncio.to_thread(
@@ -2730,6 +2794,7 @@ class ActionExecutor:
             return self._handle_run_failure(params, e)
 
         self._forget_records_no_longer_staged(params.action_name, params.action_config)
+        self._note_action_corpus_change(params, corpus)
         duration = (datetime.now() - params.start_time).total_seconds()
         batch_status = self._check_batch_submission(
             params.action_name,
@@ -2739,6 +2804,63 @@ class ActionExecutor:
         return self._handle_run_success(
             params, output_folder, duration, batch_status, pre_run_count, counts
         )
+
+    def _index_action_corpus(self, params: ActionRunParams) -> "CorpusIndex | None":
+        """Index the records a retrieve step's ``from:`` action processed, before the step runs.
+
+        Every record of the step then searches this one index. None for any other action.
+        """
+        spec = builtin_tool(params.action_config)  # type: ignore[arg-type]
+        if spec is None or spec["tool"] != RETRIEVE or searches_base(spec):
+            return None
+        from agent_actions.knowledge.api import index_action_corpus
+
+        index = index_action_corpus(
+            self._corpus_folder(params.action_name),
+            spec["corpus"],
+            spec["methods"],
+            _stored_rows(self.deps.action_runner.storage_backend, spec["corpus"]["action"]),
+            label=step_label(spec, params.action_name),
+        )
+        register_corpus(params.action_name, index)
+        return index
+
+    def _note_action_corpus_change(
+        self, params: ActionRunParams, index: "CorpusIndex | None"
+    ) -> None:
+        """Say once per run how the corpus differs from what the step's kept answers searched.
+
+        Read once the step ran: an answer it gave again in this run searched *index*.
+        """
+        if index is None:
+            return
+        from agent_actions.knowledge.api import action_corpus_change
+
+        step = params.action_name
+        answers = [
+            (row["source_guid"], answer["index"])
+            for row in _stored_rows(self.deps.action_runner.storage_backend, step)
+            if isinstance(row.get("source_guid"), str)
+            and isinstance(answer := (row.get("content") or {}).get(step), dict)
+            and isinstance(answer.get("index"), str)
+        ]
+        try:
+            change = action_corpus_change(self._corpus_folder(step), index, answers)
+        except (OSError, sqlite3.Error) as error:
+            logger.warning("%s: could not compare the records with older answers: %s", step, error)
+            return
+        spec = builtin_tool(params.action_config)  # type: ignore[arg-type]
+        note = change.message(step, step_label(spec or {}, step))
+        # A run with --wait makes several passes; it says so on the first.
+        if note is not None and first_knowledge_warning(step):
+            logger.log(*note)
+
+    def _corpus_folder(self, step: str) -> Path:
+        from agent_actions.knowledge.action_corpus import corpus_folder
+
+        runner = self.deps.action_runner
+        io_dir = Path(runner.get_action_folder(runner.workflow_name))
+        return corpus_folder(sandbox.run_dir(io_dir), step)
 
     def __repr__(self):
         return f"ActionExecutor(deps={self.deps})"

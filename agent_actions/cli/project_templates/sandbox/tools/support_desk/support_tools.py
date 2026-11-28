@@ -1,11 +1,24 @@
 """Tools of the support_desk workflow: plain Python, no network, no model."""
 
+import re
 from typing import Any
 
 from agent_actions import udf_tool
 
 SPAM_WORDS = ("win a free", "click this link")
 BILLING_WORDS = ("charged", "invoice", "refund", "payment")
+# Canonical keywords: two tickets that say the same thing in other words share one, so a
+# keyword search of the tickets (classify's retrieve entry `similar`) finds one for the other.
+KEYWORDS = {
+    "billing": BILLING_WORDS,
+    "account": ("account", "email", "password"),
+    "app": ("app", "upload", "crash", "crashes"),
+}
+
+
+def _mentions(text: str, words: tuple[str, ...]) -> bool:
+    # Whole words, with or without a plural "s": "app" matches "apps", not "happy".
+    return any(re.search(rf"\b{re.escape(word)}s?\b", text) for word in words)
 
 
 @udf_tool
@@ -17,8 +30,9 @@ def read_ticket(data: Any, *args: Any) -> dict:
         "ticket_id": str(source["ticket_id"]),
         "text": text,
         "priority": "high" if source.get("priority") == "high" else "normal",
-        "queue": "billing" if any(word in lowered for word in BILLING_WORDS) else "support",
-        "is_spam": any(word in lowered for word in SPAM_WORDS),
+        "queue": "billing" if _mentions(lowered, BILLING_WORDS) else "support",
+        "is_spam": _mentions(lowered, SPAM_WORDS),
+        "keywords": [key for key, words in KEYWORDS.items() if _mentions(lowered, words)],
     }
 
 

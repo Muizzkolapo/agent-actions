@@ -26,8 +26,6 @@ _THIRD_PARTY_NOISY_LOGGERS: tuple[str, ...] = (
     "cohere",
     "google_genai",
     "googleapiclient",
-    "sentence_transformers",
-    "transformers",
     "pypdf",
 )
 

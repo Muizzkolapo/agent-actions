@@ -111,7 +111,7 @@ def _refuse_unsplittable(chunk_config: dict[str, Any], action_name: str) -> None
     overlap = get_default("chunk_overlap") if overlap is None else overlap
     split_method = chunk_config.get("split_method") or get_default("split_method")
 
-    if overlap >= size and split_method in ("tiktoken", "chars"):
+    if overlap >= size and split_method in ("tiktoken", "chars", "markdown"):
         raise ConfigurationError(
             f"chunk_overlap ({overlap}) must be smaller than chunk_size ({size}) "
             f"for a '{split_method}' split",

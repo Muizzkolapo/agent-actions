@@ -64,7 +64,7 @@ def load_workflow(
     except AgentActionsError as e:
         enrich_exception_context(e, agent=full_path.stem)
         raise
-    return AgentWorkflow(
+    workflow = AgentWorkflow(
         WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(full_path),
@@ -83,6 +83,18 @@ def load_workflow(
         ),
         read_only=read_only,
     )
+    if sends_requests:
+        _build_knowledge_indexes(workflow.action_configs, project_root)
+    return workflow
+
+
+def _build_knowledge_indexes(action_configs: Mapping[str, Any], project_root: Path | None) -> None:
+    """Build the knowledge indexes the workflow's retrieve steps search, once per run."""
+    from agent_actions.config import sandbox
+    from agent_actions.config.path_config import resolve_project_root
+    from agent_actions.llm.providers.tools.builtin import resolve_knowledge
+
+    resolve_knowledge(action_configs, resolve_project_root(project_root), sandbox.is_active())
 
 
 def validate_action_exists(action_name: str, action_configs: Mapping[str, Any]) -> None:

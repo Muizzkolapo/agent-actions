@@ -5,3 +5,4 @@ fields:
   - {id: priority, type: string, required: true, enum: [high, normal]}
   - {id: queue, type: string, required: true, enum: [billing, support]}
   - {id: is_spam, type: boolean, required: true}
+  - {id: keywords, type: array, items: {type: string}, required: true}

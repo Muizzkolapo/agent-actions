@@ -936,8 +936,7 @@ Thus the CLI shows mainly the output of the framework. The curated set is:
 
 ```
 httpx, httpcore, urllib3, openai, anthropic, ollama, groq,
-cohere, google_genai, googleapiclient, sentence_transformers,
-transformers, pypdf
+cohere, google_genai, googleapiclient, pypdf
 ```
 
 To get verbose output again from one of these loggers, pass `module_levels` when you construct the config.
@@ -951,7 +950,7 @@ config = LoggingConfig(
     default_level="INFO",
     module_levels={
         "httpx": "INFO",         # see HTTP request lines from httpx again
-        "transformers": "ERROR", # silence model-loading chatter further
+        "pypdf": "ERROR",        # silence PDF parser warnings further
     },
 )
 LoggerFactory.initialize(config=config)
