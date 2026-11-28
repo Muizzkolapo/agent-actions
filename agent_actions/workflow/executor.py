@@ -847,6 +847,10 @@ class ActionExecutor:
         )
         limits_changed = record_limit_changed or details.get("file_limit") != file_limit
         stored_input = details.get("staged_input")
+        # An action that gained a dependency reads that action now, not the staged files:
+        # the edit check names the change, so there is no staged input left to compare.
+        if action_config.get("dependencies"):
+            stored_input = None
         current_input = (
             self._staged_input(action_name, action_config) if stored_input is not None else None
         )

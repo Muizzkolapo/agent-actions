@@ -402,6 +402,9 @@ record is answered under the edit
 An edit can occur together with a change to the staged input. The run names that edit in the same way. The records that the change
 added or changed are answered under the edit. Each other record keeps its answer.
 
+An action that read the staged input can gain a dependency. It then reads the output of that action, not the staged files. The run
+names this change as an edit (`dependencies`), not as a change to the staged input. The answers of the action stand until `--rerun`.
+
 To answer each record under the edit, use `--rerun` with the name of the action. The flag runs that
 action again, and each action that reads its output. Each other action keeps its answers:
 
