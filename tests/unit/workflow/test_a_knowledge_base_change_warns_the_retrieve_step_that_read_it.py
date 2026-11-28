@@ -117,6 +117,25 @@ def test_the_change_warns_naming_the_step_the_base_and_the_rerun(tmp_path, knowl
     ]
 
 
+def test_the_change_warns_once_per_run_over_every_pass(tmp_path, knowledge, caplog):
+    executor, _ = _executor(tmp_path, knowledge)
+    knowledge.hash = "digest-2"
+
+    def passes(count):
+        with knowledge_run(ROOT, sandbox=False):
+            for _ in range(count):
+                executor._maybe_invalidate_completed_status(
+                    "write_reply__help", CONFIGS["write_reply__help"], ActionStatus.COMPLETED
+                )
+
+    with caplog.at_level(logging.WARNING):
+        passes(3)
+        passes(1)
+
+    warnings = [r for r in caplog.records if "changed since it answered" in r.getMessage()]
+    assert len(warnings) == 2
+
+
 def test_method_where_and_limits_are_in_the_steps_config_hash():
     base = _compute_action_config_hash(CONFIGS["write_reply__help"])
     for change in (
@@ -137,3 +156,16 @@ def test_rerun_of_an_action_reopens_its_retrieve_steps(tmp_path, knowledge):
     assert "write_reply__help" in reopened
     assert state.get_status("write_reply__help") == ActionStatus.PENDING
     assert state.get_status("write_reply") == ActionStatus.PENDING
+
+
+def test_rerun_of_one_version_reopens_the_retrieve_step_of_its_action():
+    from agent_actions.llm.providers.tools.builtin import retrieve_steps_of
+
+    configs = {
+        "score__help": {"kind": "tool", "_builtin": {**SPEC, "action": "score"}},
+        "score_1": {"prompt": "X", "version_base_name": "score"},
+        "score_2": {"prompt": "X", "version_base_name": "score"},
+    }
+
+    assert retrieve_steps_of(configs, "score_1") == ["score__help"]
+    assert retrieve_steps_of(configs, "score") == ["score__help"]

@@ -94,12 +94,16 @@ def test_an_edited_article_warns_the_step_and_rerun_answers_it_again(project):
         "# Billing\n\n## Duplicate charges\n\nIf you were charged twice, we refund it in a week.\n"
     )
 
-    warned = _run(project)
+    # The batch action answers again: a run with --wait makes several passes.
+    warned = _run(project, "--rerun", "tag_reply")
 
-    assert (
+    said = " ".join((warned.stdout + warned.stderr).split())
+    warning = (
         f"reply_round_iter1__draft_reply: retrieve 'help' ({STEP}): knowledge base "
         f"'help_center' changed since it answered; run again with --rerun {STEP}"
-    ) in " ".join((warned.stdout + warned.stderr).split())
+    )
+    # Once per run, not once per pass.
+    assert said.count(warning) == 1
     again = _run(project, "--rerun", STEP)
     assert "knowledge base 'help_center' changed" not in again.stdout + again.stderr
     assert "in a week" in _outputs(project)["T-1001"]["matches"][0]["text"]

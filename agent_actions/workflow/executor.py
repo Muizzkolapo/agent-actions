@@ -32,6 +32,7 @@ from agent_actions.llm.providers.local_batch_records import release_local_batch_
 from agent_actions.llm.providers.tools.builtin import (
     RETRIEVE,
     builtin_tool,
+    first_knowledge_warning,
     knowledge_hash,
     retrieve_steps_of,
     runs_udf,
@@ -887,12 +888,14 @@ class ActionExecutor:
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
         spec = builtin_tool(configs.get(action_name))
         if KNOWLEDGE_EDIT in edits and spec is not None and spec["tool"] == RETRIEVE:
-            logger.warning(
-                "%s: knowledge base '%s' changed since it answered; run again with --rerun %s",
-                step_label(spec, action_name),
-                spec["base"],
-                action_name,
-            )
+            # A run with --wait makes several passes; it warns on the first.
+            if first_knowledge_warning(action_name):
+                logger.warning(
+                    "%s: knowledge base '%s' changed since it answered; run again with --rerun %s",
+                    step_label(spec, action_name),
+                    spec["base"],
+                    action_name,
+                )
             edits = [edit for edit in edits if edit != KNOWLEDGE_EDIT]
             if not edits:
                 return

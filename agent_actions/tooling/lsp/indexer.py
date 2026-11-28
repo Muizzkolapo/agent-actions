@@ -474,6 +474,8 @@ def _index_retrieve_steps(
             continue
         owner = known.get(action["name"])
         start = owner.location.line if owner is not None else 0
+        if owner is not None:
+            owner.retrieve_entries = [e for e in entries if isinstance(e, str)]
         for entry in entries:
             name = f"{action['name']}__{entry}"
             if not isinstance(entry, str) or name in known:
@@ -507,7 +509,7 @@ def _retrieve_reads(entry: Any) -> list[str]:
     if not isinstance(entry, dict):
         return []
     query = entry.get("query")
-    refs = [query] if isinstance(query, str) else query if isinstance(query, list) else []
+    refs = [query] if isinstance(query, str) else list(query) if isinstance(query, list) else []
     where = entry.get("where")
     refs += [v for v in where.values() if isinstance(v, str)] if isinstance(where, dict) else []
     roots = [ref.split(".", 1)[0] for ref in refs if isinstance(ref, str) and "." in ref]

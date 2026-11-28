@@ -178,7 +178,7 @@ The step is a step like the others. Its matches are stored, and the commands nam
 
 - `agac inspect` shows it with a note, also when its action is in a loop, and `agac records -A write_reply__help` prints its output.
 - A message about it reads `write_reply: retrieve 'help' (write_reply__help)`.
-- `--rerun write_reply__help` searches again. `--rerun write_reply` also searches again for each entry of `write_reply`. A filtered rerun (`--where` or `--records`) of `write_reply` does not search again: name the step, as `--rerun write_reply__help --where ...`.
+- `--rerun write_reply__help` searches again. `--rerun write_reply` also searches again for each entry of `write_reply`. A version of a versioned action, such as `--rerun score_1`, also searches again for the entries of its action. A filtered rerun (`--where` or `--records`) of `write_reply` does not search again: name the step, as `--rerun write_reply__help --where ...`.
 - `sandbox_expected.yml` names it as `write_reply__help`.
 
 In the prompt and in a guard of the action, `retrieve.help` is the output of `write_reply__help`. Text in a `{% raw %}` block or a `{# #}` comment of the prompt does not change. The prompt of an action with `retrieve` entries cannot use `retrieve` as a local name (`{% set retrieve %}`, a loop variable or a macro): the load refuses it. An action without entries, and a workflow without entries, can use the name as before. Another action can read the same matches: it observes `write_reply__help.matches` and depends on `write_reply`, or on an action downstream of it.

@@ -127,13 +127,18 @@ def run_builtin(spec: Mapping[str, Any], data: Any) -> dict[str, Any]:
 
 
 def retrieve_steps_of(action_configs: Mapping[str, Any], action: str) -> list[str]:
-    """The retrieve steps the load generated for the context_scope.retrieve of *action*."""
+    """The retrieve steps the load generated for the context_scope.retrieve of *action*.
+
+    A version (``score_1``) has the steps of its versioned action (``score``).
+    """
+    config = action_configs.get(action)
+    base = config.get("version_base_name") if isinstance(config, Mapping) else None
     return [
         name
-        for name, config in action_configs.items()
-        if (spec := builtin_tool(config)) is not None
+        for name, step in action_configs.items()
+        if (spec := builtin_tool(step)) is not None
         and spec["tool"] == RETRIEVE
-        and spec.get("action") == action
+        and spec.get("action") in (action, base)
     ]
 
 
@@ -160,6 +165,7 @@ class KnowledgeRun:
     sandbox: bool
     digests: dict[tuple[str, frozenset[str]], str] = field(default_factory=dict)
     hashes: dict[tuple[str, frozenset[str]], str | None] = field(default_factory=dict)
+    warned: set[str] = field(default_factory=set)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -226,6 +232,17 @@ def knowledge_hash(spec: Mapping[str, Any]) -> str | None:
                 run.project_root, key[0], set(key[1]), sandbox=run.sandbox
             )
         return run.hashes[key]
+
+
+def first_knowledge_warning(step: str) -> bool:
+    """Whether this run has not yet warned that the knowledge base of *step* changed."""
+    run = _knowledge_run
+    if run is None:
+        return True
+    with run.lock:
+        first = step not in run.warned
+        run.warned.add(step)
+    return first
 
 
 def query_words(value: Any, ref: str) -> list[str]:
