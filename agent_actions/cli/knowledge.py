@@ -29,15 +29,11 @@ def _bases(project_root: Path, name: str | None) -> dict[str, Any]:
     return {name: bases[name]}
 
 
-def _kinds_entries_use(project_root: Path) -> dict[str, set[frozenset[str]]]:
-    """Each base, and the sets of index kinds the retrieve entries of the workflows read.
-
-    A workflow that does not load is left out: its own commands report why.
-    """
-    import jinja2
+def _kinds_entries_use(project_root: Path) -> tuple[dict[str, set[frozenset[str]]], list[str]]:
+    """Each base and the sets of index kinds the workflows' retrieve entries read, and the
+    names of the workflows that do not load (their own commands report why)."""
     import yaml
 
-    from agent_actions.errors import AgentActionsError
     from agent_actions.llm.providers.tools.builtin import (
         RETRIEVE,
         builtin_tool,
@@ -46,23 +42,38 @@ def _kinds_entries_use(project_root: Path) -> dict[str, set[frozenset[str]]]:
     from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
     used: dict[str, set[frozenset[str]]] = {}
+    unread: list[str] = []
     for config in sorted(project_root.glob("agent_workflow/*/agent_config/*.y*ml")):
+        found: list[tuple[str, frozenset[str]]] = []
         try:
-            rendered = render_pipeline_with_templates(
-                config,
-                project_root / "templates",
-                compile_schemas=False,
-                project_root=project_root,
+            rendered = yaml.safe_load(
+                render_pipeline_with_templates(
+                    config,
+                    project_root / "templates",
+                    compile_schemas=False,
+                    project_root=project_root,
+                )
             )
-        except (AgentActionsError, OSError, ValueError, jinja2.TemplateError) as error:
-            logger.debug("knowledge: %s does not load: %s", config, error)
+            for action in rendered.get("actions") or []:
+                spec = builtin_tool(action) if isinstance(action, dict) else None
+                if spec is not None and spec["tool"] == RETRIEVE:
+                    found.append(searched_indexes(spec))
+        except Exception as error:  # any malformed workflow; the others still count
+            logger.debug("knowledge: %s does not load: %s", config, error, exc_info=True)
+            unread.append(config.stem)
             continue
-        for action in (yaml.safe_load(rendered) or {}).get("actions") or []:
-            spec = builtin_tool(action) if isinstance(action, dict) else None
-            if spec is not None and spec["tool"] == RETRIEVE:
-                base, kinds = searched_indexes(spec)
-                used.setdefault(base, set()).add(kinds)
-    return used
+        for base, kinds in found:
+            used.setdefault(base, set()).add(kinds)
+    return used, unread
+
+
+def _note_unread(unread: list[str]) -> None:
+    if unread:
+        click.echo(
+            f"Not read (does not load): {', '.join(unread)}. "
+            "An index kind that only its retrieve entries search is not shown.",
+            err=True,
+        )
 
 
 def _kinds(base: Any, used: set[frozenset[str]]) -> list[str]:
@@ -93,7 +104,8 @@ def list_bases(project_root: Path) -> None:
     if not bases:
         click.echo("No knowledge base in agent_actions.yml.")
         return
-    used = _kinds_entries_use(project_root)
+    used, unread = _kinds_entries_use(project_root)
+    _note_unread(unread)
     for name, base in bases.items():
         click.echo(f"{name}: {len(base.sources)} source(s), index: {', '.join(base.index)}")
         try:
@@ -136,7 +148,8 @@ def build(project_root: Path, name: str | None, refresh: bool, prune: bool) -> N
     from agent_actions.knowledge.index import prune as prune_files
 
     bases = _bases(project_root, name)
-    used = _kinds_entries_use(project_root)
+    used, unread = _kinds_entries_use(project_root)
+    _note_unread(unread)
     if refresh:
         request_refresh()
     current: dict[str, set[Path]] = {}
@@ -156,6 +169,11 @@ def build(project_root: Path, name: str | None, refresh: bool, prune: bool) -> N
     finally:
         if refresh:
             forget_refresh_request()
+    if prune and unread:
+        raise click.ClickException(
+            f"Prune skipped: {', '.join(unread)} does not load, so the index kinds its "
+            "retrieve entries search are not known. Fix or remove it, then run again."
+        )
     if prune:
         with ExitStack() as runs:
             _hold_every_run_lock(project_root, runs)
