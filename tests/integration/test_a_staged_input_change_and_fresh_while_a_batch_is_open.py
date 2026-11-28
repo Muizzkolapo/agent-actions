@@ -1,10 +1,10 @@
-"""A run whose batch is still open refuses a staged-input change and a plain --fresh (#1921).
+"""A staged-input change, and --fresh, while a batch of the run is still open (#1921).
 
 Between two commands of a paused run nothing holds the run lock. A file added to the
-staged input then reached the first action but never the actions after the batch, and a
-file removed was written back when the batch was collected; `--fresh` dropped the paid
-batch with no word. The next `agac run` now refuses both until the batch is collected,
-and `--fresh --abandon-in-flight` drops the batch on purpose.
+staged input reached the first action but never the actions after the batch; a file
+removed was written back when the batch was collected; `--fresh` dropped the paid batch
+with no word. A change is now answered or forgotten at every action, and `--fresh`
+refuses until the batch is collected, unless `--abandon-in-flight` drops it on purpose.
 """
 
 from __future__ import annotations
@@ -130,6 +130,14 @@ def _ids(root: Path, action: str) -> list[str]:
     return sorted(json.loads(result.stdout))
 
 
+def _collect(root: Path) -> list[int]:
+    """Run again, as a person does, until the run is no longer paused (at most 6 runs)."""
+    codes = [_run(root)[0]]
+    while codes[-1] == 4 and len(codes) < 6:
+        codes.append(_run(root)[0])
+    return codes
+
+
 @pytest.fixture
 def paused(tmp_path):
     root = _project(tmp_path)
@@ -139,27 +147,28 @@ def paused(tmp_path):
 
 
 class TestAStagedInputChangeWhileABatchIsOpen:
-    def test_an_added_file_is_refused_and_nothing_is_answered(self, paused):
+    def test_a_file_added_reaches_the_actions_after_the_batch(self, paused):
         _stage(paused, "c.json", [{"id": "c1", "n": 4}])
 
-        code, output = _run(paused)
+        codes = _collect(paused)
 
-        assert code == 2, output
-        assert "batch is still open for tag" in output
-        assert "added: staging/c.json" in output
-        assert _ids(paused, "step1") == ["a1", "a2", "b1"]
+        assert codes[-1] == 0
+        assert _ids(paused, "step1") == ["a1", "a2", "b1", "c1"]
+        assert _ids(paused, "tag") == ["a1", "a2", "b1", "c1"]
+        assert _ids(paused, "step3") == ["a1", "a2", "b1", "c1"]
 
-    def test_a_removed_file_is_refused_and_its_records_stay(self, paused):
+    def test_a_file_removed_is_not_written_back_when_the_batch_is_collected(self, paused):
         (paused / "agent_workflow" / WORKFLOW / "agent_io" / "staging" / "b.json").unlink()
 
-        code, output = _run(paused)
+        codes = _collect(paused)
 
-        assert code == 2, output
-        assert "removed: staging/b.json" in output
-        assert _ids(paused, "step1") == ["a1", "a2", "b1"]
+        assert codes[-1] == 0
+        assert _ids(paused, "step1") == ["a1", "a2"]
+        assert _ids(paused, "tag") == ["a1", "a2"]
+        assert _ids(paused, "step3") == ["a1", "a2"]
 
     def test_no_change_collects_the_batch_as_before(self, paused):
-        codes = [_run(paused)[0] for _ in range(4)]
+        codes = _collect(paused)
 
         assert codes[-1] == 0
         assert _ids(paused, "step3") == ["a1", "a2", "b1"]
