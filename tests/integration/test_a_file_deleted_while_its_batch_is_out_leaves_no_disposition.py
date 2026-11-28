@@ -50,4 +50,4 @@ def test_no_action_keeps_a_disposition_for_a_record_of_the_deleted_file(tmp_path
     assert _collect(root)[-1] == 0
 
     for action in _actions(root):
-        assert _disposed(root, action) <= _records(root, action), action
+        assert _disposed(root, action) == _records(root, action), action

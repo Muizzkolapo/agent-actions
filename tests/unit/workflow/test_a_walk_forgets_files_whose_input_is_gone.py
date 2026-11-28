@@ -346,35 +346,73 @@ def _disposed(backend, action=ACTION):
     return sorted(row["record_id"] for row in backend.get_disposition(action, snapshots=False))
 
 
+def _row(guid, parent=None):
+    row = {"source_guid": guid, "_state": "processed", "_delta_mode": "full"}
+    if parent:
+        row["parent_source_guid"] = parent
+    return row
+
+
 class TestTheDispositionsOfAFileWhoseInputIsGone:
-    def test_its_records_lose_theirs_and_the_kept_file_keeps_its_own(self, backend, tmp_path):
+    def test_its_records_lose_theirs_and_their_checkpoints(self, backend, tmp_path):
         """A batch collected after the input left wrote them; nothing else would clear them."""
-        _store(backend, "gone.json", "pages.json")
-        for record in ("gone.json", "pages.json"):
-            backend.set_disposition(ACTION, record, "success")
+        backend._write_target_raw(ACTION, "gone.json", [_row("g1")])
+        backend._write_target_raw(ACTION, "pages.json", [_row("p1")])
+        backend.set_disposition(ACTION, "g1", "success")
+        backend.save_checkpoint_records(ACTION, "gone.json", [_row("g1")])
 
         process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
 
-        assert _disposed(backend) == ["pages.json"]
+        assert "g1" not in _disposed(backend)
+        assert backend.read_checkpoint_records(ACTION, "gone.json") == []
+
+    def test_what_the_kept_files_and_the_node_hold_stays(self, backend, tmp_path):
+        """A filtered or failed record holds no row; nor does the node-level disposition."""
+        backend._write_target_raw(ACTION, "gone.json", [_row("g1")])
+        backend._write_target_raw(ACTION, "pages.json", [_row("p1")])
+        for record, disposition in [
+            ("g1", "success"),
+            ("p1", "success"),
+            ("filtered1", "filtered"),
+            ("failed1", "failed"),
+            ("__node__", "skipped"),
+        ]:
+            backend.set_disposition(ACTION, record, disposition)
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert _disposed(backend) == ["__node__", "failed1", "filtered1", "p1"]
+
+    def test_an_expanded_record_is_forgotten_by_its_input_guid(self, backend, tmp_path):
+        """An expansion's rows carry new guids; its disposition names its input."""
+        backend._write_target_raw(ACTION, "gone.json", [_row("m1", "X"), _row("m2", "X")])
+        backend._write_target_raw(ACTION, "pages.json", [_row("p1")])
+        backend.set_disposition(ACTION, "X", "success")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert "X" not in _disposed(backend)
 
     def test_a_record_a_kept_file_also_holds_keeps_its_disposition(self, backend, tmp_path):
         """Its identity is its content, so it may live on in another file."""
-        backend._write_target_raw(
-            ACTION,
-            "gone.json",
-            [{"source_guid": "moved", "_state": "processed", "_delta_mode": "full"}],
-        )
-        backend._write_target_raw(
-            ACTION,
-            "pages.json",
-            [{"source_guid": "moved", "_state": "processed", "_delta_mode": "full"}],
-        )
+        backend._write_target_raw(ACTION, "gone.json", [_row("moved")])
+        backend._write_target_raw(ACTION, "pages.json", [_row("moved")])
         backend.set_disposition(ACTION, "moved", "success")
 
         process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
 
         assert _held(backend) == ["pages.json"]
         assert _disposed(backend) == ["moved"]
+
+    def test_a_record_still_deferred_keeps_its_disposition(self, backend, tmp_path):
+        """It moved to a file whose batch is out, so no kept row holds it yet."""
+        backend._write_target_raw(ACTION, "gone.json", [_row("moved")])
+        backend._write_target_raw(ACTION, "pages.json", [_row("p1")])
+        backend.set_disposition(ACTION, "moved", "deferred")
+
+        process_files(_runner(backend), _params([_staged(tmp_path, "pages.json")]))
+
+        assert "moved" in _disposed(backend)
 
 
 class TestTheBatchStateOfAFileWhoseInputIsGone:
