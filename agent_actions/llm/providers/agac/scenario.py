@@ -281,6 +281,11 @@ class Scenario:
         key = self._named(self._data.actions, action)
         return key is not None and bool(self._data.actions[key].stub)
 
+    def calls_for_real(self, action: str) -> bool:
+        """Whether the scenario sets ``stub: false`` on *action*: its outside call is made."""
+        key = self._named(self._data.actions, action)
+        return key is not None and self._data.actions[key].stub is False
+
     def stubbed(self) -> list[str]:
         return [tool for tool in self._tools if self.stubs(tool)]
 

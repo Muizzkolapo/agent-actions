@@ -23,6 +23,8 @@ tracking) for each supported LLM vendor.
 | `cohere/__init__.py` | Module | Cohere provider adapter for embeddings/inference. | `llm.providers`, `cohere` |
 | `gemini/__init__.py` | Module | Gemini provider wiring (Google Gemini). | `llm.providers`, `google` |
 | `groq/__init__.py` | Module | Groq provider binding for Groq Cloud inference. | `llm.providers`, `groq` |
+| `mcp/session.py` | Module | `McpSession`: a stdlib, synchronous stdio client of an MCP server (start, `initialize`, `tools/list`, `call_tool`; a reader thread files each reply by id; a tool error raises `McpError`). `POOL` (`SessionPool`) keeps one started session per server name for the process and closes them at exit. `result_records` turns a tool result into records: structured content as is, a text item's JSON parsed, other text under `result`. | `subprocess`, `threading` |
+| `mcp/client.py` | Module | The `mcp` built-in tool: `server_settings(name, root)` reads a server of `mcp_servers:` in agent_actions.yml (`command`, `args`, `env`, `cwd`; `${NAME}` read from the environment), `arguments_for` reads each field reference of the record, and `called` calls the tool through `POOL` (one object is the output; anything else under `result`). A failed call raises `AgentActionsError`, which fails the record. | `config.path_config`, `mcp.session`, `tools.builtin` |
 
 | `ollama/__init__.py` | Module | Ollama provider with dual registration: `ollama_local` (no auth, `OLLAMA_HOST`, API-enforced structured output via `format` param) and `ollama_cloud` (Bearer auth via `OLLAMA_API_KEY`, `OLLAMA_CLOUD_HOST`, no structured output support yet). | `llm.providers`, `ollama` |
 | `openai/__init__.py` | Module | OpenAI provider adapter with tool/window shaping. | `llm.providers`, `openai` |

@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from agent_actions.llm.providers.tools.builtin import DEFAULT_CASE, PICK, RETRIEVE, ROUTE
+from agent_actions.llm.providers.tools.builtin import DEFAULT_CASE, MCP, PICK, RETRIEVE, ROUTE
 
 
 class RouteSpec(BaseModel):
@@ -82,7 +82,24 @@ class RetrieveSpec(BaseModel):
         return self
 
 
-_SPECS: dict[str, type[BaseModel]] = {ROUTE: RouteSpec, PICK: PickSpec, RETRIEVE: RetrieveSpec}
+class McpSpec(BaseModel):
+    """``mcp``: tool ``name`` of MCP server ``server``, called with ``arguments``."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    tool: Literal["mcp"]
+    server: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    # Each argument to a field reference, or to {"value": <constant>}.
+    arguments: dict[str, str | dict[str, Any]]
+
+
+_SPECS: dict[str, type[BaseModel]] = {
+    ROUTE: RouteSpec,
+    PICK: PickSpec,
+    RETRIEVE: RetrieveSpec,
+    MCP: McpSpec,
+}
 
 
 def checked_builtin(spec: Any) -> dict[str, Any]:

@@ -245,6 +245,31 @@ Only rewrite if checks failed:
 
 `filter` removes the record entirely. `skip` sets `content["action_name"] = null` and the record continues — downstream must handle null with `{% if %}` in prompts.
 
+### MCP Action (a tool of an MCP server)
+
+Call one tool of an MCP server for each record, with no Python tool. Declare the server once in `agent_actions.yml`:
+
+```yaml
+mcp_servers:
+  dbt:
+    command: uvx
+    args: [dbt-mcp]
+    env: { DBT_TOKEN: "${DBT_TOKEN}" }   # read from the environment, never written here
+```
+
+```yaml
+- name: lineage
+  kind: mcp
+  server: dbt
+  tool: get_lineage
+  schema: lineage_output                 # required, as for a tool action
+  arguments:
+    model: source.model_name             # field reference: added to observe
+    depth: { value: 2 }                  # constant
+```
+
+It routes as a RECORD tool action: online, one call a record, no `prompt`, no `impl`, no File granularity. A tool error fails the record. A sandbox run starts no server and the mock answers from the schema, unless the scenario sets `stub: false` on the action.
+
 ### HITL (Human-in-the-Loop)
 
 ```yaml

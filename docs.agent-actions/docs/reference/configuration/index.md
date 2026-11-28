@@ -181,7 +181,7 @@ actions:
 |-------|------|-------------|
 | `name` | string | A unique action identifier |
 | `intent` | string | A human-readable description (required) |
-| `kind` | string | `llm` (default), `tool` or `hitl` |
+| `kind` | string | `llm` (default), `tool`, `hitl` or `mcp` (a tool of an MCP server, see [MCP Servers](./mcp-servers.md)) |
 | `dependencies` | list | The upstream actions to wait for |
 | `prompt` | string | An inline prompt or a `$store.template` reference |
 | `schema` | string | The output validation schema |
@@ -383,6 +383,8 @@ defaults:
 | `impl` | string | The Python function name (required for `kind: tool`) |
 
 Tool actions support `Record` and `File` granularity. With File granularity, the tool can process all records at the same time. This permits operations such as deduplication, aggregation and batch exports.
+
+To call a tool of an MCP server in place of a Python function, use `kind: mcp`. See [MCP Servers](./mcp-servers.md).
 
 ## Vendor Support
 

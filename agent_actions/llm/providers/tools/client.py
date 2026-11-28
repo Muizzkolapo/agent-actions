@@ -9,7 +9,7 @@ import json
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent_actions.config import sandbox
-from agent_actions.llm.providers.tools.builtin import builtin_tool, run_builtin
+from agent_actions.llm.providers.tools.builtin import MCP, builtin_tool, run_builtin
 from agent_actions.utils.constants import MODEL_NAME_KEY, RECORD_GUID_KEY
 from agent_actions.utils.udf_management.tooling import (
     execute_user_defined_function,
@@ -138,6 +138,12 @@ class ToolClient:
         Invoke a user-defined function (UDF) specified in the configuration.
         """
         builtin = builtin_tool(agent_config)
+        if builtin is not None and builtin["tool"] == MCP and sandbox.is_active():
+            # A sandbox run starts no outside server unless the scenario asks it to.
+            followed = sandbox.scenario()
+            name = str(agent_config.get("name"))
+            if followed is not None and not followed.calls_for_real(name):
+                return ToolClient._stub(followed, agent_config, context_data, name)
         if builtin is not None:
             data = ToolClient._strip_internal_fields(context_data)
             record = json.loads(data) if isinstance(data, str) else data

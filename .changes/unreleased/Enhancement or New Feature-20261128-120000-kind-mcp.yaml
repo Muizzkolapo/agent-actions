@@ -1,0 +1,3 @@
+kind: Enhancement or New Feature
+body: '`kind: mcp` calls a tool of an MCP server for each record, with no Python tool: declare the server under `mcp_servers:` in agent_actions.yml (`command`, `args`, `env`, `cwd`; `${NAME}` is read from the environment) and give the action `server`, `tool`, `arguments` (field references or constants) and an output schema. It runs as a RECORD tool action; a tool error fails the record; a sandbox run starts no server unless the scenario sets `stub: false`. agac speaks to the server over stdio with no new dependency.'
+time: 2026-11-28T12:00:00.000000000+00:00

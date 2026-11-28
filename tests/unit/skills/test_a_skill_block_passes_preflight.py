@@ -99,7 +99,7 @@ def _authored(action: dict[str, Any]) -> dict[str, Any]:
     kind = action.get("kind", "llm")
     if kind == "tool":
         action.setdefault("impl", action["name"])
-    elif kind != "hitl" and (
+    elif kind not in ("hitl", "mcp") and (
         not isinstance(action.get("prompt"), str) or action["prompt"].startswith("$")
     ):
         action["prompt"] = "Answer."
@@ -137,6 +137,8 @@ def _project(root: Path, block: list[dict[str, Any]], earlier: dict[str, dict[st
     (root / "agent_actions.yml").write_text(
         "default_agent_config: {model_name: gpt-4o-mini}\n"
         "knowledge: {help_center: {sources: [knowledge/help_center/*.md]}}\n"
+        # The server the MCP examples call; loading a workflow never starts it.
+        "mcp_servers: {dbt: {command: uvx, args: [dbt-mcp]}}\n"
     )
     articles = root / "knowledge" / "help_center"
     articles.mkdir(parents=True)

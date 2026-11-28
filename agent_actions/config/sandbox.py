@@ -283,6 +283,10 @@ def tool_actions(action_configs: Mapping[str, Mapping[str, Any]]) -> dict[str, T
                 "is a retrieve step: a sandbox run searches its knowledge base, or the records "
                 "of its earlier action, for real, as a run does"
             )
+        elif spec is not None and spec["tool"] == "mcp":
+            # The mock answers it unless the scenario says `stub: false`.
+            if not config.get("json_output_schema"):
+                cannot_stub = "has no output schema, so the mock has nothing to build from"
         elif spec is not None:
             cannot_stub = "is a built-in tool: it runs no code of the project"
         elif str(config.get("granularity") or "").lower() == "file":

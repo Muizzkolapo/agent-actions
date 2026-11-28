@@ -14,6 +14,7 @@ from agent_actions.cli.cli_decorators import (
     workflow_option,
 )
 from agent_actions.config import sandbox
+from agent_actions.llm.providers.tools.builtin import MCP, builtin_tool
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
@@ -103,6 +104,14 @@ class ActionCommand(BaseInspectCommand):
             model += "  ·  [dim]answered by the sandbox mock[/dim]"
         elif sandbox.stubs(self.action_name):
             model += "  ·  [dim]stubbed by the sandbox scenario: its code does not run[/dim]"
+        spec = builtin_tool(action_config)
+        if spec is not None and spec["tool"] == MCP:
+            kind = "mcp"
+            model = _escape_markup(f"tool {spec['name']} of MCP server {spec['server']}")
+            if sandbox.is_active():
+                followed = sandbox.scenario()
+                if followed is None or not followed.calls_for_real(self.action_name):
+                    model += "  ·  [dim]answered by the sandbox mock: no server starts[/dim]"
         granularity = action_config.get("granularity", get_default("granularity"))
         guard = action_config.get("guard")
         guard_label = (
