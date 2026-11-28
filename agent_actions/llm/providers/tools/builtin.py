@@ -4,7 +4,8 @@
 ``cases``, else ``default`` when the router has a default branch. ``pick`` writes the
 output of the one action of ``of`` the record holds an output of. ``retrieve`` writes the
 matches a search of a knowledge base, or of the records an earlier action processed, finds
-for the record's query.
+for the record's query. ``mcp`` writes what a tool of an MCP server the project declares
+answers for the record (``kind: mcp``).
 """
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ BUILTIN_KEY = "_builtin"
 ROUTE = "route"
 PICK = "pick"
 RETRIEVE = "retrieve"
-BUILTIN_TOOLS = frozenset({ROUTE, PICK, RETRIEVE})
+MCP = "mcp"
+BUILTIN_TOOLS = frozenset({ROUTE, PICK, RETRIEVE, MCP})
 CASE_FIELD = "case"
 DEFAULT_CASE = "default"
 
@@ -127,6 +129,10 @@ def run_builtin(
         return {CASE_FIELD: route_case(spec, data)}
     if spec["tool"] == RETRIEVE:
         return retrieved(spec, data, source_guid)
+    if spec["tool"] == MCP:
+        from agent_actions.llm.providers.mcp.client import called
+
+        return called(spec, data)
     return picked(spec, data)
 
 

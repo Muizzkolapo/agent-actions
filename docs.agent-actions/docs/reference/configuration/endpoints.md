@@ -13,7 +13,7 @@ The endpoint MUST:
 2. Accept `response_format: {"type": "json_schema", "json_schema": {...}}`.
 3. Return `choices[0].message.content` as JSON text that matches the schema.
 
-Servers that expose this API include vLLM, SGLang, llama.cpp and llamafile, Ollama, LM Studio, OpenRouter, Azure OpenAI and the Vertex AI OpenAI route. A server that does not speak this API is out of scope. For such a server, put an adapter in front of it (vLLM, TGI, a LiteLLM proxy). Or call the server from a `tool` action.
+Servers that expose this API include vLLM, SGLang, llama.cpp and llamafile, Ollama, LM Studio, OpenRouter, Azure OpenAI and the Vertex AI OpenAI route. A server that does not speak this API is out of scope. For such a server, put an adapter in front of it (vLLM, TGI, a LiteLLM proxy). Or call the server from a `tool` action. To call a tool of an MCP server, see [MCP Servers](./mcp-servers.md).
 
 ## Declare an endpoint
 

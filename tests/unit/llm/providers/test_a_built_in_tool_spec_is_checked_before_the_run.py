@@ -47,7 +47,10 @@ def _action(spec: dict[str, Any], **over: Any) -> dict[str, Any]:
         ({**ROUTE, "cases": ["a", "default"]}, "names the default branch"),
         ({**PICK, "of": "on_a"}, "of"),
         ({**PICK, "of": []}, "of"),
-        ({"tool": "rout", "field": "source.kind"}, "the built-in tools are pick, retrieve, route"),
+        (
+            {"tool": "rout", "field": "source.kind"},
+            "the built-in tools are mcp, pick, retrieve, route",
+        ),
     ],
     ids=[
         "no-field",

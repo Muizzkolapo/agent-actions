@@ -19,6 +19,7 @@ from agent_actions.config.includes import (
     workflow_label,
 )
 from agent_actions.config.loops import expand_loops, finish_loops
+from agent_actions.config.mcp_actions import expand_mcp_actions
 from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.retrieve import (
     alias_retrieve_prompts,
@@ -739,6 +740,7 @@ def render_pipeline_with_templates(
     # Step 2a: Put the actions of each included branch file in place of its include entry
     data, inclusions = expand_includes(data, yaml_path, project_root=project_root)
     data = expand_loops(data)
+    data = _with_file(workflow_file, expand_mcp_actions, data, workflow_file, project_root)
     data = _with_file(workflow_file, expand_retrieves, data, workflow_file, project_root)
     data = _with_file(workflow_file, expand_routes, data, workflow_file, inclusions)
     finish_retrieve_routes(data)

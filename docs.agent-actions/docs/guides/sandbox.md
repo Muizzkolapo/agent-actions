@@ -37,6 +37,7 @@ Agent Actions loads the workflow as for a real run. Then it changes these action
 |--------|------------------|
 | LLM action | The mock provider answers it. The action keeps its `model_name`, which the traces and `inspect` show |
 | Tool action | Runs its own code, as in a real run. A tool action that the scenario stubs does not run: the mock builds its output. See [Stub a tool action](#stub-a-tool-action) |
+| MCP action (`kind: mcp`) | Starts no MCP server: the mock builds its output from its output schema. With `stub: false` on the action in the scenario, the action calls its server, as in a real run. See [MCP Servers](../reference/configuration/mcp-servers.md#sandbox-runs) |
 | HITL action | Approves each record and opens no review UI. The records get `hitl_status: approved` and the comment `auto-approved (sandbox)` |
 | `retrieve` step | Searches for real. A search of a knowledge base reads its real index in `.agac/knowledge/`. A search of an earlier action reads the records of the sandbox store. You cannot stub the step. A knowledge base with a database source needs its snapshot: a sandbox run does not connect to the database, and stops if the snapshot does not exist. See [In a sandbox run](./knowledge.md#in-a-sandbox-run) |
 
@@ -125,7 +126,7 @@ batch:
 | `break_rules` | With the probability `rate`, the mock changes the record so that the real check of a rule fails. `rules: all` breaks one error-severity rule of the action. An action with no such rule is not changed. A list of rule types breaks each rule of those types |
 | `heal_on_attempt` | The attempt of a record from which a fault stops. With `heal_on_attempt: 2`, the first attempt fails and the next attempt passes: the retry, the repair round or `agac retry`. `null` never stops the fault |
 | `pin` | Sets each named field of the record to the value. The field must be in the output schema of the action. The value is kept also when the schema or a rule refuses it. The mock then logs one warning for each action and field |
-| `stub` | Only under `actions`, for a tool action. With `stub: true`, the code of the tool does not run in a sandbox run, and the mock builds the output of the tool. See [Stub a tool action](#stub-a-tool-action) |
+| `stub` | Only under `actions`, for a tool action. With `stub: true`, the code of the tool does not run in a sandbox run, and the mock builds the output of the tool. See [Stub a tool action](#stub-a-tool-action). For a `kind: mcp` action, the mock builds the output by default, and `stub: false` calls the server |
 | `records` | Each entry gives the rules of the records that its `match` selects. `error: <kind>` makes each attempt of the record fail with that kind. An entry can also set `errors`, `break_rules`, `pin` and `latency_ms` |
 | `batch` | The timing and the faults of the mock batch provider |
 

@@ -96,6 +96,7 @@ const sidebars: SidebarsConfig = {
             'reference/configuration/loops',
             'reference/configuration/defaults',
             'reference/configuration/endpoints',
+            'reference/configuration/mcp-servers',
           ],
         },
         {

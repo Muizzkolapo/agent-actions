@@ -6,7 +6,7 @@ sidebar_position: 6
 
 # mcp Command
 
-The `mcp` command starts a server that speaks the [Model Context Protocol](https://modelcontextprotocol.io) (MCP). An AI assistant (Claude Code, Claude Desktop, Cursor, or any other MCP client) starts the command and calls its tools. With these tools, the assistant can validate, run, retry and check a workflow, and read the result.
+The `mcp` command starts a server that speaks the [Model Context Protocol](https://modelcontextprotocol.io) (MCP). An AI assistant (Claude Code, Claude Desktop, Cursor, or any other MCP client) starts the command and calls its tools. For the other direction, a workflow action that calls a tool of an MCP server, see [MCP Servers](../configuration/mcp-servers.md). With these tools, the assistant can validate, run, retry and check a workflow, and read the result.
 
 ```bash
 agac mcp [options]

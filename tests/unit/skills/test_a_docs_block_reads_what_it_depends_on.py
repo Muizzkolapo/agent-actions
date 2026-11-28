@@ -109,14 +109,15 @@ def _authored(action: dict[str, Any]) -> dict[str, Any]:
     action = dict(action)
     action.setdefault("intent", action["name"])
     kind = action.get("kind", "llm")
-    if kind == "tool":
-        action.setdefault("impl", action["name"])
+    if kind in ("tool", "mcp"):
+        if kind == "tool":
+            action.setdefault("impl", action["name"])
         if not isinstance(action.get("schema"), dict):
             action["schema"] = {"out": "string"}
     elif kind != "hitl":
         if not isinstance(action.get("prompt"), str) or action["prompt"].startswith("$"):
             action["prompt"] = "Answer."
-    if kind != "tool" and not isinstance(action.get("schema"), dict):
+    if kind not in ("tool", "mcp") and not isinstance(action.get("schema"), dict):
         action.pop("schema", None)
     return action
 
