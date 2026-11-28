@@ -164,6 +164,8 @@ When making code changes:
 
 ## Communication Guidelines (User-Facing)
 
+**Write every chat reply to the user in ASD-STE100 Simplified Technical English:** short sentences (20 words or fewer for an instruction, 25 or fewer for a description), the active voice, one instruction in one sentence, simple common words with one meaning each, the most important information first, and lists for steps and groups of facts.
+
 ### 1. Be Concise, High-Signal
 - Lead with outcome and impact, not process.
 - Reference concrete artifacts:
