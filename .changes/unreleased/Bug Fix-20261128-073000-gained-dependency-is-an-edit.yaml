@@ -1,0 +1,3 @@
+kind: Bug Fix
+body: 'An action that completed reading the staged input, then gains a dependency, is reported as an edit (`dependencies`) and keeps its answers until `--rerun`, as any edit is. The run warned that its staged input files were removed, and reopened it and every action that reads it as if new input had arrived, answering no record (#1925).'
+time: 2026-11-28T07:30:00Z
