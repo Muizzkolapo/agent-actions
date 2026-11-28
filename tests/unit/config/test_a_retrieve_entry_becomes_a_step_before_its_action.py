@@ -261,12 +261,20 @@ class TestTheAlias:
         assert "entries: help" in message
 
     def test_an_alias_on_an_action_with_no_entry_is_refused(self, tmp_path):
+        other = _action("a", context_scope={"observe": ["retrieve.help.matches"]})
+
+        assert "retrieve.help" in _refusal(_workflow(actions=[other]), tmp_path)
+
+    def test_a_workflow_with_no_entry_keeps_every_retrieve_name_as_it_is(self, tmp_path):
         data = {
             "name": "wf",
-            "actions": [_action("a", context_scope={"observe": ["retrieve.help.matches"]})],
+            "actions": [
+                _action("a", context_scope={"observe": ["retrieve.help.matches"]}),
+                _action("retrieve", guard={"condition": "retrieve.x == 1"}),
+            ],
         }
 
-        assert "retrieve.help" in _refusal(data, tmp_path)
+        assert expand_retrieves(copy.deepcopy(data), WF, tmp_path) == data
 
 
 class TestTheGuard:
@@ -361,8 +369,8 @@ class TestTheRefusals:
 
         assert "already an action" in _refusal(data, tmp_path)
 
-    def test_an_action_named_retrieve_is_refused(self, tmp_path):
-        data = {"name": "wf", "actions": [_action("retrieve")]}
+    def test_an_action_named_retrieve_is_refused_when_the_workflow_has_entries(self, tmp_path):
+        data = _workflow(actions=[_action("retrieve")])
 
         assert "'retrieve' cannot name an action" in _refusal(data, tmp_path)
 

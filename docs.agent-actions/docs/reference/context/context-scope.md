@@ -264,7 +264,7 @@ The load refuses these entries:
 
 - `retrieve` in `defaults:` or in `default_agent_config:`.
 - An entry name that ends in `_<digits>`, or an entry whose step name is the name of an action.
-- An action named `retrieve`.
+- An action named `retrieve`, in a workflow that has `retrieve` entries.
 - A `query` or `where` reference to an action that is not upstream of the action.
 - `text`, `title` or `id` on an entry. Set them on the source of the knowledge base.
 - A method whose index the knowledge base does not build, a `where` field that no source of the base lists under `metadata:`, and `key` on a base whose sources do not all set `id:`.

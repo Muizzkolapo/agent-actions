@@ -26,18 +26,19 @@ def knowledge(monkeypatch):
     return install_fake_knowledge(monkeypatch, FakeBase("help_center"))
 
 
-def _render(tmp_path: Path, prompt: str = PROMPT, guard=None) -> dict:
+def _render(tmp_path: Path, prompt: str = PROMPT, guard=None, *, entries: bool = True) -> dict:
     (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
     reply = {
         "name": "write_reply",
         "intent": "reply",
         "prompt": prompt,
         "schema": {"reply": "string"},
-        "context_scope": {
-            "observe": ["source.text"],
-            "retrieve": {"help": {"from": "help_center", "query": "source.text"}},
-        },
+        "context_scope": {"observe": ["source.text"]},
     }
+    if entries:
+        reply["context_scope"]["retrieve"] = {
+            "help": {"from": "help_center", "query": "source.text"}
+        }
     if guard is not None:
         reply["guard"] = guard
     workflow = tmp_path / WF
@@ -96,3 +97,70 @@ def test_an_unknown_field_of_the_step_is_caught_by_the_analyzer(tmp_path):
     result = analyze_workflow(rendered)
 
     assert any("answers" in str(error) for error in result.errors)
+
+
+LOCAL_SET = '{% set retrieve = {"matches": ["a"]} %}{{ retrieve.matches }} {{ source.text }}'
+RAW = "{% raw %}{{ retrieve.help }}{% endraw %} {{ source.text }}"
+
+
+class TestAWorkflowWithNoEntryLoadsAsBefore:
+    def test_a_local_variable_named_retrieve_is_left_to_jinja(self, tmp_path):
+        reply = _by_name(_render(tmp_path, LOCAL_SET, entries=False))["write_reply"]
+
+        assert "retrieve.matches" in reply["prompt"]
+
+    def test_raw_text_naming_retrieve_is_kept(self, tmp_path):
+        reply = _by_name(_render(tmp_path, RAW, entries=False))["write_reply"]
+
+        assert "{{ retrieve.help }}" in reply["prompt"]
+
+    def test_a_load_time_variable_named_retrieve_renders_into_the_prompt(self, tmp_path):
+        _render(tmp_path, "{{ source.text }}", entries=False)
+        workflow = tmp_path / WF
+        text = workflow.read_text().replace(
+            "'{{ source.text }}'", "'{{ retrieve }} {{ source.text }}'"
+        )
+        workflow.write_text('{% set retrieve = "from the file" %}\n' + text)
+
+        rendered = yaml.safe_load(
+            render_pipeline_with_templates(
+                workflow, tmp_path / "templates", compile_schemas=False, project_root=tmp_path
+            )
+        )
+
+        assert _by_name(rendered)["write_reply"]["prompt"].startswith("from the file ")
+
+    def test_a_prompt_reading_retrieve_is_kept_for_the_later_checks(self, tmp_path):
+        rendered = _render(tmp_path, "{{ retrieve.help }} {{ source.text }}", entries=False)
+
+        assert "{{ retrieve.help }}" in _by_name(rendered)["write_reply"]["prompt"]
+
+    def test_a_guard_naming_retrieve_is_left_to_the_later_checks(self, tmp_path):
+        rendered = _render(
+            tmp_path, "{{ source.text }}", {"condition": "retrieve.x == 1"}, entries=False
+        )
+
+        assert _by_name(rendered)["write_reply"]["guard"]["condition"] == "retrieve.x == 1"
+
+
+class TestAnActionWithEntries:
+    def test_raw_text_is_not_rewritten(self, tmp_path):
+        prompt = "{% raw %}{{ retrieve.help }}{% endraw %}{{ retrieve.help.count }}"
+
+        reply = _by_name(_render(tmp_path, prompt))["write_reply"]
+
+        assert "{{ retrieve.help }}" in reply["prompt"]
+        assert "write_reply__help.count" in reply["prompt"]
+
+    @pytest.mark.parametrize(
+        "prompt",
+        [
+            LOCAL_SET,
+            "{% macro retrieve() %}x{% endmacro %}{{ retrieve() }}{{ source.text }}",
+            "{% for retrieve in [1] %}{{ retrieve }}{% endfor %}{{ source.text }}",
+            "{% with retrieve = 1 %}{{ retrieve }}{% endwith %}{{ source.text }}",
+        ],
+    )
+    def test_a_local_name_retrieve_is_refused(self, tmp_path, prompt):
+        with pytest.raises(ConfigurationError, match="binds 'retrieve' itself"):
+            _render(tmp_path, prompt)

@@ -181,14 +181,15 @@ The step is a step like the others. Its matches are stored, and the commands nam
 - `--rerun write_reply__help` searches again. `--rerun write_reply` also searches again for each entry of `write_reply`. A filtered rerun (`--where` or `--records`) of `write_reply` does not search again: name the step, as `--rerun write_reply__help --where ...`.
 - `sandbox_expected.yml` names it as `write_reply__help`.
 
-In the prompt and in a guard of the action, `retrieve.help` is the output of `write_reply__help`. Another action can read the same matches: it observes `write_reply__help.matches` and depends on `write_reply`, or on an action downstream of it.
+In the prompt and in a guard of the action, `retrieve.help` is the output of `write_reply__help`. Text in a `{% raw %}` block or a `{# #}` comment of the prompt does not change. The prompt of an action with `retrieve` entries cannot use `retrieve` as a local name (`{% set retrieve %}`, a loop variable or a macro): the load refuses it. An action without entries, and a workflow without entries, can use the name as before. Another action can read the same matches: it observes `write_reply__help.matches` and depends on `write_reply`, or on an action downstream of it.
 
 The load refuses these entries:
 
 - `retrieve` under `defaults:` or under `default_agent_config:`. Write it on each action that searches.
 - An entry name that ends in `_<digits>`, for example `help_2`. Agent Actions reads that ending as a version.
 - An entry whose step name is the name of an action.
-- An action named `retrieve`.
+- An action named `retrieve`, in a workflow that has `retrieve` entries.
+- A prompt of an action with entries that sets `retrieve` as a local name.
 - A `query` or `where` reference to an action that is not upstream of the action.
 - A `top_k` outside 1 to 50, a `candidates` below `top_k` or above 1000, a `method` that the base has no index for, or `key` with another method.
 - A `where` field that no source of the base lists under `metadata:`.

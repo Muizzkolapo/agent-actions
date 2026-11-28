@@ -56,6 +56,10 @@ _TOKEN = re.compile(
     r"|(?P<name>[A-Za-z_][A-Za-z0-9_]*)"
 )
 _JINJA_TAG = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
+# Prompt text the alias never rewrites: a raw block and a comment.
+_KEPT_TEXT = re.compile(
+    r"\{%[-+]?\s*raw\s*[-+]?%\}.*?\{%[-+]?\s*endraw\s*[-+]?%\}|\{#.*?#\}", re.DOTALL
+)
 _SCOPE_LISTS = ("observe", "passthrough", "drop")
 
 MATCH_FIELDS = {
@@ -104,17 +108,17 @@ def expand_retrieves(data: Any, workflow_file: str, project_root: Path | None = 
     if not isinstance(actions, list):
         return data
     _refuse_in_defaults(data, workflow_file, project_root)
+    # A workflow with no entry loads as it would without this feature.
+    if not any(_entries_of(e) for e in actions):
+        return data
     names = {e["name"] for e in actions if isinstance(e, dict) and isinstance(e.get("name"), str)}
     if RETRIEVE_KEY in names:
         raise ConfigurationError(
             f"Action '{RETRIEVE_KEY}' in {workflow_file}: '{RETRIEVE_KEY}' cannot name an "
-            f"action. A prompt or guard reads '{RETRIEVE_KEY}.<entry>' as an entry of the "
-            "action's context_scope.retrieve.",
+            "action of a workflow that has context_scope.retrieve entries. A prompt or guard "
+            f"reads '{RETRIEVE_KEY}.<entry>' as an entry of its action's context_scope.retrieve.",
             context={"action_name": RETRIEVE_KEY},
         )
-    if not any(_entries_of(e) for e in actions):
-        _refuse_alias_without_entries(actions, workflow_file)
-        return data
     data = copy.deepcopy(data)
     actions = data["actions"]
     graph = _read_graph(actions)
@@ -181,22 +185,63 @@ def finish_retrieve_routes(data: Any) -> None:
 def alias_retrieve_prompts(data: Any, workflow_file: str) -> None:
     """Write ``retrieve.<entry>`` in each prompt as the name of the step it aliases.
 
-    Runs once prompts are resolved; refuses an alias of no entry of the action.
+    Runs once prompts are resolved, only on actions that have entries; refuses an alias of
+    no entry of the action, and a prompt that binds the name ``retrieve`` itself.
     """
     actions = data.get("actions") if isinstance(data, dict) else None
     for action in actions if isinstance(actions, list) else []:
         if not isinstance(action, dict):
             continue
-        steps = action.pop(_STEPS_KEY, None) or {}
+        steps = action.pop(_STEPS_KEY, None)
         prompt = action.get("prompt")
-        if isinstance(prompt, str) and RETRIEVE_KEY in prompt:
+        if steps and isinstance(prompt, str) and RETRIEVE_KEY in prompt:
             where = f"Action '{action.get('name')}' in {workflow_file}: its prompt"
+            _refuse_local_retrieve(prompt, where)
             action["prompt"] = _aliased_prompt(prompt, steps, where)
 
 
 def _aliased_prompt(prompt: str, steps: Mapping[str, str], where: str) -> str:
-    """*prompt* with the alias written as step names inside each Jinja tag."""
-    return _JINJA_TAG.sub(lambda tag: _aliased(tag.group(0), steps, where), prompt)
+    """*prompt* with the alias written as step names inside each Jinja tag.
+
+    Text in a ``{% raw %}`` block or a ``{# #}`` comment is kept as written.
+    """
+
+    def aliased(text: str) -> str:
+        return _JINJA_TAG.sub(lambda tag: _aliased(tag.group(0), steps, where), text)
+
+    pieces: list[str] = []
+    pos = 0
+    for kept in _KEPT_TEXT.finditer(prompt):
+        pieces += [aliased(prompt[pos : kept.start()]), kept.group(0)]
+        pos = kept.end()
+    pieces.append(aliased(prompt[pos:]))
+    return "".join(pieces)
+
+
+def _refuse_local_retrieve(prompt: str, where: str) -> None:
+    """Refuse a prompt that binds ``retrieve`` (set, for, with, macro, import)."""
+    import jinja2
+    from jinja2 import nodes
+
+    from agent_actions.prompt.cache_point import PROMPT_EXTENSIONS
+
+    try:
+        # Parsed only, never rendered.
+        ast = jinja2.Environment(extensions=PROMPT_EXTENSIONS).parse(prompt)  # nosec B701
+    except jinja2.TemplateError:
+        return  # The load reports a prompt that does not parse.
+    names = [n.name for n in ast.find_all(nodes.Name) if n.ctx in ("store", "param")]
+    names += [m.name for m in ast.find_all(nodes.Macro)]
+    names += [i.target for i in ast.find_all(nodes.Import)]
+    names += [
+        n if isinstance(n, str) else n[1] for i in ast.find_all(nodes.FromImport) for n in i.names
+    ]
+    if RETRIEVE_KEY in names:
+        raise ConfigurationError(
+            f"{where} binds '{RETRIEVE_KEY}' itself (with set, for, with, macro or import). "
+            f"In an action with context_scope.retrieve entries, '{RETRIEVE_KEY}' names those "
+            "entries: give the local name another name.",
+        )
 
 
 # -- one entry ---------------------------------------------------------------
