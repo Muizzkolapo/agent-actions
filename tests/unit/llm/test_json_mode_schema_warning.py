@@ -7,6 +7,7 @@ Validates that:
 - No false positives for valid configs
 """
 
+import uuid
 from typing import Any
 from unittest.mock import patch
 
@@ -14,9 +15,21 @@ import pytest
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchTask
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.logging.core.manager import get_manager
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     WorkflowStaticAnalyzer,
 )
+
+
+@pytest.fixture(autouse=True)
+def _a_run():
+    """Each test is a new run, so the runtime warning (once per action in a run) fires."""
+    manager = get_manager()
+    before = manager.get_context("correlation_id")
+    manager.set_context(correlation_id=f"run-{uuid.uuid4().hex[:8]}")
+    yield
+    manager.set_context(correlation_id=before)
+
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
