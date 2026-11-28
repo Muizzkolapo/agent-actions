@@ -56,7 +56,7 @@ context_scope:
       from: help_center                   # a knowledge base (an action name is refused in this version)
       query: [source.text]                # field refs, joined with spaces
       method: {keyword: 0.7, fuzzy: 0.3}  # default keyword; or [keyword, fuzzy] (equal weights)
-      where: {category: classify.category}  # a field ref if it starts with source/an upstream action
+      where: {category: classify.category}  # a field ref if it starts with source/an upstream action; compared as text (2 == "2")
       top_k: 4                            # default 5, 1..50
       candidates: 20                      # default max(20, 4 * top_k), top_k..1000; per method, before the merge
       max_context_tokens: 1000            # total size; never cuts a chunk

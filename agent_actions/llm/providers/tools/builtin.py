@@ -207,7 +207,11 @@ def resolve_knowledge(
 
 
 def knowledge_hash(spec: Mapping[str, Any]) -> str | None:
-    """The digest the current files give the indexes *spec* searches; None outside a run."""
+    """The digest the indexes *spec* searches have in this run; None outside a run.
+
+    Once the run resolved them, the digest its searches used: a later scan could see an
+    edit made during the run, or fail.
+    """
     run = _knowledge_run
     if run is None:
         return None
@@ -215,6 +219,8 @@ def knowledge_hash(spec: Mapping[str, Any]) -> str | None:
 
     key = searched_indexes(spec)
     with run.lock:
+        if key in run.digests:
+            return run.digests[key]
         if key not in run.hashes:
             run.hashes[key] = current_hash(
                 run.project_root, key[0], set(key[1]), sandbox=run.sandbox
@@ -251,6 +257,14 @@ def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any
         name: value["value"] if isinstance(value, Mapping) else _value_or_none(data, value)
         for name, value in spec["where"].items()
     }
+    label = step_label(spec, f"{spec['action']}__{spec['entry']}")
+    for name, value in where.items():
+        if isinstance(value, Mapping | list):
+            kind = "a list" if isinstance(value, list) else "an object"
+            raise TypeError(
+                f"{label}: 'where: {{{name}: {spec['where'][name]}}}' holds {kind}; a where "
+                "value is one text, number or boolean"
+            )
     run = _knowledge_run
     digest = run.digests.get(searched_indexes(spec)) if run is not None else None
     if run is None or digest is None:
@@ -272,5 +286,5 @@ def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any
         candidates=spec["candidates"],
         max_context_tokens=spec["max_context_tokens"],
         max_per_origin=spec["max_per_origin"],
-        label=step_label(spec, f"{spec['action']}__{spec['entry']}"),
+        label=label,
     )

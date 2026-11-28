@@ -48,9 +48,14 @@ Where = Sequence[tuple[str, Any]]
 Hit = tuple[str, float]
 
 
+def _words(text: str) -> list[str]:
+    """The lowercase word tokens of *text* that hold a letter or a digit (not ``___``)."""
+    return [w for w in _WORD.findall(text.lower()) if any(ch.isalnum() for ch in w)]
+
+
 def terms(text: str, *, keep_stopwords: bool = False) -> list[str]:
     """The lowercase word tokens of *text*, each once, in order."""
-    words = [w for w in _WORD.findall(text.lower()) if keep_stopwords or w not in STOPWORDS]
+    words = [w for w in _words(text) if keep_stopwords or w not in STOPWORDS]
     return list(dict.fromkeys(words))
 
 
@@ -67,7 +72,7 @@ def all_words_query(text: str) -> str:
 
 
 def phrase_query(text: str) -> str:
-    words = _WORD.findall(text.lower())[:MAX_TERMS]
+    words = _words(text)[:MAX_TERMS]
     return _quoted(" ".join(words)) if words else ""
 
 
@@ -117,7 +122,8 @@ def _where_sql(where: Where) -> tuple[str, list[Any]]:
     clauses = []
     params: list[Any] = []
     for key, value in where:
-        clauses.append("json_extract(c.metadata, ?) = ?")
+        # As text on both sides: a CSV value is a string, a JSON value may be a number.
+        clauses.append("CAST(json_extract(c.metadata, ?) AS TEXT) = CAST(? AS TEXT)")
         params.extend(['$."' + key.replace('"', '\\"') + '"', value])
     return "".join(f" AND {clause}" for clause in clauses), params
 

@@ -129,6 +129,42 @@ def test_a_where_value_matches_exactly_and_none_matches_nothing(root):
     assert _ids(root, "fuzzy", "sign", where={"product": None}) == []
 
 
+def test_a_where_value_and_the_metadata_compare_as_text(tmp_path):
+    root = make_project(
+        tmp_path / "t",
+        {
+            "r.csv": "id,text,tier\n1,gold plan,2\n2,silver plan,3\n",
+            "r.json": json.dumps([{"id": "j1", "text": "bronze plan", "tier": 2}]),
+        },
+        {
+            "rows": {
+                "sources": [
+                    {"path": "r.csv", "text": "text", "id": "id", "metadata": "tier"},
+                    {"path": "r.json", "text": "text", "id": "id", "metadata": "tier"},
+                ]
+            }
+        },
+    )
+
+    for value in (2, "2"):
+        found = find(root, "rows", {"keyword": 1.0}, "plan", where={"tier": value})
+        assert sorted(m["id"] for m in found["matches"]) == ["1", "j1"]
+
+
+@pytest.mark.parametrize("method", ["keyword", "all_words", "phrase", "fuzzy"])
+def test_a_term_with_no_letter_or_digit_is_dropped(root, method):
+    assert _ids(root, method, "refund ___ policy")[0] == "refund"
+    assert _ids(root, method, "___ __") == []
+
+
+@pytest.mark.parametrize(
+    "compile_query", [keyword_query, all_words_query, phrase_query, fuzzy_query]
+)
+def test_no_compiler_writes_a_term_with_no_letter_or_digit(compile_query):
+    assert "_" not in compile_query("refund ___ policy")
+    assert compile_query("___") == ""
+
+
 def test_where_is_applied_inside_the_search_before_candidates(tmp_path):
     rows = [{"id": f"a{i}", "text": "refund refund refund", "p": "a"} for i in range(30)]
     rows.append({"id": "b1", "text": "refund policy", "p": "b"})

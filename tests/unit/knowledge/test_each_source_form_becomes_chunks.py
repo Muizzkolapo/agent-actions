@@ -98,6 +98,17 @@ def test_records_of_json_jsonl_and_csv_are_one_chunk_each(tmp_path):
     ]
 
 
+def test_a_jsonl_record_is_one_line_whatever_line_separators_its_strings_hold(tmp_path):
+    line = json.dumps({"n": "1", "q": "How now\x85then?"}, ensure_ascii=False)
+    root = make_project(
+        tmp_path / "p",
+        {"seed/faq.jsonl": line + "\n\n"},
+        {"kb": {"sources": [{"path": "seed/faq.jsonl", "text": "q", "id": "n"}]}},
+    )
+
+    assert [c.text for c in _chunks(root)] == ["How now\x85then?"]
+
+
 @pytest.mark.parametrize(
     ("files", "source", "message"),
     [

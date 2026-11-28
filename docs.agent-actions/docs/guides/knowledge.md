@@ -248,6 +248,8 @@ A value is a field reference when its first part is `source` or an action upstre
 
 Each method applies `where` in its own search, before it returns its `candidates`. Thus a filter never leaves fewer than `top_k` chunks when more chunks match it. A reference that is null or missing for a record matches nothing, and the record does not fail. It never removes the filter. A chunk of a file glob source has no metadata, so a `where` never keeps it.
 
+`where` compares the two values as text. A CSV file holds each value as text, and a JSON file can hold a number. Thus `where: {tier: 2}` and `where: {tier: "2"}` both match the CSV value `2` and the JSON value `2`. A boolean is the text `1` or `0`. A number with a decimal point is not equal to the same whole number: `2.0` does not match `2`. A reference that holds a list or an object fails the record, with a message that names the step.
+
 ### Limits {/* #limits */}
 
 These limits apply after the merge, in this order:

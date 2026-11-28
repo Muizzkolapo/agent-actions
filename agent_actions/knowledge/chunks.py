@@ -310,7 +310,8 @@ def _records(data: bytes, suffix: str, name: str, relpath: str) -> list[dict[str
         if suffix == ".csv":
             records: list[Any] = list(csv.DictReader(io.StringIO(text, newline="")))
         elif suffix == ".jsonl":
-            records = [json.loads(line) for line in text.splitlines() if line.strip()]
+            # JSON lines end at \n only; a string may hold U+2028 or U+0085.
+            records = [json.loads(line) for line in text.split("\n") if line.strip()]
         else:
             loaded = json.loads(text)
             records = loaded if isinstance(loaded, list) else [loaded]

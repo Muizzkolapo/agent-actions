@@ -99,6 +99,15 @@ def test_a_where_ref_the_record_lacks_is_null_and_matches_nothing(knowledge, cla
     assert call["where"] == {"product": None}
 
 
+@pytest.mark.parametrize("value", [["billing", "web"], {"name": "billing"}])
+def test_a_where_ref_that_holds_a_list_or_an_object_is_refused_naming_the_step(knowledge, value):
+    with knowledge_run(ROOT, sandbox=False):
+        resolve_knowledge({"s": _config(_spec())}, ROOT, sandbox=False)
+        with pytest.raises(TypeError, match=r"write_reply: retrieve 'help' \(write_reply__help\)"):
+            run_builtin(_spec(), _record(product=value))
+    assert knowledge.searched == []
+
+
 def test_a_where_ref_whose_action_is_null_is_null(knowledge):
     spec = _spec(query=["source.subject"], where={"product": "classify.product"})
 
@@ -162,6 +171,15 @@ class TestTheRunResolvesEachIndexOnce:
 class TestTheKnowledgeHash:
     def test_it_is_none_outside_a_run(self, knowledge):
         assert knowledge_hash(_spec()) is None
+        assert knowledge.hashed == []
+
+    def test_a_run_stamps_the_digest_its_search_used_and_never_scans_again(self, knowledge):
+        knowledge.hash = None  # a scan now would fail, or see a newer edit
+        with knowledge_run(ROOT, sandbox=False):
+            resolve_knowledge({"s": _config(_spec())}, ROOT, sandbox=False)
+
+            assert knowledge_hash(_spec()) == knowledge.digest
+
         assert knowledge.hashed == []
 
     def test_a_run_hashes_the_kinds_the_methods_read_once(self, knowledge):

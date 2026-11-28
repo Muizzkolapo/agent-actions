@@ -250,7 +250,7 @@ context_scope:
 | `from` | required | | The name of a knowledge base under `knowledge:` in `agent_actions.yml`. The name of an action is refused: `retrieval from an action comes in a later version` |
 | `query` | required | | A field reference, or a list of field references. The values are turned into text and joined with spaces |
 | `method` | `keyword` | | `keyword`, `all_words`, `phrase`, `fuzzy` or `key`. A list merges methods with equal weights. A mapping gives each method its weight. `key` cannot be merged |
-| `where` | none | | A mapping of a metadata field to a value. A value whose first part is `source` or an upstream action is a field reference. Any other value is a constant. `{value: "a.b"}` is always a constant. A null or missing reference matches nothing and does not fail the record |
+| `where` | none | | A mapping of a metadata field to a value. A value whose first part is `source` or an upstream action is a field reference. Any other value is a constant. `{value: "a.b"}` is always a constant. A null or missing reference matches nothing and does not fail the record. The values are compared as text, so `2` and `"2"` are equal |
 | `top_k` | `5` | 1 to 50 | The number of matches, at most |
 | `candidates` | the larger of 20 and 4 × `top_k` | `top_k` to 1000 | The number of results of each method, before the merge and the limits |
 | `max_context_tokens` | none | | The total number of tokens of the matches. Chunks are added in rank order until the next chunk passes the limit. A chunk is never cut |
