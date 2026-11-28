@@ -54,7 +54,10 @@ run calls no model and costs nothing: the offline mock answers each LLM action w
 that matches its schema, tool actions run their own code, and the output is kept apart \
 from real output. It tests the wiring, not prompt quality.
 3. Read the result with workflow_status, dispositions, records, traces and usage. They \
-read sandbox output by default; pass sandbox=false to read what real runs stored.
+read sandbox output by default; pass sandbox=false to read what real runs stored. \
+When a record is missing from an action's output, call dispositions with record (its \
+source_guid): it shows where the record went and the guard that stopped it. \
+inspect_workflow with action shows one action as the run sees it.
 4. Test failure paths with scenario="chaos", and assert a run with sandbox_check.
 5. To answer some records again after a full run, use run_workflow with rerun plus where \
 or records, and dry_run first to see the count.

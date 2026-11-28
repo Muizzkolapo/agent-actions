@@ -153,6 +153,8 @@ For a record that `field` cannot split (the long text is nested, or spread over 
 |---|---|
 | How many records of each action succeeded or failed? | `agac dispositions -w <workflow> --json` |
 | Which records failed, and why? | `agac dispositions -w <workflow> --quarantined` |
+| Why is one record missing from an action's output? | `agac dispositions -w <workflow> --record <source_guid>` |
+| How does the run see one action (guard, reads, writes, prompt)? | `agac inspect -w <workflow> action <action>` |
 | What did one action output? | `agac records -w <workflow> -A <action>` |
 | What prompt did the model get? | `agac traces -w <workflow> -A <action>` |
 | What did the run cost in tokens? | `agac usage -w <workflow>` |
@@ -168,9 +170,9 @@ When you reach agac through its MCP server (`agac mcp`), you have tools, not a s
 | `agac run` (also `--rerun`, `--where`, `--records`, `--dry-run`, `--fresh`, `--scenario`) | `run_workflow` |
 | `agac retry` | `retry_workflow` |
 | `agac sandbox check` | `sandbox_check` |
-| `agac inspect` | `inspect_workflow` |
+| `agac inspect`, `inspect action`, `inspect context` | `inspect_workflow` (`action`, `view`) |
 | `agac status --json` | `workflow_status` |
-| `agac dispositions --json`, `--quarantined` | `dispositions` |
+| `agac dispositions --json`, `--quarantined`, `--record` | `dispositions` (`quarantined`, `record`) |
 | `agac records`, `--snapshots` | `records` (`failed_inputs`) |
 | `agac traces` | `traces` |
 | `agac usage` | `usage` |

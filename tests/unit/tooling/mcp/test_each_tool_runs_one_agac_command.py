@@ -409,3 +409,62 @@ def test_traces_keep_the_newest_when_they_are_cut(ran, tmp_path):
 
     assert "5 records in all; the last 2 (newest) are shown" in outcome.text
     assert '"r3"' in outcome.text and '"r4"' in outcome.text and '"r0"' not in outcome.text
+
+
+def test_one_action_is_inspected_with_its_name_after_the_options_end():
+    assert _argv("inspect_workflow", workflow="wf", action="--help") == [
+        "inspect",
+        "--workflow=wf",
+        "--sandbox",
+        "action",
+        "--",
+        "--help",
+    ]
+    assert _argv("inspect_workflow", workflow="wf", action="a", view="context")[-3:] == [
+        "context",
+        "--",
+        "a",
+    ]
+
+
+def test_a_view_outside_its_choices_is_refused():
+    with pytest.raises(ToolRefused, match="'view' must be one of action, context"):
+        check_arguments(TOOLS["inspect_workflow"], {"workflow": "wf", "view": "--fresh"})
+
+
+def test_one_record_is_followed_through_the_dispositions():
+    assert _argv("dispositions", workflow="wf", record="g1") == [
+        "dispositions",
+        "--workflow=wf",
+        "--sandbox",
+        "--record=g1",
+        "--json",
+    ]
+
+
+def test_records_are_paged_with_offset(ran, tmp_path):
+    _, answer = ran
+    answer["done"] = _Done(stdout=json.dumps([{"n": n} for n in range(5)]))
+    context = Context(project_root=tmp_path)
+
+    page = call_tool(TOOLS["records"], {"workflow": "wf", "limit": 2, "offset": 2}, context)
+    past = call_tool(TOOLS["records"], {"workflow": "wf", "offset": 9}, context)
+
+    assert "5 records in all; records 3 to 4 are shown" in page.text
+    assert '"n": 2' in page.text and '"n": 4' not in page.text
+    assert "none: 'offset' 9 is past the end" in past.text
+
+
+def test_each_tool_says_whether_it_changes_or_reaches_outside_anything():
+    hints = {name: tool.schema()["annotations"] for name, tool in TOOLS.items()}
+
+    assert hints["records"] == {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+    assert hints["run_workflow"]["destructiveHint"] and hints["run_workflow"]["openWorldHint"]
+    assert hints["export_outputs"]["destructiveHint"]
+    assert not hints["retry_workflow"]["destructiveHint"]
+    assert all(hint["idempotentHint"] == hint["readOnlyHint"] for hint in hints.values())

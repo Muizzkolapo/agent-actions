@@ -97,6 +97,10 @@ class Tool:
     # without the notices the command prints beside it.
     prints_json: bool = False
     read_only: bool = True
+    # Can replace or remove what earlier calls stored (MCP's destructiveHint).
+    destructive: bool = False
+    # Reaches outside the project: model providers or the project's databases.
+    open_world: bool = False
 
     def schema(self) -> dict[str, Any]:
         return {
@@ -108,7 +112,12 @@ class Tool:
                 "required": list(self.required),
                 "additionalProperties": False,
             },
-            "annotations": {"readOnlyHint": self.read_only},
+            "annotations": {
+                "readOnlyHint": self.read_only,
+                "destructiveHint": self.destructive,
+                "idempotentHint": self.read_only,
+                "openWorldHint": self.open_world,
+            },
         }
 
 
@@ -185,18 +194,31 @@ def _newest_records(output: str, args: dict[str, Any]) -> str:
 
 def _some_records(output: str, args: dict[str, Any], *, newest: bool) -> str:
     limit = args.get("limit") or DEFAULT_RECORD_LIMIT
+    offset = args.get("offset") or 0
     start = output.find("[")
     try:
         records = json.loads(output[start:]) if start >= 0 else None
     except ValueError:
         return output
-    if not isinstance(records, list) or len(records) <= limit:
+    if not isinstance(records, list) or (len(records) <= limit and not offset):
         return output
-    kept = records[-limit:] if newest else records[:limit]
-    which = f"the last {limit} (newest)" if newest else f"the first {limit}"
+    if newest:
+        kept = records[-limit:]
+        which = f"the last {limit} (newest)"
+    elif offset:
+        kept = records[offset : offset + limit]
+        which = (
+            f"records {offset + 1} to {offset + len(kept)}"
+            if kept
+            else f"none: 'offset' {offset} is past the end"
+        )
+    else:
+        kept = records[:limit]
+        which = f"the first {limit}"
     return (
-        f"{len(records)} records in all; {which} are shown. Raise 'limit', or narrow "
-        f"with 'action', 'source_guid', 'record' or 'field'.\n"
+        f"{len(records)} records in all; {which} are shown. "
+        + ("Raise 'limit'" if newest else "Page with 'offset', raise 'limit'")
+        + ", or narrow with 'action', 'source_guid', 'record' or 'field'.\n"
         + json.dumps(kept, indent=1, ensure_ascii=False)
     )
 
@@ -256,6 +278,8 @@ TOOLS: tuple[Tool, ...] = (
         real_when_not_sandbox=True,
         ok_exit_codes=frozenset(RUN_OUTCOMES),
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
     Tool(
         name="retry_workflow",
@@ -284,6 +308,7 @@ TOOLS: tuple[Tool, ...] = (
         real_when_not_sandbox=True,
         ok_exit_codes=frozenset(RUN_OUTCOMES),
         read_only=False,
+        open_world=True,
     ),
     Tool(
         name="sandbox_check",
@@ -308,15 +333,33 @@ TOOLS: tuple[Tool, ...] = (
         ],
         ok_exit_codes=frozenset({0, 1}),
         read_only=False,
+        destructive=True,
     ),
     Tool(
         name="inspect_workflow",
         description=(
             "Validate a workflow before running it and list its actions with their "
-            "dependencies (`agac inspect`). Runs nothing."
+            "dependencies (`agac inspect`). With 'action', show one action as the run "
+            "sees it after the config is expanded: kind, model, guard, retry, the fields "
+            "it reads and writes, what reads it, its prompt and schema; with view "
+            "'context', the variables its prompt can use. Runs nothing."
         ),
-        properties={"workflow": WORKFLOW, "sandbox": SANDBOX_READ, "scenario": SCENARIO},
-        command=lambda args: [*_base(["inspect"], args), *_scenario(args)],
+        properties={
+            "workflow": WORKFLOW,
+            "sandbox": SANDBOX_READ,
+            "scenario": SCENARIO,
+            "action": {**STRING, "description": "Show this action in detail"},
+            "view": {
+                **STRING,
+                "enum": ["action", "context"],
+                "description": "With 'action': 'action' (default) or 'context'",
+            },
+        },
+        command=lambda args: [
+            *_base(["inspect"], args),
+            *_scenario(args),
+            *([args.get("view") or "action", "--", args["action"]] if args.get("action") else []),
+        ],
     ),
     Tool(
         name="workflow_status",
@@ -330,7 +373,11 @@ TOOLS: tuple[Tool, ...] = (
         description=(
             "What happened to each record at each action: success, failed, exhausted, "
             "filtered, guard-skipped. Counts per action as JSON, or with 'quarantined' "
-            "the failed, exhausted and unprocessed records with their reasons."
+            "the failed, exhausted and unprocessed records with their reasons. With "
+            "'record' (a source_guid), follow that one record through the workflow: its "
+            "disposition and reason at each action in run order, the actions it never "
+            "reached, and the guard that filtered or skipped it. Use it to find why a "
+            "record is missing from an action's output."
         ),
         properties={
             "workflow": WORKFLOW,
@@ -340,10 +387,12 @@ TOOLS: tuple[Tool, ...] = (
                 **BOOLEAN,
                 "description": "List the failed, exhausted and unprocessed records",
             },
+            "record": {**STRING, "description": "Follow this record (its source_guid)"},
         },
         command=lambda args: [
             *_base(["dispositions"], args),
             *_flag("action", args.get("action")),
+            *_flag("record", args.get("record")),
             *(["--quarantined"] if args.get("quarantined") else ["--json"]),
         ],
         prints_json=True,
@@ -372,6 +421,11 @@ TOOLS: tuple[Tool, ...] = (
             "limit": {
                 **INTEGER,
                 "description": f"How many records to return (default {DEFAULT_RECORD_LIMIT})",
+            },
+            "offset": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Skip this many records first, to page through them",
             },
         },
         command=_records,
@@ -463,6 +517,8 @@ TOOLS: tuple[Tool, ...] = (
         ],
         always_real=True,
         read_only=False,
+        destructive=True,
+        open_world=True,
     ),
 )
 
@@ -506,6 +562,9 @@ def check_arguments(tool: Tool, args: dict[str, Any]) -> None:
             right = all(isinstance(item, str) for item in value)
         if not right:
             raise ToolRefused(f"{tool.name}: '{name}' must be {_a(wanted)}")
+        allowed = tool.properties[name].get("enum")
+        if allowed is not None and value not in allowed:
+            raise ToolRefused(f"{tool.name}: '{name}' must be one of {', '.join(allowed)}")
         if least is not None and value < least:
             raise ToolRefused(f"{tool.name}: '{name}' must be {least} or more")
         if name == "records" and any(
