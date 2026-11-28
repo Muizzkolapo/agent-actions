@@ -17,6 +17,7 @@ metadata.
 | Symbol | File | Interaction | Config Key |
 |--------|------|-------------|------------|
 | `Cleaner._release_batch_records()` | `.agac/batch_state/` | Deletes (`{batch_id}.json` and abandoned `*.tmp`) | `--all` |
+| `Cleaner._run()` | `agent_io/staging/`, `agent_io/sandbox/`, `agent_io/retrieve/` | Deletes; never `.agac/knowledge/` | `--all` |
 
 ## Modules
 

@@ -69,7 +69,7 @@ knowledge:
 |-----|---------|---------|
 | `sources` | required | One or more sources. See [Sources](#sources) |
 | `index` | `[keyword]` | The indexes to build: `keyword`, `fuzzy` or both. Each [search method](#search-methods) needs one of them. `vector` comes in a later version, and the load refuses it |
-| `chunk_config` | see [Chunks](#chunks) | How the files are split into chunks |
+| `chunk_config` | see [Chunks](#chunks) | How Agent Actions splits the files into chunks |
 
 The name of a base starts with a letter and holds only letters, digits and `_`. Keep the source files of a base in a `knowledge/<base>/` folder at the project root. This is a convention, not a rule: a source can name any path in the project.
 
@@ -79,7 +79,7 @@ A base takes three kinds of source. One base can mix them.
 
 | Source | Written as | Chunks |
 |--------|------------|--------|
-| Files | A glob, relative to the project root: `knowledge/help_center/**/*.md` | A text file (`.md`, `.markdown`, `.txt`, `.html`, `.htm`, `.pdf`, `.docx`) is split into chunks. Each record of a `.json`, `.jsonl` or `.csv` file is one chunk, written as `field: value` lines |
+| Files | A glob, relative to the project root: `knowledge/help_center/**/*.md` | Agent Actions splits a text file (`.md`, `.markdown`, `.txt`, `.html`, `.htm`, `.pdf`, `.docx`) into chunks. Each record of a `.json`, `.jsonl` or `.csv` file is one chunk, with one `field: value` line for each field |
 | Structured | A mapping with `path:`, a `.json`, `.jsonl` or `.csv` glob, and the fields of its records | Each record is one chunk |
 | Database | A mapping with `connection:` and `sql:`. The connection is one of the project's [`connections:`](../reference/data-io/databases.md#connections) | Each row is one chunk |
 
@@ -87,7 +87,7 @@ A structured source and a database source take these keys:
 
 | Key | Required | Meaning |
 |-----|----------|---------|
-| `text` | yes | The fields whose values are searched and given to the prompt, joined with line breaks. A field or a list of fields |
+| `text` | yes | The fields that the search reads and that the prompt gets, joined with line breaks. A field or a list of fields |
 | `title` | no | The field that gives the title of the chunk. The title counts two times as much as the text in the `keyword` index |
 | `id` | yes for a database source | The field that names each record. The match then has this value as its `id`, so a reply can cite it. Each value must be unique in the base |
 | `metadata` | no | The fields that a [`where`](#filter-with-where) can match. The match carries them in `metadata` |
@@ -120,15 +120,20 @@ Agent Actions checks the keys of the `knowledge:` section when it loads a workfl
 - An unknown key, or a `name:` key in a base.
 - A file type that a base does not read.
 - A database source without `id:`, or SQL that writes.
-- An unknown index, or `index: [vector]`.
+- An unknown index, `index: [vector]`, or an index that the list names two times.
 - `index: [fuzzy]` when the SQLite of your Python has no trigram tokenizer with `remove_diacritics` (SQLite 3.45 or later).
 - `chunk_config.field`, or a `chunk_overlap` of more than half of `chunk_size`. This rule is for a knowledge base only. The `chunk_config` of a workflow refuses only an overlap at or above the chunk size.
 
-The source files are read when an index is built: at the start of `agac run` or `agac retry`, before the first action, and in `agac knowledge build`, `list` and `search`. The build refuses these sources:
+Agent Actions reads the source files at the start of `agac run` or `agac retry`, before the first action. Each `agac knowledge` command also reads them. These commands then refuse these sources:
 
-- A glob that finds no file, a path outside the project, a file that cannot be read, or a file over 10 MB.
+- A glob that finds no file, a path outside the project, a file that Agent Actions cannot read, or a file over 10 MB.
+- A file that two sources read in different ways, for example a file glob and a `path:` source. Name the file in one source.
+- A record of a `.json` or `.jsonl` file that is not an object.
 - A record with no text in its `text` fields, or with no value in its `id` field.
 - Two chunks with the same `id`.
+- A database source with no snapshot, in a sandbox run. A sandbox run never connects to a database. See [In a sandbox run](#in-a-sandbox-run).
+
+`agac knowledge list` does not stop at a refused source. It prints `not built:` and the reason for that base, and continues with the next base.
 
 ## Retrieve in an Action
 
@@ -174,7 +179,7 @@ An entry of a knowledge base does not take `text`, `title` or `id`. Set them on 
 
 The load turns each entry into an internal step of the workflow, named `<action>__<entry>`. The entry `help` of `write_reply` is the step `write_reply__help`. The load adds the step to the dependencies of the action, and its output to the `observe` of the action. The step has all the dependencies of the action, and also depends on the actions that its `query` and `where` references name. Thus a record that an upstream guard filters, or that a router sends to another branch, does not reach the step. It does not reach the action either.
 
-The step is a step like the others. Its matches are stored, and the commands name the step:
+The step is a step like the others. Agent Actions stores its matches, and the commands name the step:
 
 - `agac inspect` shows it with a note, also when its action is in a loop, and `agac records -A write_reply__help` prints its output.
 - A message about it reads `write_reply: retrieve 'help' (write_reply__help)`.
@@ -217,7 +222,7 @@ actions:
       retrieve:
         similar:
           from: summarize                # an earlier action: its records are the corpus
-          text: [summary, keywords]      # the output fields that are searched
+          text: [summary, keywords]      # the output fields that the search reads
           title: product                 # optional
           id: ticket_id                  # optional: a short, unique output field
           query: [summarize.summary, summarize.keywords]
@@ -248,14 +253,14 @@ link_duplicates: retrieve 'similar' from action summarize by keyword on summariz
 | `method` | `keyword` | `keyword`, `all_words`, `phrase` or `fuzzy`, or a mix of them. `key` comes in a later version |
 | `where` | none | An exact match on an output field of the record that is not a `text` field. The step compares the values as text |
 
-The load checks `text`, `title`, `id` and the `where` fields against the output schema of the action, as it checks `observe`. A field that the schema does not have is refused. `max_per_origin` is refused: each record has the same origin, the action.
+The load checks `text`, `title`, `id` and the `where` fields against the output schema of the action, as it checks `observe`. The load refuses a field that the schema does not have. It also refuses `max_per_origin`, because each record has the same origin: the action.
 
 The load also refuses a `from:` that names one of these, because their records are not one record for each input record:
 
 - An action that is not upstream of the action.
 - A tool with `granularity: file`. It can write several records for one input record, or none.
 - A versioned action or one of its versions, for example `score` or `score_1`. Name the action that merges the versions (`version_consumption`).
-- A router. Name an action of one branch, or the join after the branches. A join is accepted.
+- A router. Name an action of one branch, or the join after the branches. The load accepts a join.
 - A loop. Name an action of one iteration.
 - A name that is both a knowledge base and an action.
 
@@ -278,9 +283,9 @@ Each record of the action is one chunk. Two records with the same text both stay
 
 A record is never one of its own matches. The step searches for one match more and removes the record itself. Thus each record gets `top_k` matches. It gets fewer only when fewer records match.
 
-The step knows a record by its `source_guid`. A step that splits a record into several records gives each new record a new `source_guid`. Thus, below such a step, a record can match the record of the `from:` action that it came from. To prevent this, name in `from:` an action below the split.
+The step knows a record by its `source_guid`. Below a step that splits records, a record can match the record that it came from. See [Limits](#limits-of-an-action-corpus).
 
-Two records with the same `source_guid`, or with the same value of the `id:` field, fail the step, and the error names the value. A citation must name one record.
+Two records with the same `source_guid`, or with the same value of the `id:` field, fail the step, and the error names the value. A citation must name one record. A record with no value in its `id:` field also fails the step.
 
 ### The Index
 
@@ -293,7 +298,9 @@ The digest covers the `from:` action, `text`, `title` and `id`, the indexes that
 
 ### When the Records Change
 
-A run that adds records adds them to the corpus. The new records search all the records. The records that answered in an earlier run keep their matches: they did not see the new records. The run that adds the records tells you once:
+A run that adds records adds them to the corpus. The new records search all the records. The records that answered in an earlier run keep their matches: they did not see the new records. The run that adds the records tells you once. A run that stops early can lose this line. See [Limits](#limits-of-an-action-corpus).
+
+The line reads:
 
 ```
 link_duplicates: retrieve 'similar' (link_duplicates__similar): 40 records were added since 1,200 earlier answers searched; --rerun link_duplicates__similar to search again
@@ -305,7 +312,7 @@ A record that changed or that left the store is a different matter. A stored mat
 link_duplicates: retrieve 'similar' (link_duplicates__similar): since 1,200 earlier answers searched the records, 0 changed, 3 left and 3 were added, so those answers may show old text or cite a record that is gone. Run again with --rerun link_duplicates__similar to search again
 ```
 
-The step finds the changes when it compares the index of each stored answer with the current records. An edited input record gets a new `source_guid`, so it counts as one record that left and one that was added. If the index file of a stored answer is gone, the step cannot tell what changed, and each run of the step warns that those answers searched an index that is gone.
+The step finds the changes when it compares the index of each stored answer with the current records. An edited input record gets a new `source_guid`, so it counts as one record that left and one new record. If the index file of a stored answer is gone, the step cannot tell what changed, and each run of the step warns that those answers searched an index that is gone.
 
 To search again for each record:
 
@@ -337,6 +344,15 @@ fields:
 
 Two tickets that say the same thing in other words then share their keywords, and the search finds one for the other. A closed list of terms works better than free words. `fuzzy` finds words with typing errors, but not synonyms.
 
+### Limits {/* #limits-of-an-action-corpus */}
+
+A search of an earlier action has these limits:
+
+- **A record can match its own origin below a split.** The step finds the record itself by its `source_guid`. A step that splits a record into several records gives each new record a new `source_guid`. Thus, below such a step, a record can match the record of the `from:` action that it came from. To prevent this, name in `from:` an action below the split.
+- **A route case that names an include instance hides what is above the router.** A case of a [route](../reference/configuration/routes.md#route-entry) can name an include instance (`as:`). The load then does not count the router and the actions above it as upstream of the first actions of that instance. Thus the load can refuse a `from:`, `query` or `where` reference in such an action to an action above the router. To fix this, add that action to the `dependencies` of the action.
+- **An interrupted run can lose the line about added records.** The step builds the new index when it starts, and it compares the records after it runs. If the run stops between these two points, the next run finds the index file. That run does not print the line that says that records were added. This limit does not apply to the warning about records that changed or left. Each run gives that warning until you search again.
+- **Keyword search finds words, not meanings.** A paraphrase does not match. See [Find duplicates in other words](#find-duplicates-in-other-words).
+
 ### In the Starter Project
 
 The [starter project](./sandbox.md#starter-project) has an action corpus. `read_ticket`, a tool action, writes the text of each ticket and its canonical `keywords`. `classify` has the entry `similar`, which searches the records of `read_ticket`. Its step is `classify__similar`. The tickets T-1001 ("charged twice for my March invoice") and T-1005 ("the refund for my cancelled order") share no search word, but both have the keyword `billing`, so each one finds the other:
@@ -352,17 +368,17 @@ The knowledge base declares its indexes. The action selects a method that one of
 
 | Method | Index | What it finds |
 |--------|-------|---------------|
-| `keyword` | `keyword` | Chunks that hold any word of the query. Stopwords are removed, and words match their stem: "charged" finds "charge" and "charges". The best chunks hold the most rare words of the query |
-| `all_words` | `keyword` | Chunks that hold each word of the query. Stopwords are removed. Use it for short queries |
-| `phrase` | `keyword` | Chunks that hold the query as an exact phrase. Stopwords are kept |
+| `keyword` | `keyword` | Chunks that hold any word of the query. The search removes stopwords, and words match their stem: "charged" finds "charge" and "charges". The best chunks hold the most rare words of the query |
+| `all_words` | `keyword` | Chunks that hold each word of the query. The search removes stopwords. Use it for short queries |
+| `phrase` | `keyword` | Chunks that hold the query as an exact phrase. The search keeps stopwords |
 | `fuzzy` | `fuzzy` | Chunks that hold parts of the words of the query (groups of three letters). It finds many typing errors, for example "pasword" and "refnd", but not all of them: it does not find "Smith" for "Smyth" |
 | `key` | `key` | The one chunk whose `id` is the query text. It needs `id:` on each source of the base, and you cannot merge it with another method. You do not declare the `key` index: a search with `key` writes it, and `agac knowledge build` builds it when an entry uses `key` |
 | `vector` | | Chunks with the same meaning. This comes in a later version |
 
 These rules apply to the query:
 
-- `keyword`: the query is split into words, lowercase. English stopwords are removed. The query keeps at most 32 words.
-- `fuzzy`: stopwords are removed. A word of fewer than three letters adds nothing. The query keeps at most 64 groups of three letters. The load checks that the SQLite of your Python has the trigram tokenizer.
+- `keyword`: the search splits the query into lowercase words and removes English stopwords. The query keeps at most 32 words. `all_words` and `phrase` also keep at most 32 words.
+- `fuzzy`: the search removes stopwords. A word of fewer than three letters adds nothing. The query keeps at most 64 groups of three letters. The load checks that the SQLite of your Python has the trigram tokenizer.
 - `key`: a file glob source has no `id:`. Thus a base with a file glob cannot use `key`.
 
 The `score` of a match is higher for a better match. It compares matches of one query only. Do not compare the scores of two records.
@@ -377,7 +393,7 @@ method: [keyword, fuzzy]                 # equal weights
 method: {keyword: 0.7, fuzzy: 0.3}       # your weights
 ```
 
-A merged search uses only the ranks, not the scores of the methods. Its `score` is the sum of the merge. A search with one method keeps the score of that method. Two chunks with the same merged score are ordered by their best rank in one method, then by `id`.
+A merged search uses only the ranks, not the scores of the methods. Its `score` is the sum of the merge. A search with one method keeps the score of that method. The merge puts two chunks with the same merged score in the order of their best rank in one method, then of their `id`.
 
 Use `[keyword, fuzzy]` when the records have typing errors. The base must have both indexes: `index: [keyword, fuzzy]`.
 
@@ -529,7 +545,7 @@ A run that builds an index logs `knowledge base 'help_center': built the keyword
 
 The index files are in `.agac/knowledge/<base>/` at the project root. The name of each file holds a digest of the bytes that it indexes. Thus a changed source gives a new file, and an unchanged source uses the file that exists. One run reads one digest for each base, also when you edit a source during the run. A build writes a temporary file and renames it, under a lock for the project. Thus two runs that build at the same time do not damage the index.
 
-Old index files stay until `agac knowledge build --prune` removes them. `agac init` and `agac init example` add `.agac/` to the `.gitignore` of the project, and write the file if it does not exist. In a project that you made before, add `.agac/` to `.gitignore`. The index files are made from your sources, so do not commit them.
+Old index files stay until `agac knowledge build --prune` removes them. `agac clean --all` and `agac run --fresh` do not remove `.agac/knowledge/`. `agac init` and `agac init example` add `.agac/` to the `.gitignore` of the project, and write the file if it does not exist. In a project that you made before, add `.agac/` to `.gitignore`. Agent Actions makes the index files from your sources, so do not commit them.
 
 ### A Database Source
 
@@ -537,7 +553,7 @@ The first build reads the rows of a database source and keeps them as a snapshot
 
 ## When a Knowledge Base Changes
 
-The stored matches of a record come from the index that the search read. When the files of a base change, the stored matches are old. Each run then warns:
+The stored matches of a record come from the index that the search read. When the files of a base change, or `agac knowledge build --refresh` reads new rows of a database source, the stored matches are old. Each run then warns:
 
 ```
 write_reply: retrieve 'help' (write_reply__help): knowledge base 'help_center' changed since it answered; run again with --rerun write_reply__help
@@ -572,9 +588,9 @@ A sandbox run that builds an index writes it to `.agac/knowledge/`, as a real ru
 
 ## Limits of Keyword Search
 
-- The stopwords and the stems are English. A base in another language gets a worse search: no stopword is removed, and words do not match their stems.
+- The stopwords and the stems are English. A base in another language gets a worse search: the search removes no stopword of that language, and words do not match their stems.
 - Keyword search finds words, not meanings. "Billed twice" does not find "duplicate charge". Write the query with an LLM action, or put the words of the articles in the `title` field. For an action corpus, see [Find duplicates in other words](#find-duplicates-in-other-words).
-- `fuzzy` finds many typing errors, but not all of them. A word that is spelled in a very different way, for example "Smyth" for "Smith", does not match.
+- `fuzzy` finds many typing errors, but not all of them. A word with a very different spelling, for example "Smyth" for "Smith", does not match.
 - `vector` search, which finds the same meaning, comes in a later version.
 - No `min_score`: a weak match is still a match. Use `top_k`, `where` and the `{% else %}` branch to control what the model reads.
 

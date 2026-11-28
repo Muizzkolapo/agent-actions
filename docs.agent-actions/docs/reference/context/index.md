@@ -12,9 +12,9 @@ The context system controls how data flows between actions. It refers to upstrea
 | Concept | Purpose | Syntax |
 |---------|---------|--------|
 | **Field References** | Gets the outputs of upstream actions | `{{ action_name.field }}` |
-| **Context Scope** | Controls which data an action can see and how data flows | `context_scope: {observe, drop, passthrough, seed}` |
+| **Context Scope** | Controls which data an action can see and how data flows | `context_scope: {observe, drop, passthrough, seed, retrieve}` |
 | **Seed Data** | Loads static reference data | `seed: {name: $file:path}` |
-| **Retrieve** | Searches a knowledge base for each record and gives the prompt the matches | `retrieve: {name: {from: base, query: [source.text]}}` |
+| **Retrieve** | Searches a knowledge base, or the records of an earlier action, for each record and gives the prompt the matches | `retrieve: {name: {from: base, query: [source.text]}}` |
 
 ## Learn More
 

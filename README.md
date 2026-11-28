@@ -102,6 +102,7 @@ Switch providers per-action by changing `model_vendor`.
 - **Batch processing** — route thousands of records through provider batch APIs
 - **Selective rerun** — after a full run, answer only the records that need it again (`--rerun ACTION --where '...'`); the rest keep their paid answers ([docs](docs.agent-actions/docs/reference/cli/run.md#rerun-selected-records))
 - **User-defined functions** — Python tools for pre/post-processing and custom logic
+- **Knowledge bases and retrieval** — `context_scope.retrieve` gives each record the passages of a large reference (files, JSON/CSV records or database rows), or the records of an earlier action, that match it; a local keyword/fuzzy search with no model call ([docs](docs.agent-actions/docs/guides/knowledge.md))
 - **Databases** — read input rows from a query and write results to tables on SQLite, DuckDB, Postgres, MySQL, Redshift, Snowflake, BigQuery or Databricks ([docs](docs.agent-actions/docs/reference/data-io/databases.md))
 - **Expectations** — declare rules the output must satisfy; failures are regenerated with the rule's feedback
 - **Observability** — per-action timing, token counts, and structured event logs

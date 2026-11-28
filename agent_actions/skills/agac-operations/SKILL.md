@@ -63,6 +63,8 @@ Exit codes of `agac run` and `agac retry`:
 
 See run (docs: `reference/cli/run`), retry (docs: `reference/cli/retry`), dispositions (docs: `reference/cli/dispositions`) and usage (docs: `reference/cli/usage`).
 
+A workflow with `context_scope.retrieve` entries searches knowledge bases or the records of an earlier action. A changed base or new records do not search again: the run warns, and `--rerun <action>__<entry>` searches again. See knowledge (docs: `guides/knowledge`, `reference/cli/knowledge`) and `references/knowledge-retrieval.md` of the `agac-agent-skills` skill.
+
 ## Batch or online
 
 `run_mode: batch` sends one provider batch per action and file, at about half the online price. The run pauses (exit code 4) until the batch ends. `run_mode: online` calls the model record by record.

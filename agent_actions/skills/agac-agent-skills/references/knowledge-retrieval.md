@@ -102,7 +102,7 @@ context_scope:
   later). `max_per_origin` is refused. `text`/`title`/`id` stay refused on a knowledge base.
 - Refused `from:`: not upstream, a FILE tool, a versioned action or a version (name the merge),
   a router (name a branch action or the join), a loop, a name that is also a base.
-- A repeated `source_guid` or `id` value fails the step, naming it.
+- A repeated `source_guid` or `id` value fails the step, naming it. So does a record with no `id` value.
 - The index is built once when the step starts: `agent_io/retrieve/<step>/<digest>.db`
   (`agent_io/sandbox/retrieve/...` in a sandbox run). `agac clean --all` and `--fresh` remove it.
 - Records added since earlier answers: one info line, from the run that adds them (`... 40
@@ -113,6 +113,15 @@ context_scope:
   warns above 20,000 records.
 - Paraphrases do not match: ask the earlier action for canonical `keywords` from a closed list
   and search them with the summary.
+- Limits (guide section "Limits" of "Retrieve from an earlier action"):
+  - The record itself is excluded by `source_guid`. Below a step that splits records, a record
+    can match the record it came from: name an action below the split in `from:`.
+  - A route case that names an include instance (`as:`) does not make the router and what is
+    above it upstream of that instance's first actions. A `from:`, `query` or `where` reference
+    to them can be refused: add the action to `dependencies`.
+  - If a run stops after the step built a new index and before it compared, the next run does
+    not print the "records were added" line for those records. The changed/left warning still
+    repeats each run.
 
 ## Prompt
 

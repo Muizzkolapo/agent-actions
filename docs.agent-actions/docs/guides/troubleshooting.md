@@ -286,6 +286,37 @@ This table gives the messages that occur most often for the `endpoints:` block o
 | `endpoint '<name>' auth command 'x' exited with 3` (or `printed nothing`, `did not finish in 30s`, `could not be run: ...`) | `--verify-keys`, record | The auth command failed. Run the command manually from the project root. Then correct `endpoints.<name>.auth`. The framework never shows the stderr of the command, because the stderr can hold the secret. |
 | `[<a>] endpoint '<name>' returned JSON that does not match schema '<s>': ...` | record | The reply did not match the schema. The record gets the disposition `failed` with the reason `parse_error`. Check the model and the schema. |
 
+## Knowledge Bases and Retrieval {/* #knowledge-bases-and-retrieval */}
+
+This table gives the messages that occur most often for the `knowledge:` section of `agent_actions.yml` and for `context_scope.retrieve`. A message about a step starts with `<action>: retrieve '<entry>' (<action>__<entry>)`. The [Knowledge Bases and Retrieval](./knowledge.md) guide gives all the rules.
+
+| Message | Stage | What to do |
+|---------|-------|------------|
+| `No knowledge base named '<name>' in agent_actions.yml. ... Knowledge bases: ...` | load | Correct `from:`, or declare the base under `knowledge:` in `agent_actions.yml`. |
+| `method 'fuzzy' searches the 'fuzzy' index, which knowledge base '<base>' does not build (index: keyword)` | load | Add `fuzzy` to the `index:` list of the base, or use another method. |
+| `'where:' names '<field>', which is no metadata field of knowledge base '<base>'` | load | Add the field to the `metadata:` list of a structured or database source. |
+| `'from: <action>' names an action that is not upstream of the action` | load | Add the action, or an action below it, to the `dependencies` of the action. |
+| `... A query or 'where:' reads source or an action the action depends on.` | load | The `query` or the `where` reads an action that is not upstream. Add that action to the `dependencies` of the action. A route case that names an include instance can cause this. See [Limits](./knowledge.md#limits-of-an-action-corpus). |
+| `knowledge base '<base>': source '<glob>' matches no file` | run start, `agac knowledge` | Correct the glob. A glob is relative to the project root. |
+| `knowledge base '<base>': source <n> reads connection '<c>', and no snapshot of it exists, and this command does not connect to a database ...` | sandbox run, `agac knowledge list` | Run `agac knowledge build <base>` one time where the connection works. A sandbox run never connects to a database. |
+| `knowledge base '<base>' changed since it answered; run again with --rerun <step>` | run (warning) | The files or the snapshot of the base changed. The stored matches stand. To search again, run `agac run -w <workflow> --rerun <step>`. |
+| `... records were added since ... earlier answers searched; --rerun <step> to search again` | run (info) | New records of the `from:` action are in the corpus. The earlier answers did not see them. To search again, use `--rerun <step>`. |
+| `... changed, ... left and ... were added, so those answers may show old text or cite a record that is gone` | run (warning) | Records of the `from:` action changed or left. To search again, use `--rerun <step>`. |
+| `no record of action '<action>' holds text in <fields>, so no record can match. Check the field names` | run (warning) | Correct the `text:` fields of the entry. They must be output fields of the `from:` action that hold text. |
+| `the best match alone holds <n> tokens, more than max_context_tokens (<m>), so a record gets no match` | run (warning) | Raise `max_context_tokens`, or lower the `chunk_size` of the base. |
+
+### A Retrieve Step Has No Matches {/* #a-retrieve-step-has-no-matches */}
+
+If `count` is `0` for a record, do these checks in this order:
+
+1. Print the matches of each record: `agac records -w <workflow> -A <action>__<entry>`. Read the `query` field. It is the query that the search ran.
+2. Try the query on the base: `agac knowledge search <base> "<text>"`. The command uses the same index and the same methods as a run.
+3. Make sure that the words of the query occur in the base. Keyword search finds words, not meanings. Write the query with an LLM action, or use `method: [keyword, fuzzy]` for typing errors.
+4. Examine the `where` filter. A null or missing reference matches nothing. A chunk of a file glob source has no metadata, so a `where` never keeps it. `2.0` does not match `2`.
+5. Examine `max_context_tokens`. If the best chunk alone is larger than the limit, the record gets no match.
+
+See [A record with no match](./knowledge.md#a-record-with-no-match) to handle these records in the prompt or with a guard.
+
 ## Debugging with Prompt Traces
 
 If an LLM action produces unexpected output, examine the compiled prompt and the raw response. This is the fastest way to find the cause. Agent Actions captures the two automatically.

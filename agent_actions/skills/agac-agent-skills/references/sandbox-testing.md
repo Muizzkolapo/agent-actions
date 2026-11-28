@@ -193,13 +193,13 @@ feature once and passes `agac sandbox check -w support_desk` offline in a few se
 | Action | Feature |
 |--------|---------|
 | `read_ticket` | Tool action (pure Python, no network) |
-| `classify` | Guard (filters spam), `expect:` with `repair: auto`, `llm_judge` with `severity: warn` |
+| `classify` | Guard (filters spam), `expect:` with `repair: auto`, `llm_judge` with `severity: warn`, retrieve from an earlier action (`retrieve.similar` searches the records of `read_ticket`; step `classify__similar`) |
 | `score` → `merge_scores` | Versions (`score_1`, `score_2`) and their merge |
 | `reply_round` | Loop of `branches/reply_round.yml`: write, then check |
 | `by_queue` → `assigned` | Router and join |
 | `approve_reply` | HITL (auto-approved in a sandbox run) |
 | `tag_reply` | `run_mode: batch`, guarded on the HITL status |
-| `retrieve.help` | Help-article retrieval from the knowledge base `help_center` (real search in a sandbox run; see `knowledge-retrieval.md`) |
+| `retrieve.help` (on `draft_reply`) | Help-article retrieval from the knowledge base `help_center` (real search in a sandbox run; step `reply_round_iter1__draft_reply__help`; see `knowledge-retrieval.md`) |
 
 Its `sandbox.yml` breaks `classify`'s regex rule once per record (repair heals it), gives each
 rater one rate limit (retry heals it) and drops half the first batch results (the retry batch

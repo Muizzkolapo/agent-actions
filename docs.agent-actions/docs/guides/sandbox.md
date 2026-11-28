@@ -38,6 +38,7 @@ Agent Actions loads the workflow as for a real run. Then it changes these action
 | LLM action | The mock provider answers it. The action keeps its `model_name`, which the traces and `inspect` show |
 | Tool action | Runs its own code, as in a real run. A tool action that the scenario stubs does not run: the mock builds its output. See [Stub a tool action](#stub-a-tool-action) |
 | HITL action | Approves each record and opens no review UI. The records get `hitl_status: approved` and the comment `auto-approved (sandbox)` |
+| `retrieve` step | Searches for real. A search of a knowledge base reads its real index in `.agac/knowledge/`. A search of an earlier action reads the records of the sandbox store. You cannot stub the step. A knowledge base with a database source needs its snapshot: a sandbox run does not connect to the database, and stops if the snapshot does not exist. See [In a sandbox run](./knowledge.md#in-a-sandbox-run) |
 
 Preflight checks the changed workflow. A key that is not set is not an error, because the mock reads no key. The configuration must still be valid for its real vendor. For example, an action on a vendor that takes a key must name `api_key`, as for a real run.
 
