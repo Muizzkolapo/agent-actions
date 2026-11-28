@@ -86,6 +86,7 @@ class TestTheIndexFile:
         records = corpus_records(_outputs(a="one"), SETTINGS, LABEL)
         first = build_corpus_index(tmp_path, SETTINGS, {"keyword"}, records, LABEL)
         written = first.path.stat().st_mtime_ns
+        caplog.clear()
 
         with caplog.at_level(logging.INFO):
             again = build_corpus_index(tmp_path, SETTINGS, {"keyword"}, records, LABEL)

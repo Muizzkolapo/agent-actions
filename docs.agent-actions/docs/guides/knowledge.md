@@ -241,12 +241,12 @@ link_duplicates: retrieve 'similar' from action summarize by keyword on summariz
 | Key | Default | Meaning |
 |-----|---------|---------|
 | `from` | required | An action upstream of this action. The step depends on it, and on all the dependencies of the action |
-| `text` | required | An output field of the action, or a list of output fields. They are joined with spaces. A list of strings is joined with spaces too. A field of the schema that holds an object, or a list of objects, is refused at load |
+| `text` | required | An output field of the action, or a list of output fields. The step joins them with spaces. It also joins a list of strings with spaces. The load refuses a field of the schema that holds an object, or a list of objects |
 | `title` | none | An output field. The title has weight 2 in the search, as the title of a chunk of a knowledge base |
 | `id` | `source_guid` | A short output field that is unique for each record, for example `ticket_id`. A model copies a short id more easily than a `source_guid` |
 | `query`, `top_k`, `candidates`, `max_context_tokens` | as for a knowledge base | See [Every key](#every-key) |
 | `method` | `keyword` | `keyword`, `all_words`, `phrase` or `fuzzy`, or a mix of them. `key` comes in a later version |
-| `where` | none | An exact match on an output field of the record that is not a `text` field. The values are compared as text |
+| `where` | none | An exact match on an output field of the record that is not a `text` field. The step compares the values as text |
 
 The load checks `text`, `title`, `id` and the `where` fields against the output schema of the action, as it checks `observe`. A field that the schema does not have is refused. `max_per_origin` is refused: each record has the same origin, the action.
 
@@ -277,6 +277,8 @@ Each record of the action is one chunk. Two records with the same text both stay
 | `matches[].metadata` | The other output fields of the record, and always its `source_guid` |
 
 A record is never one of its own matches. The step searches for one match more and removes the record itself. Thus each record gets `top_k` matches. It gets fewer only when fewer records match.
+
+The step knows a record by its `source_guid`. A step that splits a record into several records gives each new record a new `source_guid`. Thus, below such a step, a record can match the record of the `from:` action that it came from. To prevent this, name in `from:` an action below the split.
 
 Two records with the same `source_guid`, or with the same value of the `id:` field, fail the step, and the error names the value. A citation must name one record.
 
@@ -315,7 +317,7 @@ A record that `agac retry` answers searches all the records. The records that an
 
 ### Cost
 
-Each record searches the whole corpus, so the time of the step grows with the square of the number of records. A keyword search of 10,000 records takes about 14 ms, so 10,000 records take about 2.3 minutes in all. A search of 100,000 records takes about 140 ms, so 100,000 records take hours. The step warns when the corpus has more than 20,000 records. Building the index is fast: 100,000 records take about half a second.
+Each record searches the whole corpus, so the time of the step grows with the square of the number of records. A keyword search of 10,000 records takes about 14 ms, so 10,000 records take about 2.3 minutes in all. A search of 100,000 records takes about 140 ms, so 100,000 records take hours. The step warns when the corpus has more than 20,000 records. Building the index is fast: 100,000 records take a few seconds.
 
 ### Find Duplicates in Other Words
 
@@ -337,7 +339,7 @@ Two tickets that say the same thing in other words then share their keywords, an
 
 ### In the Starter Project
 
-The [starter project](./sandbox.md#starter-project) has an action corpus. `read_ticket`, a tool action, writes the text of each ticket and its canonical `keywords`. `classify` has the entry `similar`, which searches the records of `read_ticket`. Its step is `classify__similar`. The tickets T-1001 ("charged twice for my March invoice") and T-1005 ("the refund for my cancelled order") share no word, but both have the keyword `billing`, so each one finds the other:
+The [starter project](./sandbox.md#starter-project) has an action corpus. `read_ticket`, a tool action, writes the text of each ticket and its canonical `keywords`. `classify` has the entry `similar`, which searches the records of `read_ticket`. Its step is `classify__similar`. The tickets T-1001 ("charged twice for my March invoice") and T-1005 ("the refund for my cancelled order") share no search word, but both have the keyword `billing`, so each one finds the other:
 
 ```bash
 agac run -w support_desk --sandbox --wait

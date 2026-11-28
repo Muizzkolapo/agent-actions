@@ -1,5 +1,6 @@
 """Tools of the support_desk workflow: plain Python, no network, no model."""
 
+import re
 from typing import Any
 
 from agent_actions import udf_tool
@@ -11,8 +12,13 @@ BILLING_WORDS = ("charged", "invoice", "refund", "payment")
 KEYWORDS = {
     "billing": BILLING_WORDS,
     "account": ("account", "email", "password"),
-    "app": ("app", "upload", "crash"),
+    "app": ("app", "upload", "crash", "crashes"),
 }
+
+
+def _mentions(text: str, words: tuple[str, ...]) -> bool:
+    # Whole words only: "app" does not match "happy".
+    return any(re.search(rf"\b{re.escape(word)}\b", text) for word in words)
 
 
 @udf_tool
@@ -24,9 +30,9 @@ def read_ticket(data: Any, *args: Any) -> dict:
         "ticket_id": str(source["ticket_id"]),
         "text": text,
         "priority": "high" if source.get("priority") == "high" else "normal",
-        "queue": "billing" if any(word in lowered for word in BILLING_WORDS) else "support",
-        "is_spam": any(word in lowered for word in SPAM_WORDS),
-        "keywords": [key for key, words in KEYWORDS.items() if any(w in lowered for w in words)],
+        "queue": "billing" if _mentions(lowered, BILLING_WORDS) else "support",
+        "is_spam": _mentions(lowered, SPAM_WORDS),
+        "keywords": [key for key, words in KEYWORDS.items() if _mentions(lowered, words)],
     }
 
 

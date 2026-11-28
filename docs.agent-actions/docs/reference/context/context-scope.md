@@ -270,7 +270,7 @@ The load refuses these entries:
 - An action named `retrieve`, in a workflow that has `retrieve` entries.
 - A `query` or `where` reference to an action that is not upstream of the action.
 - `text`, `title` or `id` on an entry that searches a knowledge base. Set them on the source of the base.
-- With `from: <action>`: an action that is not upstream, a tool with `granularity: file`, a versioned action or a version, a router, a loop, a name that is both a base and an action, `max_per_origin`, method `key`, and a `text`, `title`, `id` or `where` field that is not in the output schema of the action. A `text` field that holds an object is refused too.
+- With `from: <action>`: an action that is not upstream, a tool with `granularity: file`, a versioned action or a version, a router, a loop, a name that is both a base and an action, `max_per_origin`, method `key`, a `text`, `title`, `id` or `where` field that is not in the output schema of the action, and a `where` field that is also a `text` field. The load also refuses a `text` field that holds an object or a list of objects.
 - A method whose index the knowledge base does not build, a `where` field that no source of the base lists under `metadata:`, and `key` on a base whose sources do not all set `id:`.
 
 A guard that reads `retrieve.<entry>` runs after the search of that entry. See [A record with no match](../../guides/knowledge.md#a-record-with-no-match).
