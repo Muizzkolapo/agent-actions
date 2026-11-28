@@ -73,6 +73,10 @@ class RetryCommandArgs(BaseModel):
         default=None,
         description="Why the records given to filters are filtered; stored as their reason.",
     )
+    collected_after: bool = Field(
+        default=False,
+        description="The caller collects an open batch itself, as `agac run --wait` does.",
+    )
     all: bool = Field(
         default=False,
         description="Retry again while a pass closes an open failure.",

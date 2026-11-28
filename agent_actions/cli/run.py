@@ -695,7 +695,10 @@ def rerun_selected_records(args: RunCommandArgs, project_root: Path | None) -> N
         records_from=args.records,
     )
     retry_args = RetryCommandArgs(
-        agent=args.agent, from_action=args.rerun[0], dry_run=args.dry_run
+        agent=args.agent,
+        from_action=args.rerun[0],
+        dry_run=args.dry_run,
+        collected_after=args.wait and not args.dry_run,
     )
     try:
         RetryCommand(retry_args, record_filter).execute(project_root=project_root)

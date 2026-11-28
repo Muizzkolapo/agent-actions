@@ -194,6 +194,8 @@ def test_the_protocol_is_utf_8_whatever_the_locale_of_the_server(project):
     client = Client(project, PYTHONIOENCODING="ascii", PYTHONUTF8="0")
     try:
         client.ask("initialize", {"protocolVersion": "2025-06-18"})
+        failed, said = client.call("run_workflow", workflow=WORKFLOW)
+        assert not failed, said[-3000:]
         is_error, text = client.call(
             "run_workflow",
             workflow=WORKFLOW,
