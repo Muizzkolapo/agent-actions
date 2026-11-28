@@ -58,6 +58,7 @@ These are the **stable paths** that exist in every user's project:
 | `agent_io/target/{action}/` | Output data per action |
 | `agent_io/store/` | Durable database (SQLite) |
 | `agent_io/sandbox/` | Output of sandbox runs (status, logs, target); the store is `agent_io/store/{workflow}.sandbox.db` |
+| `agent_io/retrieve/{step}/` | Index files of the records a `context_scope.retrieve` entry with `from: <action>` searches (generated; `agent_io/sandbox/retrieve/` in a sandbox run) |
 | `.agac/knowledge/{base}/` | Built knowledge indexes, one file per index and digest (generated; `.agac/` is in `.gitignore`) |
 | `.env` | Environment variables |
 | `sandbox.yml` | Sandbox scenario (optional): the faults the mock follows and the tool actions it stubs in `agac run --sandbox`, `agac retry --sandbox`, `agac inspect --sandbox` and `agac sandbox check` |

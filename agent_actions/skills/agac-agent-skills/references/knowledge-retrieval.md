@@ -2,7 +2,8 @@
 
 A knowledge base is named reference text in `agent_actions.yml`: files, the records of a
 JSON/CSV file, or database rows. `context_scope.retrieve` on an action searches it for each
-record and gives the prompt only the matches. The search is local (SQLite full-text index): no
+record and gives the prompt only the matches. It can also search what an earlier action wrote
+for the other records (`from: <action>`). The search is local (SQLite full-text index): no
 model call, no API key.
 
 Full reference: `docs.agent-actions/docs/guides/knowledge.md` and
@@ -15,7 +16,7 @@ Full reference: `docs.agent-actions/docs/guides/knowledge.md` and
 | The same small reference | `seed: {name: $file:x.json}` |
 | One file chosen by an exact value | `seed` with `select_by` |
 | The few parts of a large reference that match it | `retrieve` from a knowledge base |
-| What other records produced | `retrieve from: <action>` comes in a later version. Now: write an `outputs:` table in one workflow and declare a knowledge base on it in another |
+| What other records produced | `retrieve` with `from: <action>` (see below). Another workflow's records: an `outputs:` table and a knowledge base on it |
 
 ## Declare a base
 
@@ -53,7 +54,7 @@ context_scope:
   observe: [source.text, classify.category]
   retrieve:
     help:                                 # the entry name; the prompt reads retrieve.help
-      from: help_center                   # a knowledge base (an action name is refused in this version)
+      from: help_center                   # a knowledge base, or an earlier action (see below)
       query: [source.text]                # field refs, joined with spaces
       method: {keyword: 0.7, fuzzy: 0.3}  # default keyword; or [keyword, fuzzy] (equal weights)
       where: {category: classify.category}  # a field ref if it starts with source/an upstream action; compared as text (2 == "2")
@@ -78,6 +79,39 @@ filtered upstream or sent to another branch is not searched. `agac records`, `ag
 
 Output: `retrieve.help = {matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`.
 `score` is higher for better and compares matches of one query only.
+
+## Search an earlier action's records
+
+```yaml
+context_scope:
+  observe: [summarize.*]
+  retrieve:
+    similar:
+      from: summarize                     # an action upstream of this one; the step depends on it
+      text: [summary, keywords]           # required: output fields searched (a list of strings is joined)
+      title: product                      # optional
+      id: ticket_id                       # optional, short and unique; default source_guid
+      query: [summarize.summary, summarize.keywords]
+      top_k: 3                            # the record itself is never a match; each gets top_k
+```
+
+- The corpus is every record the action **processed** still in the store: this run and earlier
+  runs. Failed, filtered, guard-skipped and exhausted records are left out. `--fresh` empties it.
+- `text`/`title`/`id`/`where` fields are checked against the action's output schema at load; a
+  `text` field holding an object is refused. Methods: keyword, all_words, phrase, fuzzy (`key`
+  later). `max_per_origin` is refused. `text`/`title`/`id` stay refused on a knowledge base.
+- Refused `from:`: not upstream, a FILE tool, a versioned action or a version (name the merge),
+  a router (name a branch action or the join), a loop, a name that is also a base.
+- A repeated `source_guid` or `id` value fails the step, naming it.
+- The index is built once when the step starts: `agent_io/retrieve/<step>/<digest>.db`
+  (`agent_io/sandbox/retrieve/...` in a sandbox run). `agac clean --all` and `--fresh` remove it.
+- Records added since earlier answers: one info line per run (`... 1,200 earlier answers did not
+  see the 40 new ones; --rerun <step> to search again`). Records changed or gone: a warning.
+  The earlier answers stand until `--rerun <step>`.
+- Cost grows with the square of the corpus (about 14 ms a search at 10,000 records); the step
+  warns above 20,000 records.
+- Paraphrases do not match: ask the earlier action for canonical `keywords` from a closed list
+  and search them with the summary.
 
 ## Prompt
 
@@ -126,7 +160,8 @@ agac run -w {workflow} --rerun write_reply__help          # search again after t
    real. A retrieve step cannot be stubbed.
 5. **Keyword search matches words, not meanings.** "billed twice" does not find "duplicate
    charge". Have an earlier LLM action write the query in the words of the articles
-   (`query: [classify.search_terms]`). Vector search comes later.
+   (`query: [classify.search_terms]`). For an action corpus, search a canonical `keywords`
+   field. Vector search comes later.
 6. **`retrieve` is per action.** Not in `defaults:` or `default_agent_config:`. An entry name
    cannot end in `_<digits>`. A second action reads the matches by observing
    `write_reply__help.matches`.

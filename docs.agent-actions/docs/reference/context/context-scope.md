@@ -228,7 +228,7 @@ defaults:
 
 ## Retrieve {/* #retrieve */}
 
-`retrieve` searches a [knowledge base](../../guides/knowledge.md) for each record. The prompt and the guard of the action read the matches as `retrieve.<entry>`. Each entry is one search:
+`retrieve` searches a [knowledge base](../../guides/knowledge.md), or the records of an earlier action, for each record. The prompt and the guard of the action read the matches as `retrieve.<entry>`. Each entry is one search:
 
 ```yaml
 context_scope:
@@ -247,18 +247,21 @@ context_scope:
 
 | Key | Default | Range | Meaning |
 |-----|---------|-------|---------|
-| `from` | required | | The name of a knowledge base under `knowledge:` in `agent_actions.yml`. The name of an action is refused: `retrieval from an action comes in a later version` |
+| `from` | required | | The name of a knowledge base under `knowledge:` in `agent_actions.yml`, or of an action upstream of this action. See [Retrieve from an earlier action](../../guides/knowledge.md#retrieve-from-an-earlier-action) |
+| `text` | required with `from: <action>` | | The output fields of the action that are searched: one field or a list. Refused when `from:` names a knowledge base |
+| `title` | none | | With `from: <action>`: the output field that is the title of each record |
+| `id` | `source_guid` | | With `from: <action>`: a short output field, unique for each record, that names it in `matches[].id` |
 | `query` | required | | A field reference, or a list of field references. The values are turned into text and joined with spaces |
 | `method` | `keyword` | | `keyword`, `all_words`, `phrase`, `fuzzy` or `key`. A list merges methods with equal weights. A mapping gives each method its weight. `key` cannot be merged |
 | `where` | none | | A mapping of a metadata field to a value. A value whose first part is `source` or an action of the workflow is a field reference, and the load refuses one that names an action that is not upstream. Any other value is a constant. `{value: "a.b"}` is always a constant. A null or missing reference matches nothing and does not fail the record. The values are compared as text, so `2` and `"2"` are equal |
 | `top_k` | `5` | 1 to 50 | The number of matches, at most |
 | `candidates` | the larger of 20 and 4 × `top_k` | `top_k` to 1000 | The number of results of each method, before the merge and the limits |
 | `max_context_tokens` | none | 1 or more | The total number of tokens of the matches. Chunks are added in rank order until the next chunk passes the limit. A chunk is never cut |
-| `max_per_origin` | none | 1 or more | The number of matches from one file, or from one connection |
+| `max_per_origin` | none | 1 or more | The number of matches from one file, or from one connection. Refused with `from: <action>` |
 
 The load turns each entry into an internal step named `<action>__<entry>`, for example `write_reply__help`. The step has the dependencies of the action, so it searches only for the records that reach the action. The load adds the step to the dependencies of the action and the step's output to the `observe` of the action. `retrieve.help` in a prompt or a guard is the output of that step. `agac records`, `agac inspect`, `--rerun` and the messages name the step.
 
-The output of each entry is `{matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`.
+The output of each entry is `{matches: [{id, rank, score, text, title, origin, hash, metadata}], count, query, index}`. With `from: <action>`, a record is never one of its own matches.
 
 The load refuses these entries:
 
@@ -266,7 +269,8 @@ The load refuses these entries:
 - An entry name that does not start with a letter, holds a character other than a letter, a digit or `_`, holds `__`, ends in `_`, or ends in `_<digits>`. An entry whose step name is the name of an action.
 - An action named `retrieve`, in a workflow that has `retrieve` entries.
 - A `query` or `where` reference to an action that is not upstream of the action.
-- `text`, `title` or `id` on an entry. Set them on the source of the knowledge base.
+- `text`, `title` or `id` on an entry that searches a knowledge base. Set them on the source of the base.
+- With `from: <action>`: an action that is not upstream, a tool with `granularity: file`, a versioned action or a version, a router, a loop, a name that is both a base and an action, `max_per_origin`, method `key`, and a `text`, `title`, `id` or `where` field that is not in the output schema of the action. A `text` field that holds an object is refused too.
 - A method whose index the knowledge base does not build, a `where` field that no source of the base lists under `metadata:`, and `key` on a base whose sources do not all set `id:`.
 
 A guard that reads `retrieve.<entry>` runs after the search of that entry. See [A record with no match](../../guides/knowledge.md#a-record-with-no-match).
