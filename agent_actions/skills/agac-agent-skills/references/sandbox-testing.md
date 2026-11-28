@@ -26,7 +26,7 @@ agac run -w {workflow} -u tools --sandbox --scenario chaos      # a preset, or a
 agac run -w {workflow} -u tools --sandbox --wait                # batch actions: run every pass
 agac retry -w {workflow} --sandbox                              # retry the failed sandbox records
 agac inspect -w {workflow} -u tools --sandbox action {action}   # the action as the sandbox runs it
-agac sandbox check -w {workflow} -u tools                       # run --sandbox --fresh --wait, compare with sandbox_expected.yml
+agac sandbox check -w {workflow} -u tools                       # run --sandbox --fresh --abandon-in-flight --wait, compare with sandbox_expected.yml
 agac init my_sandbox --template sandbox                         # a starter project that uses each feature once
 ```
 
@@ -143,7 +143,7 @@ entries in it.
 
 ## Assert the outcome: `agac sandbox check`
 
-`agac sandbox check -w {workflow}` runs the workflow as `agac run --sandbox --fresh --wait`
+`agac sandbox check -w {workflow}` runs the workflow as `agac run --sandbox --fresh --abandon-in-flight --wait`
 in the same process, then compares the result with `sandbox_expected.{workflow}.yml`, else
 `sandbox_expected.yml`, at the project root (`--expected <path>` names another file; a
 relative path is from the project root). It

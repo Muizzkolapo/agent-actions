@@ -388,7 +388,12 @@ class RunCommand:
         """
         if self.args.abandon_in_flight:
             return
-        open_batches = batches_still_open(paths.io_dir, self.agent_name)
+        try:
+            open_batches = batches_still_open(paths.io_dir, self.agent_name)
+        except Exception as e:
+            # --fresh is how a store whose batch state cannot be read is started over.
+            logger.warning("Could not tell whether a batch is still open (%s); --fresh goes on", e)
+            return
         if open_batches:
             raise click.UsageError(
                 f"--fresh would drop the batch still open for {', '.join(open_batches)}, "
@@ -403,7 +408,7 @@ class RunCommand:
         Decided before the workflow loads, from what is stored, since loading (with
         ``--rerun``) clears state. A batch answers the rows it was sent, so reading
         the query again under one would forget a record whose answer is on its way.
-        ``--fresh`` discards the batches, so it is not refused.
+        ``--fresh`` discards the batches, so it is not refused; it has its own check.
         """
         if not self.args.fresh:
             open_batches = batches_still_open(paths.io_dir, self.agent_name)

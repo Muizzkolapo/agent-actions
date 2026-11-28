@@ -816,6 +816,8 @@ class ActionExecutor:
         answer the records added or changed.
         """
         repairing = bool(getattr(self.deps.action_runner, "retried_records", ()))
+        if current_status in _WAITING_ON_A_BATCH and not repairing:
+            self._note_a_staged_change_while_it_waits(action_name, action_config)
         if current_status not in COMPLETED_STATUSES and not repairing:
             return current_status
         details = self.deps.state_manager.get_status_details(action_name)
@@ -995,25 +997,65 @@ class ActionExecutor:
             why,
         )
 
+    def _note_a_staged_change_while_it_waits(
+        self, action_name: str, action_config: ActionConfigDict
+    ) -> None:
+        """Mark a first stage waiting on a batch whose staged input changed since it sent it."""
+        state = self.deps.state_manager
+        stored_input = state.get_status_details(action_name).get("staged_input")
+        if (
+            stored_input is None
+            or action_config.get("dependencies")
+            or state.input_changed_while_it_waited(action_name)
+            or stored_input == self._staged_input(action_name, action_config)
+        ):
+            return
+        logger.warning(
+            "The input files of %s changed while its batch is out. It collects the batch, "
+            "then runs again, keeping its answers, to answer the change",
+            action_name,
+        )
+        state.mark_input_changed_while_it_waited([action_name])
+
+    def _answer_a_change_made_while_it_waited(self, action_name: str) -> bool:
+        """Reopen an action whose input changed while it waited, now its batch is collected.
+
+        Not reopened while it waits: a file whose batch is out is not sent again, so a
+        record changed or added in it would never be answered.
+        """
+        state = self.deps.state_manager
+        if state.get_status(action_name) not in COMPLETED_STATUSES:
+            return False
+        if not state.input_changed_while_it_waited(action_name):
+            return False
+        logger.info(
+            "%s collected its batch and runs again to answer its changed input", action_name
+        )
+        self._reopen_keeping_answers(action_name)
+        return True
+
     def _reopen_keeping_answers(self, action_name: str) -> None:
         """Put *action_name* and what reads it back to pending, keeping every answer held.
 
-        The completed ones, and a reader waiting on a batch: one that only checks its batch
-        collects the records the batch was sent, so a record added since would never reach
-        it, and one removed would be written back. Back on the run path, it records the
-        inputs of each file whose batch is out and sends the new ones. Any other runs anyway.
-        One edited since it completed answers beside answers given before the edit, so its
-        stamps stay held to that config and each later run names the edit, until ``--rerun``.
+        The completed ones. A reader waiting on a batch is marked instead, and reopened once
+        its batch is collected (``_answer_a_change_made_while_it_waited``). Any other runs
+        anyway. One edited since it completed answers beside answers given before the edit,
+        so its stamps stay held to that config and each later run names the edit, until
+        ``--rerun``.
         """
         configs = getattr(self.deps.action_runner, "action_configs", None) or {}
         readers = self._stale_readers(action_name)
+        waiting = [
+            name
+            for name in readers
+            if self.deps.state_manager.get_status(name) in _WAITING_ON_A_BATCH
+        ]
+        if waiting:
+            self.deps.state_manager.mark_input_changed_while_it_waited(waiting)
         names = [
             name
             for name in [*readers, action_name]
             if self.deps.state_manager.get_status(name) in COMPLETED_STATUSES
-            or (
-                name in readers and self.deps.state_manager.get_status(name) in _WAITING_ON_A_BATCH
-            )
         ]
         held: dict[str, dict[str, Any]] = {}
         mixed = []
@@ -2192,7 +2234,9 @@ class ActionExecutor:
             current_status = self.deps.state_manager.get_status(action_name)
 
         if current_status == ActionStatus.BATCH_SUBMITTED:
-            return self._handle_batch_check(action_name, action_idx, action_config, start_time)
+            checked = self._handle_batch_check(action_name, action_idx, action_config, start_time)
+            if not self._answer_a_change_made_while_it_waited(action_name):
+                return checked
 
         # A deliberate halt is not a failure to retry: refuse before any work.
         if action_is_halted(
@@ -2263,9 +2307,11 @@ class ActionExecutor:
             current_status = self.deps.state_manager.get_status(action_name)
 
         if current_status == ActionStatus.BATCH_SUBMITTED:
-            return await self._handle_batch_check_async(
+            checked = await self._handle_batch_check_async(
                 action_name, action_idx, action_config, start_time
             )
+            if not self._answer_a_change_made_while_it_waited(action_name):
+                return checked
 
         # A deliberate halt is not a failure to retry: refuse before any work.
         if action_is_halted(

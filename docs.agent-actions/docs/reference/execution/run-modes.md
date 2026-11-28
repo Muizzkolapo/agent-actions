@@ -175,7 +175,7 @@ not read again the files that a run already read.
 
 A run that cannot reach the provider while it checks whether its batches have finished pauses
 in the same way. The run continues to pause for as long as the provider cannot be
-asked. To abandon those batches, use `agac run --fresh`. This command sends each record of the
+asked. To abandon those batches, use `agac run --fresh --abandon-in-flight`. This command sends each record of the
 workflow again.
 
 ### When the run cannot read the results of one file
@@ -259,19 +259,19 @@ provider reports a status that agac knows.
 
 A batch answers the records that it got. A record can leave the input of a file while the batch
 of that file is at the provider. For example, you remove the record from staging. A run that
-resumes the action reads the input again in three cases. The first case is after a collect pass
-stopped partway. The second case is after a run that checked on the batch was interrupted. The
-third case is after the staged input of the workflow changed. That run does not write the answer
-of the departed record into the file, as online mode does.
+resumes the action reads the input again in two cases. The first case is after a collect pass
+stopped partway. The second case is after a run that checked on the batch was interrupted. That run does not write the answer of the
+departed record into the file, as online mode does.
 
 A file that all its records left waits for its batch like any other file. Then the system stores
-the file empty. This is also true for a staged file that you delete: its batch is collected and
-the file is stored empty at the batch action.
+the file empty. This is also true for a file whose input is gone completely.
 
-A file or a record that you add to staging while a batch is out is not in that batch. The next
-run sends it in a new batch. When both batches are collected, the actions after the batch action
-get every record. A run that only collects, with no change to the staged input, does not read the
-input again.
+A change to the staged input while a batch is out is answered after the batch. The run that
+collects the batch then runs the batch action again in the same run, and keeps its answers.
+That pass sends the records that you added or changed in a new batch, and forgets the records
+that are no longer staged. The actions after the batch action run when that batch is collected.
+Thus every action gets the same records as the first action. This is also true when the batch
+action is the first action of the workflow.
 
 In each case, the provider has already answered the records that it got. After a batch is at
 the provider, you pay for its answers, whether the run keeps them or not.
