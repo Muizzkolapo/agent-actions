@@ -56,7 +56,7 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 | `StorageBackend.records_share_a_repeat_chain()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.claim_source_guid_for_run()` | in-memory only, not persisted | — | — |
 | `StorageBackend.target_rows_per_source_guid()` | `agent_io/store/{workflow_name}.db` | Reads | — |
-| `StorageBackend.target_row_identities()` | `agent_io/store/{workflow_name}.db` | Reads | — |
+| `StorageBackend.target_row_identities()` | `agent_io/store/{workflow_name}.db` | Reads (every file, or only `relative_paths`) | — |
 | `StorageBackend.has_target_rows()` | `agent_io/store/{workflow_name}.db` | Reads | — |
 | `StorageBackend.set_disposition()` | `agent_io/store/{workflow_name}.db` | Writes | — |
 | `StorageBackend.get_disposition()` | `agent_io/store/{workflow_name}.db` | Reads | — |
