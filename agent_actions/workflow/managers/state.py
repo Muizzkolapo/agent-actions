@@ -79,7 +79,7 @@ ANSWERS_UNDER_MORE_THAN_ONE_CONFIG = "answers_under_more_than_one_config"
 
 # Status detail: the staged input changed while the action waited on a batch. Once the
 # batch is collected, the action runs again, keeping its answers, to answer the change.
-# Removed by that run, or by any reset.
+# Removed when the action is reopened (`reopen`).
 INPUT_CHANGED_WHILE_IT_WAITED = "input_changed_while_it_waited"
 
 

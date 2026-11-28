@@ -1342,7 +1342,8 @@ def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: li
     more = len(gone) - _ERROR_SAMPLE_SIZE
     logger.warning(
         "'%s' has no input for %s%s any more, so what it stored for them is deleted. "
-        "Restore the input and run with --fresh to rebuild it.",
+        "Restore the input and run with --fresh to rebuild it (with --abandon-in-flight "
+        "while a batch is open).",
         action_name,
         ", ".join(gone[:_ERROR_SAMPLE_SIZE]),
         f" (and {more} more)" if more > 0 else "",

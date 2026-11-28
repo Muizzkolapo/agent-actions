@@ -252,7 +252,9 @@ Limits changed since last run? (record/file limit)
 Staged input changed? (first stage: a staged file added, removed or rewritten)
     YES → reopen it and every completed reader to PENDING, keeping their
           answers; after its walk, records no staged file holds lose their
-          dispositions and checkpoints there and at every reader
+          dispositions and checkpoints there and at every reader. A reader
+          waiting on a batch (or a first stage waiting on its own) is marked
+          INPUT_CHANGED_WHILE_IT_WAITED instead
 Config edited (prompt, model, schema, guard, context scope,
 dependencies)?
     YES → warn, naming the edit and `--rerun`; nothing is reset
@@ -267,6 +269,9 @@ Already COMPLETED?
     ▼
 BATCH_SUBMITTED?
     YES → _handle_batch_check() → poll provider
+          collected and marked INPUT_CHANGED_WHILE_IT_WAITED → reopen it and
+          its readers, keeping their answers, and run it now: the added and
+          changed records go in a new batch
     │
     ▼
 Upstream dependency FAILED or SKIPPED?
@@ -319,7 +324,8 @@ released. The rows always go: a walk does not come back to a file it deleted, an
 left behind would feed the actions below while the action reads as complete. Batch state
 that a failure (or a release that fails) keeps stays, with a warning that names it and
 says that `agac clean --all` or `--fresh` removes it; a file whose batch is still owed
-keeps its batch state for a collect pass. The prefix match (`list_metadata_prefix`,
+keeps its batch state for a collect pass and is marked as taking no input, so that pass
+stores it empty. The prefix match (`list_metadata_prefix`,
 `delete_metadata_prefix`) is exact and case-sensitive, so `item.json`'s cleanup takes
 nothing of `Item.json`. A version merge's walk is
 the merged input the correlator hands it (`FileProcessParams.correlated_input`), one entry
