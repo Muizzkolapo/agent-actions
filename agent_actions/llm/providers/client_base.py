@@ -8,7 +8,9 @@ data redaction, and invocation dispatch to JSON or non-JSON modes.
 import logging
 import os
 import re
+import threading
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from typing import Any, ClassVar
 
 from pydantic import SecretStr
@@ -46,9 +48,30 @@ def get_or_create_client(cls: type, api_key: str | None, **kwargs: Any) -> Any:
     return client
 
 
+# The actions each run already warned of; past this many runs, the oldest is forgotten.
+_MAX_RUNS = 16
+_schema_warned: OrderedDict[str, set[str]] = OrderedDict()
+_schema_warned_lock = threading.Lock()
+
+
 def warn_schema_without_json_mode(agent_config: dict[str, Any]) -> None:
-    """Log a warning when a schema was compiled but json_mode is disabled."""
+    """Warn, once per action in a run, that a compiled schema is not sent (json_mode is off).
+
+    Every LLM call of the action reaches here; preflight already warns once per action.
+    """
+    from agent_actions.logging.core.manager import get_manager
+
     action_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
+    # Each run sets a new correlation id when it starts, so each run warns again.
+    run = str(get_manager().get_context("correlation_id") or "")
+    with _schema_warned_lock:
+        warned = _schema_warned.setdefault(run, set())
+        _schema_warned.move_to_end(run)
+        while len(_schema_warned) > _MAX_RUNS:
+            _schema_warned.popitem(last=False)
+        if action_name in warned:
+            return
+        warned.add(action_name)
     logger.warning(
         "json_mode=false but schema was compiled for action '%s'. "
         "The schema will not be sent to the LLM. "

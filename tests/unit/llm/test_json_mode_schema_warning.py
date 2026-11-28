@@ -7,6 +7,7 @@ Validates that:
 - No false positives for valid configs
 """
 
+import uuid
 from typing import Any
 from unittest.mock import patch
 
@@ -14,9 +15,21 @@ import pytest
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchTask
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.logging.core.manager import get_manager
 from agent_actions.validation.static_analyzer.workflow_static_analyzer import (
     WorkflowStaticAnalyzer,
 )
+
+
+@pytest.fixture(autouse=True)
+def _a_run():
+    """Each test is a new run, so the runtime warning (once per action in a run) fires."""
+    manager = get_manager()
+    before = manager.get_context("correlation_id")
+    manager.set_context(correlation_id=f"run-{uuid.uuid4().hex[:8]}")
+    yield
+    manager.set_context(correlation_id=before)
+
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -364,3 +377,20 @@ class TestPrepareTasksContentKeyRequired:
         client = ConcreteBatchClient()
         with pytest.raises(ValueError, match=r"\?"):
             client.prepare_tasks(data, config)
+
+
+class TestRuntimeWarningFromWorkerThreads:
+    """An online run sends its calls from worker threads; the warning is still once."""
+
+    def test_calls_from_many_threads_in_one_run_warn_once(self, caplog):
+        import logging
+        from concurrent.futures import ThreadPoolExecutor
+
+        from agent_actions.llm.providers.client_base import warn_schema_without_json_mode
+
+        config = {"json_mode": False, "agent_type": "classify"}
+        with caplog.at_level(logging.WARNING), ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(lambda _: warn_schema_without_json_mode(config), range(64)))
+
+        warned = [r for r in caplog.records if "json_mode=false but schema" in r.getMessage()]
+        assert len(warned) == 1
