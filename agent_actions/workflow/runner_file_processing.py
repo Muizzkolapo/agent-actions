@@ -32,6 +32,7 @@ from agent_actions.logging.diagnostics import DIAGNOSTIC
 from agent_actions.record.elsewhere import gathers, sends_elsewhere
 from agent_actions.record.reasons import SENT_ELSEWHERE
 from agent_actions.storage.backend import (
+    DISPOSITION_DEFERRED,
     DISPOSITION_FILTERED,
     DISPOSITION_SUCCESS,
     NODE_LEVEL_RECORD_ID,
@@ -1328,17 +1329,22 @@ def _process_stored_entry(
     )
 
 
-def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: list[str]) -> None:
+def forget_files_of_inputs_gone(
+    storage_backend: Any, action_name: str, gone: list[str], *, forget_their_records: bool = False
+) -> None:
     """Delete *gone*, files an action stores from input that is gone, and their batch state.
 
     The batch state goes first, each file on its own. Batch state that cannot be deleted
     stays with a warning, but the rows go: no later walk comes back to the file, and rows
-    left behind would feed the actions below. Raises what the store raises when it deletes
-    the rows.
+    left behind would feed the actions below. With *forget_their_records*, from a walk that
+    read every input, the records only those files held lose their dispositions and
+    checkpoints too. Raises what the store raises when it deletes the rows.
     """
     gone_set = set(gone)
     _forget_batch_state_of_files_gone(storage_backend, action_name, gone_set.__contains__)
-    held_there = _identities_held(storage_backend, action_name, gone)
+    held_there = (
+        _identities_held(storage_backend, action_name, gone) if forget_their_records else set()
+    )
     storage_backend.delete_target_files(action_name, gone)
     _forget_records_only_they_held(storage_backend, action_name, held_there)
     more = len(gone) - _ERROR_SAMPLE_SIZE
@@ -1354,9 +1360,21 @@ def forget_files_of_inputs_gone(storage_backend: Any, action_name: str, gone: li
         logger.debug("'%s' deleted what it stored for %s", action_name, ", ".join(gone))
 
 
-def _identities_held(storage_backend: Any, action_name: str, files: list[str]) -> set[str]:
+def _identities_held(
+    storage_backend: Any, action_name: str, files: list[str] | None = None
+) -> set[str]:
+    """The records the rows of *files* (every file, when None) answer.
+
+    An expansion's rows carry new guids, and its input's, which its disposition names,
+    under ``parent_source_guid``.
+    """
     try:
-        return {guid for guid, _ in storage_backend.target_row_identities(action_name, files)}
+        return {
+            guid
+            for identity in storage_backend.target_row_identities(action_name, files)
+            for guid in identity
+            if guid
+        }
     except Exception as e:
         logger.warning(
             "Could not read the records '%s' stores for input that is gone, so their "
@@ -1373,12 +1391,19 @@ def _forget_records_only_they_held(
     """Forget the dispositions and checkpoints of records no file the action keeps holds.
 
     A batch collected after its file's input left wrote them; the action's rows are the
-    only record of which these are. A record that moved to a kept file keeps its own.
+    only record of which these are. A record that moved to a kept file keeps its own, and
+    so does one still ``deferred``: a batch out answers it, so it is not stored yet.
     """
     if not held_there:
         return
     try:
-        forgotten = held_there - set(storage_backend.target_rows_per_source_guid(action_name))
+        deferred = {
+            row["record_id"]
+            for row in storage_backend.get_disposition(
+                action_name, disposition=DISPOSITION_DEFERRED, snapshots=False
+            )
+        }
+        forgotten = held_there - _identities_held(storage_backend, action_name) - deferred
         if forgotten:
             storage_backend.clear_dispositions_batch(action_name, forgotten)
             storage_backend.clear_checkpoint_records(action_name, source_guids=forgotten)
@@ -1532,7 +1557,7 @@ def _forget_files_no_input_maps_to(
         stored = backend.list_target_files(action_name)
         gone = [name for name in stored if name not in kept]
         if gone:
-            forget_files_of_inputs_gone(backend, action_name, gone)
+            forget_files_of_inputs_gone(backend, action_name, gone, forget_their_records=True)
         # A file sent in a batch is stored only once the batch is collected.
         unstored = set(stored) | kept
         _forget_batch_state_of_files_gone(backend, action_name, lambda path: path not in unstored)
