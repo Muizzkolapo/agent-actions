@@ -103,3 +103,91 @@ def test_an_edited_article_warns_the_step_and_rerun_answers_it_again(project):
     again = _run(project, "--rerun", STEP)
     assert "knowledge base 'help_center' changed" not in again.stdout + again.stderr
     assert "in a week" in _outputs(project)["T-1001"]["matches"][0]["text"]
+
+
+PRODUCT_TOOL = """
+from typing import Any
+
+from agent_actions import udf_tool
+
+
+@udf_tool
+def pick_product(data: Any, *args: Any) -> dict:
+    queue = data["read_ticket"]["queue"]
+    return {"queue": queue, "product": "billing"} if queue == "billing" else {"queue": queue}
+"""
+
+
+SKIP_ON_SUPPORT = """
+    guard:
+      condition: 'read_ticket.queue == "billing"'
+      on_false: skip"""
+
+
+@pytest.mark.parametrize(
+    ("where_ref", "guard"),
+    [
+        # The tool leaves the optional schema field out for a support ticket.
+        ("pick_product.product", ""),
+        # The guard skips the tool for a support ticket: its namespace is null.
+        ("pick_product.product", SKIP_ON_SUPPORT),
+        # Only the staged ticket T-1001 has a product field.
+        ("source.product", ""),
+    ],
+)
+def test_a_where_ref_the_record_lacks_matches_nothing_and_never_fails_it(
+    project, where_ref, guard
+):
+    (project / "tools/support_desk/product_tools.py").write_text(PRODUCT_TOOL)
+    staged = project / "agent_workflow/support_desk/agent_io/staging/tickets.json"
+    tickets = json.loads(staged.read_text())
+    tickets[0]["product"] = "billing"
+    staged.write_text(json.dumps(tickets))
+    (project / "schema/support_desk/product.yml").write_text(
+        "name: product\nfields:\n  - {id: queue, type: string, required: true}\n"
+        "  - {id: product, type: string, required: false}\n"
+    )
+    (project / "knowledge/faq.json").write_text(
+        json.dumps(
+            [
+                {"id": "f1", "text": "A charge twice is refunded.", "product": "billing"},
+                {"id": "f2", "text": "A charge on the app is checked.", "product": "app"},
+            ]
+        )
+    )
+    config = project / "agent_actions.yml"
+    config.write_text(
+        config.read_text()
+        + "  faq:\n    sources:\n"
+        + "      - {path: knowledge/faq.json, text: text, id: id, metadata: [product]}\n"
+    )
+    workflow = project / "agent_workflow/support_desk/agent_config/support_desk.yml"
+    workflow.write_text(
+        workflow.read_text()
+        + """
+  - name: pick_product
+    dependencies: [read_ticket]
+    kind: tool
+    impl: pick_product
+    intent: "Pick the product of a billing ticket"
+    schema: product__GUARD__
+    context_scope:
+      observe: [read_ticket.queue]
+
+  - name: faq_note
+    dependencies: [pick_product]
+    intent: "Write a note from the FAQ"
+    prompt: "{% for m in retrieve.faq.matches %}{{ m.id }}{% endfor %}"
+    schema: {note: string}
+    context_scope:
+      observe: ["pick_product.product?"]
+      retrieve:
+        faq: {from: faq, query: source.text, where: {product: __WHERE__}}
+""".replace("__GUARD__", guard).replace("__WHERE__", where_ref)
+    )
+    _run(project)
+
+    outputs = _outputs(project, "faq_note__faq")
+    assert len(outputs) == 6
+    assert [m["id"] for m in outputs["T-1001"]["matches"]] == ["f1"]
+    assert outputs["T-1002"]["matches"] == []

@@ -245,7 +245,7 @@ context_scope:
 
 A value is a field reference when its first part is `source` or an action upstream of the action. Each record then has its own value. Any other value is a constant. To give a constant that looks like a reference, write `{value: "classify.category"}`.
 
-Each method applies `where` in its own search, before it returns its `candidates`. Thus a filter never leaves fewer than `top_k` chunks when more chunks match it. A reference that is null or missing for a record matches nothing. It never removes the filter. A chunk of a file glob source has no metadata, so a `where` never keeps it.
+Each method applies `where` in its own search, before it returns its `candidates`. Thus a filter never leaves fewer than `top_k` chunks when more chunks match it. A reference that is null or missing for a record matches nothing, and the record does not fail. It never removes the filter. A chunk of a file glob source has no metadata, so a `where` never keeps it.
 
 ### Limits {/* #limits */}
 

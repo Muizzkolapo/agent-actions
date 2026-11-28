@@ -104,9 +104,17 @@ class TestTheStep:
 
         assert step["dependencies"] == ["classify"]
         assert step["context_scope"] == {
-            "observe": ["source.subject", "classify.keywords", "classify.product"]
+            "observe": ["source.subject", "classify.keywords", "classify.product?"]
         }
         assert step["_builtin"]["where"] == {"product": "classify.product"}
+
+    def test_a_where_ref_is_an_optional_observe_unless_the_query_reads_it_too(self, tmp_path):
+        data = _workflow(
+            _retrieve(query="classify.product", where={"product": "classify.product"})
+        )
+        step = _expanded(data, tmp_path)["write_reply__help"]
+
+        assert step["context_scope"]["observe"] == ["classify.product"]
 
     def test_a_step_that_reads_only_source_takes_all_of_its_actions_dependencies(self, tmp_path):
         assert _expanded(_workflow(), tmp_path)["write_reply__help"]["dependencies"] == [

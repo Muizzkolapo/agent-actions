@@ -269,6 +269,8 @@ def _step(
     candidates = _whole(config, "candidates", max(20, 4 * top_k), top_k, MAX_CANDIDATES, where)
     refs = [*query, *(ref for ref in filters.values() if isinstance(ref, str))]
     readers = list(dict.fromkeys(ref.split(".", 1)[0] for ref in refs))
+    # A null or missing `where` ref matches nothing; it never fails the record.
+    observe = [ref if ref in query else f"{ref}?" for ref in dict.fromkeys(refs)]
     spec = {
         "tool": RETRIEVE,
         "base": source,
@@ -289,7 +291,7 @@ def _step(
         "granularity": "record",
         "intent": f"Retrieve from knowledge base {source} for {name}",
         "schema": output_schema(step),
-        "context_scope": {"observe": list(dict.fromkeys(refs))},
+        "context_scope": {"observe": observe},
         BUILTIN_KEY: spec,
     }
     # The action's own dependencies first: upstream filters, cascades and route branches

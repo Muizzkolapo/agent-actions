@@ -83,7 +83,31 @@ def test_a_null_where_value_stays_null(knowledge):
     assert call["where"]["product"] is None
 
 
-def test_a_field_the_record_lacks_fails_the_record_as_for_a_router(knowledge):
+@pytest.mark.parametrize(
+    "classify",
+    [
+        {"keywords": ["x"]},
+        {"keywords": ["x"], "product": {"other": 1}},
+    ],
+)
+def test_a_where_ref_the_record_lacks_is_null_and_matches_nothing(knowledge, classify):
+    record = {"source": {"subject": "Refund"}, "classify": classify}
+    spec = _spec(where={"product": "classify.product.name"})
+
+    call = _search(knowledge, spec, record)
+
+    assert call["where"] == {"product": None}
+
+
+def test_a_where_ref_whose_action_is_null_is_null(knowledge):
+    spec = _spec(query=["source.subject"], where={"product": "classify.product"})
+
+    call = _search(knowledge, spec, {"source": {"subject": "Refund"}, "classify": None})
+
+    assert call["where"] == {"product": None}
+
+
+def test_a_query_field_the_record_lacks_fails_the_record_as_for_a_router(knowledge):
     record = {"source": {"subject": "Refund"}, "classify": {"product": "billing"}}
 
     with knowledge_run(ROOT, sandbox=False):

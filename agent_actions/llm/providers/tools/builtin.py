@@ -235,12 +235,20 @@ def query_words(value: Any, ref: str) -> list[str]:
     return [str(value)]
 
 
+def _value_or_none(data: Mapping[str, Any], path: str) -> Any:
+    """The value at *path* of the record, or None when the record does not hold it."""
+    try:
+        return field_value(data, path)
+    except KeyError:
+        return None
+
+
 def retrieved(spec: Mapping[str, Any], data: Mapping[str, Any]) -> dict[str, Any]:
     """The matches the knowledge base of *spec* holds for the record's query."""
     hint = "; the retrieve step reads it from the record"
     words = [w for ref in spec["query"] for w in query_words(field_value(data, ref, hint), ref)]
     where = {
-        name: value["value"] if isinstance(value, Mapping) else field_value(data, value, hint)
+        name: value["value"] if isinstance(value, Mapping) else _value_or_none(data, value)
         for name, value in spec["where"].items()
     }
     run = _knowledge_run
