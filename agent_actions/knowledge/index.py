@@ -17,7 +17,7 @@ import os
 import sqlite3
 import threading
 import uuid
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -76,12 +76,24 @@ def _partial(path: Path) -> Path:
     return path.with_name(f".{path.name}.{os.getpid()}-{uuid.uuid4().hex[:8]}.tmp")
 
 
-def _write_index(path: Path, chunks: list, kind: str) -> None:
+def write_index_file(
+    path: Path,
+    chunks: list,
+    kinds: Iterable[str],
+    extra: Callable[[sqlite3.Connection], None] | None = None,
+) -> None:
+    """Write *chunks* and the index of each of *kinds* to *path* through a temporary file.
+
+    *extra* adds what else the file holds before it is renamed into place.
+    """
     partial = _partial(path)
     conn = sqlite3.connect(partial)
     try:
         build_chunks_table(conn, chunks)
-        INDEX_BUILDERS[kind](conn)
+        for kind in sorted(set(kinds)):
+            INDEX_BUILDERS[kind](conn)
+        if extra is not None:
+            extra(conn)
         conn.commit()
     except BaseException:
         conn.close()
@@ -106,7 +118,7 @@ def build_indexes(project_root: Path, found: Scan, kinds: Iterable[str]) -> tupl
         chunks = chunk(found) if missing else []
         for kind in missing:
             paths[kind].parent.mkdir(parents=True, exist_ok=True)
-            _write_index(paths[kind], chunks, kind)
+            write_index_file(paths[kind], chunks, [kind])
             built.append(kind)
         if len(digests) > 1 and not listed.exists():
             partial = _partial(listed)

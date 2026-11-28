@@ -43,6 +43,7 @@ from .graph_reporting import GraphReportingMixin
 from .guard_checks import GuardChecksMixin, guard_clause_and_behavior
 from .lineage_checks import LineageChecksMixin
 from .reference_extractor import ReferenceExtractor
+from .retrieve_checks import RetrieveChecksMixin
 from .schema_checks import SchemaChecksMixin
 from .schema_extractor import SchemaExtractor
 from .schema_structure_validator import SchemaStructureValidator as SchemaStructureValidator
@@ -59,6 +60,7 @@ class WorkflowStaticAnalyzer(
     GuardChecksMixin,
     LineageChecksMixin,
     PromptCacheChecksMixin,
+    RetrieveChecksMixin,
     GraphReportingMixin,
 ):
     """Static analyzer for workflow type checking.
@@ -212,6 +214,9 @@ class WorkflowStaticAnalyzer(
             result.add_error(error)
 
         for error in self._check_named_schemas_load():
+            result.add_error(error)
+
+        for error in self._check_retrieve_corpus_fields():
             result.add_error(error)
 
         # Step 3c: context_scope validation (already ran in Step 0 before normalization)

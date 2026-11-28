@@ -88,3 +88,26 @@ def test_the_step_is_indexed_at_its_entry_and_reads_its_query(tmp_path: Path):
 
     assert step.location.line == 12
     assert step.dependencies == ["classify"]
+
+
+def test_a_step_that_searches_an_earlier_action_depends_on_it(tmp_path: Path):
+    root, config = _project(tmp_path)
+    config.write_text(
+        WORKFLOW
+        + """  - name: link
+    prompt: $wf.answer
+    dependencies: [classify]
+    context_scope:
+      observe: [retrieve.similar.matches]
+      retrieve:
+        similar: {from: classify, text: [summary], query: source.text}
+"""
+    )
+
+    index = build_index(root)
+
+    assert index.file_actions[config]["link__similar"].dependencies == ["classify"]
+    # A knowledge base is no action: the step of `help` reads only its query.
+    assert index.file_actions[config]["write_reply__help"].dependencies == ["classify"]
+    messages = [d.message for d in collect_diagnostics(config, index)]
+    assert not [m for m in messages if "similar" in m], messages

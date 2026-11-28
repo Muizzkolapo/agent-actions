@@ -38,6 +38,7 @@ def _kinds_entries_use(project_root: Path) -> tuple[dict[str, set[frozenset[str]
         RETRIEVE,
         builtin_tool,
         searched_indexes,
+        searches_base,
     )
     from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
@@ -56,7 +57,7 @@ def _kinds_entries_use(project_root: Path) -> tuple[dict[str, set[frozenset[str]
             )
             for action in rendered.get("actions") or []:
                 spec = builtin_tool(action) if isinstance(action, dict) else None
-                if spec is not None and spec["tool"] == RETRIEVE:
+                if spec is not None and spec["tool"] == RETRIEVE and searches_base(spec):
                     found.append(searched_indexes(spec))
         except Exception as error:  # any malformed workflow; the others still count
             logger.debug("knowledge: %s does not load: %s", config, error, exc_info=True)

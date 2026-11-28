@@ -36,6 +36,7 @@ export function parseEntries(entries: unknown[], branches: BranchLookup): Parsed
     const actions: ParsedAction[] = [];
     const instances = new Map<string, Instance>();
     const routes: Array<{ router: string; targets: unknown[] }> = [];
+    const searched = new Map<string, string>();
     for (const entry of entries) {
         const record = asRecord(entry);
         if (!record) {
@@ -61,13 +62,20 @@ export function parseEntries(entries: unknown[], branches: BranchLookup): Parsed
                 outputFields: [],
             });
         } else {
-            const steps = retrieveSteps(record);
+            const steps = retrieveSteps(record, searched);
             const parsed = parseActionEntry(record) ?? [];
             for (const action of parsed) {
                 const added = steps.map((step) => step.name).filter((n) => !action.dependencies.includes(n));
                 action.dependencies = [...action.dependencies, ...added];
             }
             actions.push(...steps, ...parsed);
+        }
+    }
+    // A `from:` that names an action (not a knowledge base) makes the step depend on it.
+    for (const [step, source] of searched) {
+        const node = actions.find((candidate) => candidate.name === step);
+        if (node && actions.some((candidate) => candidate.name === source) && !node.dependencies.includes(source)) {
+            node.dependencies = [...node.dependencies, source];
         }
     }
     for (const { router, targets } of routes) {
@@ -197,8 +205,11 @@ function includeInstance(record: Record<string, unknown>, branches: BranchLookup
     return { label: prefix ?? branchName, actions, names, outputs };
 }
 
-/** The step each `context_scope.retrieve` entry of an action becomes: `<action>__<entry>`. */
-function retrieveSteps(record: Record<string, unknown>): ParsedAction[] {
+/**
+ * The step each `context_scope.retrieve` entry of an action becomes: `<action>__<entry>`.
+ * Each step's `from:` is put in `searched`: a knowledge base, or an earlier action.
+ */
+function retrieveSteps(record: Record<string, unknown>, searched: Map<string, string>): ParsedAction[] {
     const entries = asRecord(asRecord(record.context_scope)?.retrieve);
     if (typeof record.name !== 'string' || !entries) {
         return [];
@@ -211,6 +222,9 @@ function retrieveSteps(record: Record<string, unknown>): ParsedAction[] {
             .filter((ref) => ref.includes('.'))
             .map((ref) => ref.split('.', 1)[0])
             .filter((name) => name !== 'source');
+        if (typeof search.from === 'string') {
+            searched.set(`${record.name}__${entry}`, search.from);
+        }
         return {
             name: `${record.name}__${entry}`,
             dependencies: [...new Set(reads)],

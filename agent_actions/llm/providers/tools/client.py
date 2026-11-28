@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from agent_actions.config import sandbox
 from agent_actions.llm.providers.tools.builtin import builtin_tool, run_builtin
-from agent_actions.utils.constants import MODEL_NAME_KEY
+from agent_actions.utils.constants import MODEL_NAME_KEY, RECORD_GUID_KEY
 from agent_actions.utils.udf_management.tooling import (
     execute_user_defined_function,
     output_schema_errors,
@@ -140,7 +140,8 @@ class ToolClient:
         builtin = builtin_tool(agent_config)
         if builtin is not None:
             data = ToolClient._strip_internal_fields(context_data)
-            return run_builtin(builtin, json.loads(data) if isinstance(data, str) else data)
+            record = json.loads(data) if isinstance(data, str) else data
+            return run_builtin(builtin, record, agent_config.get(RECORD_GUID_KEY))
 
         model_name = agent_config.get(MODEL_NAME_KEY)
         if not model_name:

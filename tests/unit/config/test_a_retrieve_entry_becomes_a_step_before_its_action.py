@@ -347,7 +347,6 @@ class TestTheRefusals:
             ({"max_context_tokens": 0}, "'max_context_tokens:'"),
             ({"weights": {}}, "unknown key weights"),
             ({"text": ["body"]}, "set on the knowledge base's source"),
-            ({"from": "classify"}, "retrieval from an action comes in a later version"),
             ({"query": []}, "'query:' must be a field reference"),
         ],
     )

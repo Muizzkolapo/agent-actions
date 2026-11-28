@@ -24,7 +24,13 @@ from agent_actions.cli.cli_decorators import (
 )
 from agent_actions.cli.inspect_base import branch_of, render_title_row
 from agent_actions.config.loops import is_loop_pick, loop_of
-from agent_actions.llm.providers.tools.builtin import PICK, RETRIEVE, ROUTE, builtin_tool
+from agent_actions.llm.providers.tools.builtin import (
+    PICK,
+    RETRIEVE,
+    ROUTE,
+    builtin_tool,
+    searches_base,
+)
 from agent_actions.services.workflow_inspector import WorkflowInspector
 from agent_actions.utils.project_root import ensure_in_project
 
@@ -101,8 +107,13 @@ def _note(config: dict[str, Any]) -> str | None:
     if spec is not None and spec["tool"] == PICK:
         return f"join of {', '.join(spec['of'])}"
     if spec is not None and spec["tool"] == RETRIEVE:
+        searched = (
+            f"knowledge base {spec['base']}"
+            if searches_base(spec)
+            else f"action {spec['corpus']['action']}"
+        )
         return (
-            f"{spec['action']}: retrieve '{spec['entry']}' from knowledge base {spec['base']} "
+            f"{spec['action']}: retrieve '{spec['entry']}' from {searched} "
             f"by {', '.join(spec['methods'])} on {', '.join(spec['query'])}, "
             f"top {spec['top_k']}"
         )

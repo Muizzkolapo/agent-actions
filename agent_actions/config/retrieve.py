@@ -1,10 +1,11 @@
 """Expand the ``context_scope.retrieve`` entries of each action into internal retrieve steps.
 
 Each entry ``<entry>`` of action ``<action>`` becomes a built-in ``retrieve`` tool action
-named ``<action>__<entry>``: it searches a knowledge base for each record and writes the
-matches. The action depends on the step and observes ``<step>.*``. In the action's prompt,
-guard and ``context_scope`` lists, ``retrieve.<entry>`` is an alias of the step, which the
-load writes as the step's name, so every later check sees an ordinary action.
+named ``<action>__<entry>``: it searches a knowledge base, or the records an earlier action
+processed (``from: <action>``), for each record and writes the matches. The action depends
+on the step and observes ``<step>.*``. In the action's prompt, guard and ``context_scope``
+lists, ``retrieve.<entry>`` is an alias of the step, which the load writes as the step's name,
+so every later check sees an ordinary action.
 """
 
 from __future__ import annotations
@@ -37,8 +38,9 @@ ENTRY_KEYS = (
     "max_context_tokens",
     "max_per_origin",
 )
-# Keys of a retrieve from an action's records (a later version); on a base, its sources set them.
+# Keys of a retrieve from an action's records; on a base, its sources set them.
 SOURCE_KEYS = ("text", "title", "id")
+CORPUS_KEYS = tuple(key for key in (*ENTRY_KEYS, *SOURCE_KEYS) if key != "max_per_origin")
 DEFAULT_METHOD = "keyword"
 KEY_METHOD = "key"
 DEFAULT_TOP_K = 5
@@ -122,6 +124,8 @@ def expand_retrieves(data: Any, workflow_file: str, project_root: Path | None = 
     data = copy.deepcopy(data)
     actions = data["actions"]
     graph = _read_graph(actions)
+    defaults = data.get("defaults") if isinstance(data.get("defaults"), dict) else {}
+    workflow = _Workflow(graph, _entries_by_name(actions), defaults)
     taken = set(graph)
     bases: dict[str, Any] | None = None
     expanded: list[Any] = []
@@ -139,7 +143,7 @@ def expand_retrieves(data: Any, workflow_file: str, project_root: Path | None = 
         steps: dict[str, str] = {}
         for entry_name, config in raw.items():
             step = _step(
-                entry, str(entry_name), config, bases, graph, upstream, taken, workflow_file
+                entry, str(entry_name), config, bases, workflow, upstream, taken, workflow_file
             )
             steps[str(entry_name)] = step["name"]
             expanded.append(step)
@@ -247,16 +251,31 @@ def _refuse_local_retrieve(prompt: str, where: str) -> None:
 # -- one entry ---------------------------------------------------------------
 
 
+class _Workflow:
+    """What an entry is checked against: the read graph, each entry by name, the defaults."""
+
+    def __init__(
+        self,
+        graph: Mapping[str, list[str]],
+        entries: Mapping[str, dict[str, Any]],
+        defaults: Mapping[str, Any],
+    ):
+        self.graph = graph
+        self.entries = entries
+        self.defaults = dict(defaults)
+
+
 def _step(
     action: dict[str, Any],
     entry: str,
     config: Any,
     bases: Mapping[str, Any],
-    graph: Mapping[str, list[str]],
+    workflow: _Workflow,
     upstream: set[str],
     taken: set[str],
     workflow_file: str,
 ) -> dict[str, Any]:
+    graph = workflow.graph
     name = action["name"]
     where = f"Action '{name}' in {workflow_file}: context_scope.retrieve.{entry}"
     if not isinstance(entry, str) or not _NAME.match(entry):
@@ -288,37 +307,42 @@ def _step(
     source = config.get("from")
     if not isinstance(source, str) or not source:
         raise ConfigurationError(
-            f"{where}: 'from:' must name the knowledge base to search.",
+            f"{where}: 'from:' must name the knowledge base, or the earlier action, to search.",
             context={"action_name": name, "entry": entry},
         )
-    if source in graph:
-        raise ConfigurationError(
-            f"{where}: 'from: {source}' names an action; retrieval from an action comes in a "
-            "later version. Name a knowledge base of agent_actions.yml.",
-            context={"action_name": name, "entry": entry, "from": source},
-        )
-    _refuse_unknown_keys(config, where)
-    base = bases.get(source)
-    if base is None:
-        from agent_actions.knowledge.config import unknown_base_message
-
-        raise ConfigurationError(
-            f"{where}: {unknown_base_message(source, bases)}",
-            context={"action_name": name, "entry": entry, "from": source},
-        )
-    methods = _methods(config.get("method", DEFAULT_METHOD), base, where)
     names = _instance_names(action)
+    corpus = _corpus(config, names.get(source, source), source, bases, workflow, upstream, where)
+    base = None
+    if corpus is None:
+        _refuse_unknown_keys(config, where)
+        base = bases.get(source)
+        if base is None:
+            from agent_actions.knowledge.config import unknown_base_message
+
+            raise ConfigurationError(
+                f"{where}: {unknown_base_message(source, bases)}",
+                context={"action_name": name, "entry": entry, "from": source},
+            )
+        methods = _methods(config.get("method", DEFAULT_METHOD), base, where)
+        fields = base.metadata_fields
+        about = f"knowledge base '{base.name}'"
+    else:
+        methods = _corpus_methods(config.get("method", DEFAULT_METHOD), where)
+        # The text fields are searched; `where` compares the others whole.
+        fields = None
+        about = f"action '{corpus['action']}' outside its text fields"
     query = _query(config.get("query"), names, graph, upstream, where)
-    filters = _where(config.get("where"), base, names, graph, upstream, where)
+    searched = corpus["text"] if corpus is not None else []
+    filters = _where(config.get("where"), fields, about, searched, names, graph, upstream, where)
     top_k = _whole(config, "top_k", DEFAULT_TOP_K, 1, MAX_TOP_K, where)
     candidates = _whole(config, "candidates", max(20, 4 * top_k), top_k, MAX_CANDIDATES, where)
     refs = [*query, *(ref for ref in filters.values() if isinstance(ref, str))]
     readers = list(dict.fromkeys(ref.split(".", 1)[0] for ref in refs))
     # A null or missing `where` ref matches nothing; it never fails the record.
     observe = [ref if ref in query else f"{ref}?" for ref in dict.fromkeys(refs)]
-    spec = {
+    spec: dict[str, Any] = {
         "tool": RETRIEVE,
-        "base": source,
+        **({"base": source} if corpus is None else {"corpus": corpus}),
         "methods": methods,
         "query": query,
         "where": filters,
@@ -334,7 +358,9 @@ def _step(
         "kind": "tool",
         "impl": RETRIEVE_IMPL,
         "granularity": "record",
-        "intent": f"Retrieve from knowledge base {source} for {name}",
+        "intent": f"Retrieve from knowledge base {source} for {name}"
+        if corpus is None
+        else f"Retrieve from the records of action {corpus['action']} for {name}",
         "schema": output_schema(step),
         "context_scope": {"observe": observe},
         BUILTIN_KEY: spec,
@@ -343,6 +369,8 @@ def _step(
     # reach the step exactly as they reach the action.
     dependencies = list(_dependencies_of(action))
     dependencies += [r for r in readers if r != "source" and r not in dependencies]
+    if corpus is not None and corpus["action"] not in dependencies:
+        dependencies.append(corpus["action"])
     if dependencies:
         built["dependencies"] = dependencies
         # Each dependency must be named in the scope; a wildcard never fails a record.
@@ -352,6 +380,152 @@ def _step(
     if "_include" in action:
         built["_include"] = copy.deepcopy(action["_include"])
     return built
+
+
+def _corpus(
+    config: Mapping[str, Any],
+    source: str,
+    written: str,
+    bases: Mapping[str, Any],
+    workflow: _Workflow,
+    upstream: set[str],
+    where: str,
+) -> dict[str, Any] | None:
+    """What a step reads of each record of the action *source* names; None for a base."""
+    graph = workflow.graph
+    versioned = _VERSION_SUFFIX.sub("", source)
+    group = workflow.entries.get(versioned) if versioned != source else None
+    if source not in graph and not (isinstance(group, dict) and "versions" in group):
+        return None
+    context = {"from": written}
+    if written in bases:
+        raise ConfigurationError(
+            f"{where}: 'from: {written}' names both a knowledge base of agent_actions.yml and "
+            "an action of the workflow. Rename one of them.",
+            context=context,
+        )
+    found = workflow.entries.get(source, group)
+    _refuse_corpus_kind(found, source, versioned, workflow, where)
+    if source not in upstream:
+        raise ConfigurationError(
+            f"{where}: 'from: {written}' names an action that is not upstream of the action. "
+            "A retrieve step searches the records of an action the action depends on.",
+            context=context,
+        )
+    unknown = sorted(str(key) for key in config if key not in CORPUS_KEYS)
+    if unknown:
+        refused = "max_per_origin" in unknown
+        raise ConfigurationError(
+            f"{where}: "
+            + (
+                "'max_per_origin' does not apply to the records of one action, which all "
+                "have one origin."
+                if refused
+                else f"unknown key {', '.join(unknown)}. Keys: {', '.join(CORPUS_KEYS)}."
+            ),
+            context={"unknown_keys": unknown},
+        )
+    text = config.get("text")
+    text = [text] if isinstance(text, str) else text
+    if not isinstance(text, list) or not text or not all(_is_field(f) for f in text):
+        raise ConfigurationError(
+            f"{where}: 'text:' must name the output field of '{written}' to search, or a list "
+            "of them, such as [summary, keywords].",
+            context=context,
+        )
+    if len(set(text)) != len(text):
+        raise ConfigurationError(f"{where}: 'text:' names a field twice.", context=context)
+    settings: dict[str, Any] = {"action": source, "text": list(text)}
+    for key in ("title", "id"):
+        value = config.get(key)
+        if value is not None and not _is_field(value):
+            raise ConfigurationError(
+                f"{where}: '{key}:' must name one output field of '{written}'.",
+                context=context,
+            )
+        settings[key] = value
+    return settings
+
+
+def _is_field(value: Any) -> bool:
+    return isinstance(value, str) and bool(_NAME.match(value))
+
+
+def _refuse_corpus_kind(
+    found: Any, source: str, versioned: str, workflow: _Workflow, where: str
+) -> None:
+    """Refuse an action whose records are not one record per input record (D20, D23)."""
+    context = {"from": source}
+    if not isinstance(found, dict):
+        return
+    spec = builtin_tool(found) or {}
+    if "route" in found or spec.get("tool") == ROUTE:
+        raise ConfigurationError(
+            f"{where}: 'from: {source}' names a router, whose records hold only their case. "
+            "Name an action of one of its branches, or the join after them.",
+            context=context,
+        )
+    if spec.get("loop") is not None:
+        raise ConfigurationError(
+            f"{where}: 'from: {source}' names a loop, whose records are spread over its "
+            "iterations. Name an action of one iteration, such as "
+            f"{source}_iter1__{spec['loop'].get('result', '<result>')}.",
+            context=context,
+        )
+    if "versions" in found:
+        raise ConfigurationError(
+            f"{where}: 'from: {source}' names "
+            + (f"a version of '{versioned}'" if versioned != source else "a version group")
+            + ", which fans out each record to several versions. Name the action that merges "
+            "them (version_consumption).",
+            context=context,
+        )
+    from agent_actions.config.includes import action_defaults
+    from agent_actions.output.response.expander_validation import (
+        inherited_routing_kind,
+        is_file_granularity,
+        resolved_granularity,
+    )
+
+    defaults = action_defaults(found, workflow.defaults)
+    kind = inherited_routing_kind(found, defaults)
+    granularity, _ = resolved_granularity(kind, found, defaults)
+    if kind == "tool" and is_file_granularity(granularity):
+        raise ConfigurationError(
+            f"{where}: 'from: {source}' names a tool of granularity File, which may write "
+            "several records for one input record, or none. Name an action with one record "
+            "per input record.",
+            context=context,
+        )
+
+
+def _corpus_methods(raw: Any, where: str) -> dict[str, float]:
+    """The methods of a search of an action's records: the index kinds it builds itself."""
+    from agent_actions.knowledge.methods import trigram_supported
+
+    corpus = _CorpusBase()
+    methods = _methods(raw, corpus, where)
+    if KEY_METHOD in methods:
+        raise ConfigurationError(
+            f"{where}: method '{KEY_METHOD}' on the records of an action comes in a later "
+            "version. Use keyword, all_words, phrase or fuzzy.",
+            context={"method": KEY_METHOD},
+        )
+    if "fuzzy" in methods and not trigram_supported():
+        raise ConfigurationError(
+            f"{where}: method 'fuzzy' needs an SQLite that builds a trigram index, and this "
+            "one does not. Use keyword, all_words or phrase.",
+            context={"method": "fuzzy"},
+        )
+    return methods
+
+
+class _CorpusBase:
+    """The checks ``_methods`` makes of a base, for the records of an action."""
+
+    name = "the action's records"
+    index = ("keyword", "fuzzy")
+    has_key = True
 
 
 def _refuse_unknown_keys(config: Mapping[str, Any], where: str) -> None:
@@ -446,12 +620,16 @@ def _query(
 
 def _where(
     raw: Any,
-    base: Any,
+    fields: set[str] | None,
+    about: str,
+    searched: Sequence[str],
     names: Mapping[str, str],
     graph: Mapping[str, list[str]],
     upstream: set[str],
     where: str,
 ) -> dict[str, Any]:
+    """The `where:` filters. *fields* are those a base allows; for a corpus (None), any
+    output field outside the *searched* ``text`` fields (checked against the schema later)."""
     if raw is None:
         return {}
     if not isinstance(raw, dict):
@@ -460,11 +638,14 @@ def _where(
         )
     filters: dict[str, Any] = {}
     for field, value in raw.items():
-        if field not in base.metadata_fields:
-            fields = ", ".join(sorted(base.metadata_fields)) or "none"
+        allowed = (
+            field in fields if fields is not None else _is_field(field) and field not in searched
+        )
+        if not allowed:
+            listed = (", ".join(sorted(fields)) or "none") if fields is not None else None
             raise ConfigurationError(
-                f"{where}: 'where:' names '{field}', which is no metadata field of knowledge "
-                f"base '{base.name}' (metadata fields: {fields}).",
+                f"{where}: 'where:' names '{field}', which is no metadata field of {about}"
+                + (f" (metadata fields: {listed})." if listed is not None else "."),
                 context={"field": str(field)},
             )
         label = f"{where}: 'where: {{{field}: ...}}'"
@@ -726,6 +907,19 @@ def _instance_names(action: Mapping[str, Any]) -> dict[str, str]:
     from agent_actions.config.includes import instance_names
 
     return instance_names(action)
+
+
+def _entries_by_name(entries: list[Any]) -> dict[str, dict[str, Any]]:
+    """Each action, route and join entry of the workflow by its name."""
+    found: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        for key in ("name", "route", "join"):
+            if isinstance(entry.get(key), str):
+                found[entry[key]] = entry
+                break
+    return found
 
 
 def _read_graph(entries: list[Any]) -> dict[str, list[str]]:
